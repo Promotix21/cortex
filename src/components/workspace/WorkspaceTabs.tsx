@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
 import { ProjectSessions } from '@/components/sessions/ProjectSessions';
+import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare } from 'lucide-react';
 
 type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'chat';
@@ -67,9 +68,9 @@ export function WorkspaceTabs() {
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className={`flex-1 overflow-auto ${activeTab !== 'terminal' ? 'p-4' : ''}`}>
         {activeTab === 'overview' && <OverviewPanel project={activeProject} />}
-        {activeTab === 'terminal' && <PlaceholderPanel label="Terminal" phase={3} />}
+        {activeTab === 'terminal' && <TerminalPanel />}
         {activeTab === 'git' && <PlaceholderPanel label="Git" phase={5} />}
         {activeTab === 'notes' && <PlaceholderPanel label="Notes" phase={5} />}
         {activeTab === 'chat' && <PlaceholderPanel label="AI Chat" phase={4} />}

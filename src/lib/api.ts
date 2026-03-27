@@ -57,6 +57,40 @@ export const api = {
   getSnapshots: (projectId: string) =>
     request<{ snapshots: any[] }>(`/api/sessions/snapshots/${projectId}`),
 
+  // Terminals
+  getTerminals: (projectId?: string) =>
+    request<{ terminals: any[] }>(projectId ? `/api/terminals?project_id=${projectId}` : '/api/terminals'),
+  getTerminal: (id: string) => request<{ terminal: any }>(`/api/terminals/${id}`),
+  getTerminalOutput: (id: string) => request<{ output: string }>(`/api/terminals/${id}/output`),
+  pollTerminal: (id: string, sinceSeq: number) =>
+    request<{ chunks: { seq: number; data: string }[]; nextSeq: number }>(`/api/terminals/${id}/poll?since=${sinceSeq}`),
+  spawnTerminal: (projectId: string, name: string, type = 'shell', command?: string) =>
+    request<{ terminal: any }>('/api/terminals', {
+      method: 'POST',
+      body: JSON.stringify({ project_id: projectId, name, type, command }),
+    }),
+  writeTerminal: (id: string, data: string) =>
+    request<{ success: boolean }>(`/api/terminals/${id}/write`, {
+      method: 'POST',
+      body: JSON.stringify({ data }),
+    }),
+  resizeTerminal: (id: string, cols: number, rows: number) =>
+    request<{ success: boolean }>(`/api/terminals/${id}/resize`, {
+      method: 'POST',
+      body: JSON.stringify({ cols, rows }),
+    }),
+  renameTerminal: (id: string, name: string) =>
+    request<{ success: boolean }>(`/api/terminals/${id}/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  clearTerminal: (id: string) =>
+    request<{ success: boolean }>(`/api/terminals/${id}/clear`, { method: 'POST' }),
+  restartTerminal: (id: string) =>
+    request<{ terminal: any }>(`/api/terminals/${id}/restart`, { method: 'POST' }),
+  killTerminal: (id: string) =>
+    request<{ success: boolean }>(`/api/terminals/${id}`, { method: 'DELETE' }),
+
   // Health
   health: () => request<{ status: string; activeSessions: number }>('/api/health'),
 };
