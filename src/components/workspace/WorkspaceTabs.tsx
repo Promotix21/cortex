@@ -6,15 +6,17 @@ import { ChatPanel } from '@/components/chat/ChatPanel';
 import { NotesPanel } from './NotesPanel';
 import { TasksPanel } from './TasksPanel';
 import { GitPanel } from './GitPanel';
-import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare } from 'lucide-react';
+import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
+import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare, Brain } from 'lucide-react';
 
-type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'chat';
+type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'chat' | 'intelligence';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'terminal', label: 'Terminal', icon: Terminal },
   { id: 'git', label: 'Git', icon: GitBranch },
   { id: 'notes', label: 'Notes', icon: FileText },
+  { id: 'intelligence', label: 'Brain', icon: Brain },
   { id: 'chat', label: 'AI Chat', icon: MessageSquare },
 ];
 
@@ -77,6 +79,7 @@ export function WorkspaceTabs() {
         {activeTab === 'terminal' && <TerminalPanel />}
         {activeTab === 'git' && <GitPanel />}
         {activeTab === 'notes' && <NotesAndTasksPanel />}
+        {activeTab === 'intelligence' && <IntelligencePanel />}
         {activeTab === 'chat' && <ChatPanel />}
       </div>
     </div>

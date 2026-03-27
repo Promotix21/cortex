@@ -91,6 +91,28 @@ export const api = {
   killTerminal: (id: string) =>
     request<{ success: boolean }>(`/api/terminals/${id}`, { method: 'DELETE' }),
 
+  // Intelligence
+  getPatterns: (projectId?: string, search?: string) =>
+    request<{ patterns: any[] }>(`/api/intelligence/patterns?${projectId ? `project_id=${projectId}&` : ''}${search ? `search=${encodeURIComponent(search)}` : ''}`),
+  createPattern: (data: any) =>
+    request<{ pattern: any }>('/api/intelligence/patterns', { method: 'POST', body: JSON.stringify(data) }),
+  updatePattern: (id: string, data: any) =>
+    request<{ pattern: any }>(`/api/intelligence/patterns/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePattern: (id: string) =>
+    request<{ success: boolean }>(`/api/intelligence/patterns/${id}`, { method: 'DELETE' }),
+  getDebugMemory: (projectId?: string, search?: string) =>
+    request<{ debug: any[] }>(`/api/intelligence/debug?${projectId ? `project_id=${projectId}&` : ''}${search ? `search=${encodeURIComponent(search)}` : ''}`),
+  createDebug: (data: any) =>
+    request<{ debug: any }>('/api/intelligence/debug', { method: 'POST', body: JSON.stringify(data) }),
+  updateDebug: (id: string, data: any) =>
+    request<{ debug: any }>(`/api/intelligence/debug/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteDebug: (id: string) =>
+    request<{ success: boolean }>(`/api/intelligence/debug/${id}`, { method: 'DELETE' }),
+  matchError: (signature: string, message: string) =>
+    request<{ match: any }>('/api/intelligence/debug/match', { method: 'POST', body: JSON.stringify({ error_signature: signature, error_message: message }) }),
+  searchIntelligence: (q: string) =>
+    request<{ results: any[] }>(`/api/intelligence/search?q=${encodeURIComponent(q)}`),
+
   // Notes
   getNote: (projectId: string) => request<{ note: any }>(`/api/notes/${projectId}`),
   saveNote: (projectId: string, content: string) =>
