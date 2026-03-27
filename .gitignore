@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+sidecar/node_modules/
+
+# Build output
+dist/
+sidecar/dist/
+
+# Tauri build
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+
+# Debug
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.db-wal
+*.db-shm

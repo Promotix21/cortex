@@ -1,0 +1,543 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+  
+  .prd { max-width: 680px; padding: 0 0 2rem; }
+  
+  .hero { padding: 2rem 0 1.5rem; border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom: 2rem; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 1rem; }
+  .hero-badge span { width: 6px; height: 6px; background: #1D9E75; border-radius: 50%; display: inline-block; }
+  .hero h1 { font-size: 32px; font-weight: 500; color: var(--color-text-primary); letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 0.5rem; }
+  .hero-sub { font-size: 15px; color: var(--color-text-secondary); line-height: 1.6; margin-bottom: 1.25rem; }
+  .hero-meta { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .hero-meta-item { font-size: 12px; color: var(--color-text-secondary); }
+  .hero-meta-item strong { color: var(--color-text-primary); font-weight: 500; display: block; font-size: 13px; }
+
+  .toc { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
+  .toc h3 { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.75rem; }
+  .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 2rem; }
+  .toc-item { font-size: 13px; color: var(--color-text-secondary); padding: 3px 0; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .toc-item:hover { color: var(--color-text-primary); }
+  .toc-num { font-size: 11px; color: var(--color-text-tertiary); min-width: 18px; }
+
+  .section { margin-bottom: 2.5rem; }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .section-num { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); min-width: 24px; }
+  .section-title { font-size: 17px; font-weight: 500; color: var(--color-text-primary); }
+  .section-tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .tag-mvp { background: #E1F5EE; color: #0F6E56; }
+  .tag-post { background: #F1EFE8; color: #5F5E5A; }
+  .tag-core { background: #E6F1FB; color: #185FA5; }
+
+  .prose { font-size: 14px; line-height: 1.7; color: var(--color-text-secondary); margin-bottom: 1rem; }
+  
+  .cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1rem; }
+  .card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; }
+  .card-label { font-size: 11px; color: var(--color-text-tertiary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.4rem; }
+  .card-value { font-size: 13px; color: var(--color-text-primary); line-height: 1.5; }
+
+  .stack-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .stack-row:last-child { border-bottom: none; }
+  .stack-cat { font-size: 12px; color: var(--color-text-tertiary); font-weight: 500; min-width: 100px; padding-top: 1px; }
+  .stack-items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 6px; padding: 3px 8px; color: var(--color-text-secondary); }
+  .chip.highlight { background: #E6F1FB; border-color: #B5D4F4; color: #185FA5; }
+
+  .feature-block { margin-bottom: 1.25rem; }
+  .feature-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 0.35rem; display: flex; align-items: center; gap: 8px; }
+  .feature-dot { width: 5px; height: 5px; border-radius: 50%; background: #1D9E75; flex-shrink: 0; }
+  .feature-dot.blue { background: #378ADD; }
+  .feature-dot.amber { background: #BA7517; }
+  .feature-dot.purple { background: #7F77DD; }
+  .feature-desc { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; padding-left: 13px; }
+
+  .phase-row { display: flex; gap: 12px; margin-bottom: 10px; }
+  .phase-num { font-size: 11px; font-weight: 500; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 6px; padding: 2px 8px; color: var(--color-text-secondary); white-space: nowrap; height: fit-content; margin-top: 1px; }
+  .phase-content { flex: 1; }
+  .phase-name { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 2px; }
+  .phase-items { font-size: 12px; color: var(--color-text-secondary); line-height: 1.6; }
+
+  .schema-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 1rem; }
+  .schema-table th { text-align: left; font-weight: 500; font-size: 11px; color: var(--color-text-tertiary); padding: 6px 10px; background: var(--color-background-secondary); border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .schema-table td { padding: 6px 10px; border-bottom: 0.5px solid var(--color-border-tertiary); color: var(--color-text-secondary); vertical-align: top; }
+  .schema-table tr:last-child td { border-bottom: none; }
+  .schema-table .field { font-family: var(--font-mono); color: var(--color-text-primary); font-size: 11px; }
+  .schema-table .type { font-family: var(--font-mono); color: #378ADD; font-size: 11px; }
+
+  .constraint-item { display: flex; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 13px; }
+  .constraint-item:last-child { border-bottom: none; }
+  .constraint-icon { color: var(--color-text-tertiary); flex-shrink: 0; }
+  .constraint-text { color: var(--color-text-secondary); line-height: 1.5; }
+  .constraint-text strong { color: var(--color-text-primary); font-weight: 500; }
+
+  .oss-box { background: #E1F5EE; border: 0.5px solid #9FE1CB; border-radius: var(--border-radius-lg); padding: 1.25rem 1.5rem; }
+  .oss-box-title { font-size: 13px; font-weight: 500; color: #085041; margin-bottom: 0.5rem; }
+  .oss-box-text { font-size: 13px; color: #0F6E56; line-height: 1.6; }
+
+  .post-mvp-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .post-mvp-chip { font-size: 12px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 20px; padding: 4px 12px; color: var(--color-text-secondary); }
+
+  .divider { height: 0.5px; background: var(--color-border-tertiary); margin: 2rem 0; }
+
+  .acceptance-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 13px; }
+  .acceptance-item:last-child { border-bottom: none; }
+  .check { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #1D9E75; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .check svg { width: 8px; height: 8px; }
+  .acceptance-text { color: var(--color-text-secondary); line-height: 1.5; }
+</style>
+
+<div class="prd">
+
+  <div class="hero">
+    <div class="hero-badge"><span></span> Product Requirements Document</div>
+    <h1>Cortex</h1>
+    <p class="hero-sub">An AI-native desktop IDE for developers managing multiple projects simultaneously. One brain. All your context. Zero switching costs.</p>
+    <div class="hero-meta">
+      <div class="hero-meta-item"><strong>Version</strong> 1.0 MVP</div>
+      <div class="hero-meta-item"><strong>Platform</strong> Linux (AppImage / .deb / .rpm)</div>
+      <div class="hero-meta-item"><strong>Stack</strong> Tauri + React + NestJS Sidecar</div>
+      <div class="hero-meta-item"><strong>License</strong> MIT (Open Source)</div>
+      <div class="hero-meta-item"><strong>Author</strong> Hiraya Digital</div>
+    </div>
+  </div>
+
+  <div class="toc">
+    <h3>Contents</h3>
+    <div class="toc-grid">
+      <div class="toc-item"><span class="toc-num">01</span> Overview & Goals</div>
+      <div class="toc-item"><span class="toc-num">06</span> Intelligence Builder</div>
+      <div class="toc-item"><span class="toc-num">02</span> Target Users</div>
+      <div class="toc-item"><span class="toc-num">07</span> Reference Intelligence</div>
+      <div class="toc-item"><span class="toc-num">03</span> Technology Stack</div>
+      <div class="toc-item"><span class="toc-num">08</span> Database Schema</div>
+      <div class="toc-item"><span class="toc-num">04</span> Core Features</div>
+      <div class="toc-item"><span class="toc-num">09</span> Build Phases</div>
+      <div class="toc-item"><span class="toc-num">05</span> UI Architecture</div>
+      <div class="toc-item"><span class="toc-num">10</span> Acceptance Criteria</div>
+    </div>
+  </div>
+
+  <!-- 01 Overview -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">Overview & Goals</span>
+      <span class="section-tag tag-core">Core</span>
+    </div>
+    <p class="prose">Cortex solves the context-switching problem that every developer using AI coding assistants faces. When you're managing 5–10 active projects simultaneously — each with their own terminal sessions, AI conversation history, git state, and task lists — you lose time and mental state every time you switch.</p>
+    <p class="prose">Cortex is the missing command center: a Tauri-based desktop app that gives every project its own persistent brain, terminal environment, and AI chat — all resumable instantly.</p>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-label">Primary Goal</div>
+        <div class="card-value">Zero context loss when switching between projects</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Key Differentiator</div>
+        <div class="card-value">Per-project AI brain with version-aware reference intelligence</div>
+      </div>
+      <div class="card">
+        <div class="card-label">OSS Strategy</div>
+        <div class="card-value">Anthropic Claude for Open Source eligibility target</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Non-Goals (MVP)</div>
+        <div class="card-value">Code editor, multi-user collab, cloud sync, plugin marketplace</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 02 Target Users -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title">Target Users</span>
+      <span class="section-tag tag-core">Core</span>
+    </div>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-label">Primary</div>
+        <div class="card-value">Agency developers · Freelancers · AI-assisted coders · Multi-repo engineers</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Secondary</div>
+        <div class="card-value">Startup engineers · DevOps · Claude Code power users · Linux developers</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 03 Tech Stack -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <span class="section-title">Technology Stack</span>
+      <span class="section-tag tag-core">Core</span>
+    </div>
+    <div class="stack-row">
+      <span class="stack-cat">Desktop</span>
+      <div class="stack-items">
+        <span class="chip highlight">Tauri</span>
+        <span class="chip">Rust Core</span>
+        <span class="chip">Tauri Shell Plugin</span>
+        <span class="chip">Tauri FS Plugin</span>
+      </div>
+    </div>
+    <div class="stack-row">
+      <span class="stack-cat">Frontend</span>
+      <div class="stack-items">
+        <span class="chip highlight">React</span>
+        <span class="chip highlight">TypeScript</span>
+        <span class="chip">Vite</span>
+        <span class="chip">ShadCN UI</span>
+        <span class="chip">Zustand</span>
+        <span class="chip">xterm.js</span>
+      </div>
+    </div>
+    <div class="stack-row">
+      <span class="stack-cat">Backend</span>
+      <div class="stack-items">
+        <span class="chip">Node.js Sidecar</span>
+        <span class="chip">Express</span>
+        <span class="chip">node-pty</span>
+        <span class="chip">simple-git</span>
+        <span class="chip highlight">SQLite</span>
+        <span class="chip">better-sqlite3</span>
+      </div>
+    </div>
+    <div class="stack-row">
+      <span class="stack-cat">AI</span>
+      <div class="stack-items">
+        <span class="chip highlight">Claude CLI</span>
+        <span class="chip highlight">Claude SDK</span>
+        <span class="chip">OpenAI API (optional)</span>
+        <span class="chip">Ollama (post-MVP)</span>
+      </div>
+    </div>
+    <div class="stack-row">
+      <span class="stack-cat">Packaging</span>
+      <div class="stack-items">
+        <span class="chip highlight">Linux AppImage</span>
+        <span class="chip highlight">.deb</span>
+        <span class="chip highlight">.rpm</span>
+        <span class="chip">macOS (post-MVP)</span>
+        <span class="chip">Windows (post-MVP)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 04 Core Features -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <span class="section-title">Core Features (MVP)</span>
+      <span class="section-tag tag-mvp">MVP</span>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot"></span> Project Management</div>
+      <div class="feature-desc">Add projects manually or auto-detect from folder path. Auto-detect git repo and tech stack type. Persist metadata including status (Active / Paused / Planning / Maintenance), last opened timestamp, and notes. Sidebar project list with search and recents.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot blue"></span> Terminal Management</div>
+      <div class="feature-desc">Spawn multiple terminal sessions per project using node-pty + xterm.js. Tab-based interface with rename, restart, kill, and clear. Terminal types: Shell, AI Session, Dev Server, Git. Terminals are project-bound and persist across sessions.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot amber"></span> Per-Project AI Chat</div>
+      <div class="feature-desc">Each project has a dedicated Claude conversation with stored history, context notes, and a custom system prompt. Chat interface with message history scroll, export, and clear. AI session data scoped per project — no context bleed across projects.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot purple"></span> Project Notes & Tasks</div>
+      <div class="feature-desc">Plain markdown notes with autosave per project. Task tracker with status: Pending / Doing / Done / Blocked. Simple, no-frills interface — productivity over aesthetics.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot blue"></span> Git Integration</div>
+      <div class="feature-desc">Live fetch of git status, current branch, uncommitted files, and last commit log. Git commands: status, branch, log, pull, push — executed via simple-git. Visual indicators for dirty state and branch name in project header.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot"></span> Workspace Resume</div>
+      <div class="feature-desc">On launch, Cortex restores the last active project: open terminals, active tab, AI chat position, and layout state. Zero setup on restart. This is the core productivity promise.</div>
+    </div>
+  </div>
+
+  <!-- 05 UI Architecture -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <span class="section-title">UI Architecture</span>
+      <span class="section-tag tag-mvp">MVP</span>
+    </div>
+    <p class="prose">VSCode-inspired layout. Dark theme. Minimal animations. Productivity-first — no decorative chrome.</p>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-label">Left Sidebar — 260px</div>
+        <div class="card-value">Project list, recent projects, search, add project button</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Center Workspace</div>
+        <div class="card-value">Tabs: Overview · Terminal · Git · Notes · AI Chat</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Bottom Panel — 260px</div>
+        <div class="card-value">Terminal tabs, xterm.js output, process status indicators</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Right Sidebar — 320px</div>
+        <div class="card-value">AI chat, Project Brain, tasks, reference lookup</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 06 Intelligence Builder -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <span class="section-title">Intelligence Builder Module</span>
+      <span class="section-tag tag-mvp">MVP</span>
+    </div>
+    <p class="prose">A structured learning layer so Cortex improves over time by remembering patterns, debugging knowledge, architecture decisions, and reusable solutions — per project.</p>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot purple"></span> Project Brain</div>
+      <div class="feature-desc">Manual storage of project summary, architecture notes, known issues, and key decisions. Persisted in <code>project_brain</code> table. Injected into AI context automatically when chatting within a project.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot amber"></span> Pattern Memory</div>
+      <div class="feature-desc">Save reusable code patterns with title, description, tags, and source project. Marked as reusable or project-specific. Searchable across all projects.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot blue"></span> Debug Memory</div>
+      <div class="feature-desc">Store bug solutions: problem, root cause, solution, and source project. Prevents solving the same bug twice across projects. Reusable flag for cross-project applicability.</div>
+    </div>
+
+    <p class="prose" style="margin-top: 0.5rem; font-size: 13px;"><strong style="color: var(--color-text-primary);">Note:</strong> MVP is manual-save only. Automatic pattern extraction via local models is post-MVP.</p>
+  </div>
+
+  <!-- 07 Reference Intelligence -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <span class="section-title">Reference Intelligence Module</span>
+      <span class="section-tag tag-mvp">MVP</span>
+    </div>
+    <p class="prose">The killer feature. Maintain accurate, version-pinned reference data for APIs, SDKs, and CLI tools. AI retrieves only version-matching commands — eliminating the #1 source of hallucination in coding assistants: stale documentation.</p>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot"></span> Tool Registry</div>
+      <div class="feature-desc">Add tools manually: name, category, doc URL, last updated. Track multiple versions per tool with release notes and dates.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot blue"></span> Version-Aware Commands</div>
+      <div class="feature-desc">Store commands per tool per version per OS (Linux / Windows / Mac). Mark deprecated commands with replacement. AI context only receives commands matching the selected version — never stale suggestions.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot amber"></span> API Change Tracking</div>
+      <div class="feature-desc">Log breaking changes per version: change type, old usage, new usage, notes. Prevents AI from suggesting removed APIs.</div>
+    </div>
+
+    <div class="feature-block">
+      <div class="feature-title"><span class="feature-dot purple"></span> Future: Vector Search</div>
+      <div class="feature-desc">Architecture is prepared for semantic search via ChromaDB or LanceDB + local embedding model. Not implemented in MVP — schema is forward-compatible.</div>
+    </div>
+  </div>
+
+  <!-- 08 Database Schema -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <span class="section-title">Database Schema</span>
+      <span class="section-tag tag-core">Core</span>
+    </div>
+    <p class="prose">SQLite via better-sqlite3. Monolithic schema, no ORM for MVP. Stored at user-configurable path.</p>
+
+    <table class="schema-table">
+      <thead><tr><th>Table</th><th>Key Fields</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="field">projects</td><td><span class="type">id, name, path, type, git_enabled, status, last_opened</span></td><td>Core project registry</td></tr>
+        <tr><td class="field">ai_sessions</td><td><span class="type">project_id, history_json, last_summary</span></td><td>Per-project AI conversation</td></tr>
+        <tr><td class="field">terminals</td><td><span class="type">project_id, name, process_id, status</span></td><td>Terminal process tracking</td></tr>
+        <tr><td class="field">notes</td><td><span class="type">project_id, content, updated_at</span></td><td>Markdown notes per project</td></tr>
+        <tr><td class="field">tasks</td><td><span class="type">project_id, title, status</span></td><td>Task tracker</td></tr>
+        <tr><td class="field">project_brain</td><td><span class="type">project_id, summary, architecture_notes, known_issues, decisions</span></td><td>AI context memory</td></tr>
+        <tr><td class="field">tools</td><td><span class="type">name, category, doc_url</span></td><td>Tool registry</td></tr>
+        <tr><td class="field">tool_versions</td><td><span class="type">tool_id, version, release_notes</span></td><td>Version tracking</td></tr>
+        <tr><td class="field">commands</td><td><span class="type">tool_id, version, os, command, deprecated, replacement</span></td><td>Version-aware commands</td></tr>
+        <tr><td class="field">api_changes</td><td><span class="type">tool_id, version, change_type, old_usage, new_usage</span></td><td>Breaking change log</td></tr>
+        <tr><td class="field">workspace</td><td><span class="type">project_id, state_json</span></td><td>Resume state</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 09 Build Phases -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <span class="section-title">Build Phases</span>
+      <span class="section-tag tag-mvp">MVP</span>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 1</span>
+      <div class="phase-content">
+        <div class="phase-name">Database & Project Foundation</div>
+        <div class="phase-items">SQLite connection, schema creation, project CRUD, sidebar list, project cards</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 2</span>
+      <div class="phase-content">
+        <div class="phase-name">Terminal Engine</div>
+        <div class="phase-items">node-pty process spawning, xterm.js integration, tabbed terminal UI, project binding</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 3</span>
+      <div class="phase-content">
+        <div class="phase-name">AI Chat Panel</div>
+        <div class="phase-items">Claude CLI integration, per-project chat UI, history persistence, system prompt injection</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 4</span>
+      <div class="phase-content">
+        <div class="phase-name">Notes & Tasks</div>
+        <div class="phase-items">Markdown notes editor, autosave, task list with status tracking</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 5</span>
+      <div class="phase-content">
+        <div class="phase-name">Git Integration</div>
+        <div class="phase-items">simple-git bindings, live status panel, branch display, basic git commands</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 6</span>
+      <div class="phase-content">
+        <div class="phase-name">Project Brain & Pattern Memory</div>
+        <div class="phase-items">Manual brain editor, pattern storage, debug solutions, cross-project search</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 7</span>
+      <div class="phase-content">
+        <div class="phase-name">Reference Intelligence</div>
+        <div class="phase-items">Tool registry UI, version management, command storage, OS filtering, API change log</div>
+      </div>
+    </div>
+    <div class="phase-row">
+      <span class="phase-num">Phase 8</span>
+      <div class="phase-content">
+        <div class="phase-name">Workspace Resume & Settings</div>
+        <div class="phase-items">Full state persistence, restore on launch, AI provider config, shell config, packaging</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Constraints -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">—</span>
+      <span class="section-title">Development Constraints</span>
+    </div>
+    <div class="constraint-item">
+      <span class="constraint-icon">—</span>
+      <div class="constraint-text"><strong>No microservices, Docker, or Kubernetes.</strong> Monolithic architecture for MVP. Node.js sidecar + SQLite only.</div>
+    </div>
+    <div class="constraint-item">
+      <span class="constraint-icon">—</span>
+      <div class="constraint-text"><strong>No premature abstraction.</strong> Simple, readable TypeScript. Stable libraries only.</div>
+    </div>
+    <div class="constraint-item">
+      <span class="constraint-icon">—</span>
+      <div class="constraint-text"><strong>Performance targets:</strong> Launch under 3s · Memory under 300MB · 10 active projects · 5 simultaneous terminals.</div>
+    </div>
+    <div class="constraint-item">
+      <span class="constraint-icon">—</span>
+      <div class="constraint-text"><strong>Security:</strong> Local-only storage. No telemetry. No cloud transmission. Secure process spawning.</div>
+    </div>
+    <div class="constraint-item">
+      <span class="constraint-icon">—</span>
+      <div class="constraint-text"><strong>UI simplicity:</strong> Dark theme, minimal animations, VSCode-familiar layout. Productivity over aesthetics.</div>
+    </div>
+  </div>
+
+  <!-- 10 Acceptance Criteria -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">10</span>
+      <span class="section-title">MVP Acceptance Criteria</span>
+      <span class="section-tag tag-mvp">MVP</span>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Developer can add and manage multiple projects from one dashboard</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Terminal sessions spawn correctly, persist names, and are project-bound</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">AI chat works per project with isolated history and brain context injection</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Notes and tasks persist correctly across restarts</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Git status, branch, and uncommitted files display correctly</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Project Brain saves summaries, patterns, and debug solutions</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Tool reference entries retrievable by version and OS</div>
+    </div>
+    <div class="acceptance-item">
+      <div class="check"><svg viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="acceptance-text">Workspace resumes correctly on app restart — zero re-setup</div>
+    </div>
+  </div>
+
+  <!-- Post MVP -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">—</span>
+      <span class="section-title">Post-MVP Roadmap</span>
+      <span class="section-tag tag-post">Post-MVP</span>
+    </div>
+    <div class="post-mvp-list">
+      <span class="post-mvp-chip">Vector search (ChromaDB)</span>
+      <span class="post-mvp-chip">Local model summarization</span>
+      <span class="post-mvp-chip">Auto pattern extraction</span>
+      <span class="post-mvp-chip">Doc scraping ingestion</span>
+      <span class="post-mvp-chip">Tool intent routing</span>
+      <span class="post-mvp-chip">Knowledge graph</span>
+      <span class="post-mvp-chip">AI agents</span>
+      <span class="post-mvp-chip">macOS support</span>
+      <span class="post-mvp-chip">Windows support</span>
+      <span class="post-mvp-chip">Embedded code editor</span>
+      <span class="post-mvp-chip">Plugin API</span>
+      <span class="post-mvp-chip">Cloud sync (opt-in)</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="oss-box">
+    <div class="oss-box-title">Anthropic Claude for Open Source — Application Note</div>
+    <div class="oss-box-text">Cortex is being built as a genuine open-source tool targeting the "ecosystem quietly depends on" exception clause. As a Linux-first, Claude-native developer workspace with no existing equivalent in the OSS ecosystem, this project directly enables Claude Code power users to work more effectively. The application will emphasize the Reference Intelligence module's unique ability to eliminate stale API hallucinations — a problem every Claude Code user faces daily.</div>
+  </div>
+
+</div>

@@ -1,0 +1,512 @@
+import * as pty from 'node-pty';
+import { EventEmitter } from 'events';
+import { v4 as uuid } from 'uuid';
+import { getDb } from '../db/index.js';
+import os from 'os';
+
+export interface SessionInfo {
+  id: string;
+  projectId: string;
+  name: string;
+  status: 'running' | 'idle' | 'completed' | 'error';
+  startedAt: string;
+  lastActive: string;
+  pid: number | null;
+  promptCount: number;
+  tokenUsageInput: number;
+  tokenUsageOutput: number;
+}
+
+interface ManagedSession {
+  id: string;
+  projectId: string;
+  name: string;
+  pty: pty.IPty;
+  outputBuffer: string;
+  lastOutput: string;
+  status: 'running' | 'idle' | 'completed' | 'error';
+  promptCount: number;
+  tokenEstimateInput: number;
+  tokenEstimateOutput: number;
+  startedAt: string;
+  lastActive: string;
+}
+
+// Rough token estimation: ~4 chars per token
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+export class SessionManager extends EventEmitter {
+  private sessions: Map<string, ManagedSession> = new Map();
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+
+  constructor() {
+    super();
+    this.startHeartbeat();
+  }
+
+  /**
+   * Spawn a new Claude Code session for a project
+   */
+  spawnSession(projectId: string, sessionName: string, projectPath: string): SessionInfo {
+    const id = uuid();
+    const now = new Date().toISOString();
+    const shell = process.env.SHELL || '/bin/bash';
+
+    // Spawn a PTY running claude in the project directory
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 40,
+      cwd: projectPath,
+      env: {
+        ...process.env,
+        TERM: 'xterm-256color',
+      } as Record<string, string>,
+    });
+
+    const session: ManagedSession = {
+      id,
+      projectId,
+      name: sessionName,
+      pty: ptyProcess,
+      outputBuffer: '',
+      lastOutput: '',
+      status: 'running',
+      promptCount: 0,
+      tokenEstimateInput: 0,
+      tokenEstimateOutput: 0,
+      startedAt: now,
+      lastActive: now,
+    };
+
+    // Collect output
+    ptyProcess.onData((data: string) => {
+      session.outputBuffer += data;
+      session.lastOutput = data;
+      session.lastActive = new Date().toISOString();
+
+      // Keep buffer from growing unbounded (last 100KB)
+      if (session.outputBuffer.length > 102400) {
+        session.outputBuffer = session.outputBuffer.slice(-51200);
+      }
+
+      this.emit('session:output', { sessionId: id, data });
+    });
+
+    // Handle exit
+    ptyProcess.onExit(({ exitCode }) => {
+      session.status = exitCode === 0 ? 'completed' : 'error';
+      this.updateSessionDb(session);
+      this.emit('session:exit', { sessionId: id, exitCode });
+    });
+
+    this.sessions.set(id, session);
+
+    // Persist to DB
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO claude_sessions (id, project_id, name, status, started_at, last_active)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, projectId, sessionName, 'running', now, now);
+
+    // Create metrics row
+    const metricsId = uuid();
+    db.prepare(`
+      INSERT INTO session_metrics (id, session_id) VALUES (?, ?)
+    `).run(metricsId, id);
+
+    // Send the claude command to start Claude Code
+    ptyProcess.write('claude\r');
+
+    this.emit('session:spawned', { sessionId: id, projectId, name: sessionName });
+    return this.getSessionInfo(id)!;
+  }
+
+  /**
+   * Send input to a session (user prompt)
+   */
+  sendInput(sessionId: string, input: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.status !== 'running') return false;
+
+    session.pty.write(input);
+    session.lastActive = new Date().toISOString();
+    session.promptCount++;
+    session.tokenEstimateInput += estimateTokens(input);
+
+    // Log to session_history
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO session_history (id, session_id, prompt_text, timestamp)
+      VALUES (?, ?, ?, ?)
+    `).run(uuid(), sessionId, input, session.lastActive);
+
+    // Update metrics
+    this.updateMetrics(session);
+
+    this.emit('session:input', { sessionId, input });
+    return true;
+  }
+
+  /**
+   * Resize session terminal
+   */
+  resizeSession(sessionId: string, cols: number, rows: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.pty.resize(cols, rows);
+    return true;
+  }
+
+  /**
+   * Stop a session gracefully
+   */
+  stopSession(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+
+    // Send Ctrl+C then exit
+    session.pty.write('\x03');
+    setTimeout(() => {
+      try {
+        session.pty.write('exit\r');
+      } catch {
+        // Process may already be dead
+      }
+    }, 500);
+
+    session.status = 'completed';
+    this.updateSessionDb(session);
+    this.emit('session:stopped', { sessionId });
+    return true;
+  }
+
+  /**
+   * Kill a session forcefully
+   */
+  killSession(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+
+    try {
+      session.pty.kill();
+    } catch {
+      // Already dead
+    }
+
+    session.status = 'completed';
+    this.updateSessionDb(session);
+    this.sessions.delete(sessionId);
+    this.emit('session:killed', { sessionId });
+    return true;
+  }
+
+  /**
+   * Get info for a single session
+   */
+  getSessionInfo(sessionId: string): SessionInfo | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      // Check DB for completed sessions
+      const db = getDb();
+      const row = db.prepare(`
+        SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output
+        FROM claude_sessions cs
+        LEFT JOIN session_metrics sm ON sm.session_id = cs.id
+        WHERE cs.id = ?
+      `).get(sessionId) as any;
+
+      if (!row) return null;
+      return {
+        id: row.id,
+        projectId: row.project_id,
+        name: row.name,
+        status: row.status,
+        startedAt: row.started_at,
+        lastActive: row.last_active,
+        pid: null,
+        promptCount: row.prompt_count || 0,
+        tokenUsageInput: row.token_usage_input || 0,
+        tokenUsageOutput: row.token_usage_output || 0,
+      };
+    }
+
+    return {
+      id: session.id,
+      projectId: session.projectId,
+      name: session.name,
+      status: session.status,
+      startedAt: session.startedAt,
+      lastActive: session.lastActive,
+      pid: session.pty.pid,
+      promptCount: session.promptCount,
+      tokenUsageInput: session.tokenEstimateInput,
+      tokenUsageOutput: session.tokenEstimateOutput,
+    };
+  }
+
+  /**
+   * Get all active (in-memory) sessions
+   */
+  getActiveSessions(): SessionInfo[] {
+    return Array.from(this.sessions.values()).map(s => ({
+      id: s.id,
+      projectId: s.projectId,
+      name: s.name,
+      status: s.status,
+      startedAt: s.startedAt,
+      lastActive: s.lastActive,
+      pid: s.pty.pid,
+      promptCount: s.promptCount,
+      tokenUsageInput: s.tokenEstimateInput,
+      tokenUsageOutput: s.tokenEstimateOutput,
+    }));
+  }
+
+  /**
+   * Get all sessions (active + completed from DB)
+   */
+  getAllSessions(projectId?: string): SessionInfo[] {
+    const db = getDb();
+    let query = `
+      SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output
+      FROM claude_sessions cs
+      LEFT JOIN session_metrics sm ON sm.session_id = cs.id
+    `;
+    const params: any[] = [];
+
+    if (projectId) {
+      query += ' WHERE cs.project_id = ?';
+      params.push(projectId);
+    }
+
+    query += ' ORDER BY cs.last_active DESC';
+
+    const rows = db.prepare(query).all(...params) as any[];
+
+    return rows.map(row => {
+      // If session is still active in memory, use live data
+      const live = this.sessions.get(row.id);
+      if (live) {
+        return {
+          id: live.id,
+          projectId: live.projectId,
+          name: live.name,
+          status: live.status,
+          startedAt: live.startedAt,
+          lastActive: live.lastActive,
+          pid: live.pty.pid,
+          promptCount: live.promptCount,
+          tokenUsageInput: live.tokenEstimateInput,
+          tokenUsageOutput: live.tokenEstimateOutput,
+        };
+      }
+
+      return {
+        id: row.id,
+        projectId: row.project_id,
+        name: row.name,
+        status: row.status,
+        startedAt: row.started_at,
+        lastActive: row.last_active,
+        pid: null,
+        promptCount: row.prompt_count || 0,
+        tokenUsageInput: row.token_usage_input || 0,
+        tokenUsageOutput: row.token_usage_output || 0,
+      };
+    });
+  }
+
+  /**
+   * Get sessions for a specific project
+   */
+  getProjectSessions(projectId: string): SessionInfo[] {
+    return this.getAllSessions(projectId);
+  }
+
+  /**
+   * Get recent output from a session
+   */
+  getSessionOutput(sessionId: string, lastN = 4096): string {
+    const session = this.sessions.get(sessionId);
+    if (!session) return '';
+    return session.outputBuffer.slice(-lastN);
+  }
+
+  /**
+   * Get usage summary across all projects
+   */
+  getUsageSummary(): {
+    today: { promptCount: number; tokenTotal: number; sessionCount: number };
+    byProject: { projectId: string; promptCount: number; tokenTotal: number }[];
+  } {
+    const db = getDb();
+    const today = new Date().toISOString().split('T')[0];
+
+    const todayRow = db.prepare(`
+      SELECT COALESCE(SUM(prompt_count), 0) as prompt_count,
+             COALESCE(SUM(token_total), 0) as token_total,
+             COALESCE(SUM(session_count), 0) as session_count
+      FROM usage_daily WHERE date = ?
+    `).get(today) as any;
+
+    const byProject = db.prepare(`
+      SELECT project_id, COALESCE(SUM(prompt_count), 0) as prompt_count,
+             COALESCE(SUM(token_total), 0) as token_total
+      FROM usage_daily WHERE date = ?
+      GROUP BY project_id
+    `).all(today) as any[];
+
+    // Add live session data not yet flushed to daily
+    for (const session of this.sessions.values()) {
+      todayRow.prompt_count += session.promptCount;
+      todayRow.token_total += session.tokenEstimateInput + session.tokenEstimateOutput;
+
+      const existing = byProject.find(p => p.project_id === session.projectId);
+      if (existing) {
+        existing.prompt_count += session.promptCount;
+        existing.token_total += session.tokenEstimateInput + session.tokenEstimateOutput;
+      } else {
+        byProject.push({
+          project_id: session.projectId,
+          prompt_count: session.promptCount,
+          token_total: session.tokenEstimateInput + session.tokenEstimateOutput,
+        });
+      }
+    }
+
+    return {
+      today: {
+        promptCount: todayRow.prompt_count,
+        tokenTotal: todayRow.token_total,
+        sessionCount: todayRow.session_count + this.sessions.size,
+      },
+      byProject: byProject.map(p => ({
+        projectId: p.project_id,
+        promptCount: p.prompt_count,
+        tokenTotal: p.token_total,
+      })),
+    };
+  }
+
+  /**
+   * Update session in DB
+   */
+  private updateSessionDb(session: ManagedSession): void {
+    const db = getDb();
+    db.prepare(`
+      UPDATE claude_sessions SET status = ?, last_active = ? WHERE id = ?
+    `).run(session.status, session.lastActive, session.id);
+
+    this.updateMetrics(session);
+    this.updateDailyUsage(session);
+  }
+
+  /**
+   * Update metrics for a session
+   */
+  private updateMetrics(session: ManagedSession): void {
+    const db = getDb();
+    const duration = Math.floor(
+      (new Date(session.lastActive).getTime() - new Date(session.startedAt).getTime()) / 1000
+    );
+
+    db.prepare(`
+      UPDATE session_metrics SET
+        prompt_count = ?,
+        token_usage_input = ?,
+        token_usage_output = ?,
+        duration_seconds = ?,
+        updated_at = ?
+      WHERE session_id = ?
+    `).run(
+      session.promptCount,
+      session.tokenEstimateInput,
+      session.tokenEstimateOutput,
+      duration,
+      session.lastActive,
+      session.id
+    );
+  }
+
+  /**
+   * Flush session usage to daily aggregate
+   */
+  private updateDailyUsage(session: ManagedSession): void {
+    const db = getDb();
+    const date = new Date().toISOString().split('T')[0];
+    const tokenTotal = session.tokenEstimateInput + session.tokenEstimateOutput;
+
+    const existing = db.prepare(
+      'SELECT id FROM usage_daily WHERE project_id = ? AND date = ?'
+    ).get(session.projectId, date) as any;
+
+    if (existing) {
+      db.prepare(`
+        UPDATE usage_daily SET
+          prompt_count = prompt_count + ?,
+          token_total = token_total + ?,
+          session_count = session_count + 1
+        WHERE id = ?
+      `).run(session.promptCount, tokenTotal, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO usage_daily (id, project_id, date, prompt_count, token_total, session_count)
+        VALUES (?, ?, ?, ?, ?, 1)
+      `).run(uuid(), session.projectId, date, session.promptCount, tokenTotal);
+    }
+  }
+
+  /**
+   * Heartbeat: check if processes are still alive
+   */
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      for (const [id, session] of this.sessions) {
+        try {
+          // Check if process is alive by sending signal 0
+          process.kill(session.pty.pid, 0);
+        } catch {
+          // Process is dead
+          if (session.status === 'running') {
+            session.status = 'error';
+            this.updateSessionDb(session);
+            this.sessions.delete(id);
+            this.emit('session:died', { sessionId: id });
+          }
+        }
+      }
+    }, 5000);
+  }
+
+  /**
+   * Cleanup on shutdown
+   */
+  destroy(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+
+    for (const [id, session] of this.sessions) {
+      try {
+        this.updateSessionDb(session);
+        session.pty.kill();
+      } catch {
+        // Best effort
+      }
+    }
+    this.sessions.clear();
+  }
+}
+
+// Singleton
+let instance: SessionManager | null = null;
+
+export function getSessionManager(): SessionManager {
+  if (!instance) {
+    instance = new SessionManager();
+  }
+  return instance;
+}
