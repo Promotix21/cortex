@@ -8,6 +8,11 @@ import { chatRouter } from './routes/chat.js';
 import { notesRouter, tasksRouter } from './routes/notes.js';
 import { gitRouter } from './routes/git.js';
 import { intelligenceRouter } from './routes/intelligence.js';
+import { bridgeRouter } from './routes/bridge.js';
+import { referenceRouter } from './routes/reference.js';
+import { policiesRouter, playbooksRouter } from './routes/policies.js';
+import { workspaceRouter, contextRouter } from './routes/workspace.js';
+import { getBridgeClient } from './bridge/bridge-client.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getTerminalManager } from './terminals/terminal-manager.js';
 
@@ -46,6 +51,17 @@ app.use('/api/notes', notesRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/git', gitRouter);
 app.use('/api/intelligence', intelligenceRouter);
+app.use('/api/bridge', bridgeRouter);
+
+app.use('/api/reference', referenceRouter);
+app.use('/api/policies', policiesRouter);
+app.use('/api/playbooks', playbooksRouter);
+app.use('/api/workspace', workspaceRouter);
+app.use('/api/context', contextRouter);
+
+// Start bridge client polling
+const bridgeClient = getBridgeClient();
+bridgeClient.start(3000);
 
 // Start server
 const server = app.listen(PORT, '127.0.0.1', () => {
@@ -59,6 +75,7 @@ function shutdown() {
   console.log('[cortex-sidecar] Shutting down...');
   sessionManager.destroy();
   terminalManager.destroy();
+  bridgeClient.stop();
   server.close();
   closeDb();
   process.exit(0);

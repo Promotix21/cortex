@@ -30,3 +30,5 @@ npm-debug.log*
 *.db-wal
 *.db-shm
 remotion-demo/
+assets/*.gif
+assets/*.mp4

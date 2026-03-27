@@ -7,9 +7,11 @@ import { NotesPanel } from './NotesPanel';
 import { TasksPanel } from './TasksPanel';
 import { GitPanel } from './GitPanel';
 import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
-import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare, Brain } from 'lucide-react';
+import { ErrorPanel } from '@/components/bridge/ErrorPanel';
+import { ReferencePanel } from './ReferencePanel';
+import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare, Brain, Book, AlertTriangle } from 'lucide-react';
 
-type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'chat' | 'intelligence';
+type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'intelligence' | 'reference' | 'errors' | 'chat';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -17,6 +19,8 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'git', label: 'Git', icon: GitBranch },
   { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'intelligence', label: 'Brain', icon: Brain },
+  { id: 'reference', label: 'Reference', icon: Book },
+  { id: 'errors', label: 'Errors', icon: AlertTriangle },
   { id: 'chat', label: 'AI Chat', icon: MessageSquare },
 ];
 
@@ -80,6 +84,8 @@ export function WorkspaceTabs() {
         {activeTab === 'git' && <GitPanel />}
         {activeTab === 'notes' && <NotesAndTasksPanel />}
         {activeTab === 'intelligence' && <IntelligencePanel />}
+        {activeTab === 'reference' && <ReferencePanel />}
+        {activeTab === 'errors' && <ErrorPanel />}
         {activeTab === 'chat' && <ChatPanel />}
       </div>
     </div>
