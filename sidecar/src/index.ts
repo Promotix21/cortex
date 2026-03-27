@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { initDb, closeDb } from './db/index.js';
+import { initDb, closeDb, getDb } from './db/index.js';
 import { projectsRouter } from './routes/projects.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { terminalsRouter } from './routes/terminals.js';
@@ -11,6 +11,7 @@ import { intelligenceRouter } from './routes/intelligence.js';
 import { bridgeRouter } from './routes/bridge.js';
 import { referenceRouter } from './routes/reference.js';
 import { policiesRouter, playbooksRouter } from './routes/policies.js';
+import { checkPolicy } from './routes/policy-check.js';
 import { workspaceRouter, contextRouter } from './routes/workspace.js';
 import { getBridgeClient } from './bridge/bridge-client.js';
 import { getSessionManager } from './sessions/session-manager.js';
@@ -54,6 +55,8 @@ app.use('/api/intelligence', intelligenceRouter);
 app.use('/api/bridge', bridgeRouter);
 
 app.use('/api/reference', referenceRouter);
+// Policy check — use app.all for exact path match (Express 5 app.use is prefix-only)
+app.all('/api/policy-check', checkPolicy);
 app.use('/api/policies', policiesRouter);
 app.use('/api/playbooks', playbooksRouter);
 app.use('/api/workspace', workspaceRouter);

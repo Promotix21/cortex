@@ -12,6 +12,8 @@ const DEFAULT_RESTRICTED = [
 
 // ==================== EXECUTION POLICIES ====================
 
+// Note: POST /check is handled by policyCheckRouter mounted at /api/policies/check in index.ts
+
 policiesRouter.get('/:projectId', (req, res) => {
   const db = getDb();
   const policies = db.prepare('SELECT * FROM execution_policies WHERE project_id = ? OR project_id IS NULL ORDER BY created_at')
@@ -19,7 +21,7 @@ policiesRouter.get('/:projectId', (req, res) => {
   res.json({ policies });
 });
 
-policiesRouter.post('/:projectId', (req, res) => {
+policiesRouter.post('/project/:projectId', (req, res) => {
   const { action_pattern, policy, reason } = req.body;
   if (!action_pattern || !policy) { res.status(400).json({ error: 'action_pattern and policy required' }); return; }
   const db = getDb();
@@ -32,34 +34,6 @@ policiesRouter.post('/:projectId', (req, res) => {
 policiesRouter.delete('/rule/:id', (req, res) => {
   getDb().prepare('DELETE FROM execution_policies WHERE id = ?').run(req.params.id);
   res.json({ success: true });
-});
-
-// POST /api/policies/check — check if an action is allowed
-policiesRouter.post('/check', (req, res) => {
-  const { action, project_id } = req.body;
-  if (!action) { res.status(400).json({ error: 'action required' }); return; }
-
-  // Check restricted defaults
-  for (const pattern of DEFAULT_RESTRICTED) {
-    if (action.includes(pattern)) {
-      res.json({ allowed: false, policy: 'restrict', reason: `Default restricted: ${pattern}` });
-      return;
-    }
-  }
-
-  // Check project-specific policies
-  if (project_id) {
-    const db = getDb();
-    const policies = db.prepare('SELECT * FROM execution_policies WHERE project_id = ?').all(project_id) as any[];
-    for (const p of policies) {
-      if (action.includes(p.action_pattern)) {
-        res.json({ allowed: p.policy === 'allow', policy: p.policy, reason: p.reason });
-        return;
-      }
-    }
-  }
-
-  res.json({ allowed: true, policy: 'allow', reason: 'Default allow' });
 });
 
 // ==================== PLAYBOOKS ====================
