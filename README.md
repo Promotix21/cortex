@@ -405,7 +405,7 @@ MIT. Use it, fork it, ship it.
 <p align="center">
   <strong>Cortex — the AI development workspace that remembers everything.</strong>
   <br/><br/>
-  Built by <a href="https://hiraya.dev">Hiraya Digital</a>
+  Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a>
   <br/>
   <sub>If this is useful, star the repo. It helps others find it.</sub>
 </p>

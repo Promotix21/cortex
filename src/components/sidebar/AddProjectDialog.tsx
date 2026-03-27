@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
-import { X } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { X, FolderOpen } from 'lucide-react';
 
 interface AddProjectDialogProps {
   onClose: () => void;
@@ -12,6 +13,26 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
   const [path, setPath] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const handleBrowse = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Project Folder',
+      });
+      if (selected && typeof selected === 'string') {
+        setPath(selected);
+        // Auto-fill name from folder name if empty
+        if (!name.trim()) {
+          const folderName = selected.split('/').filter(Boolean).pop() || '';
+          setName(folderName);
+        }
+      }
+    } catch {
+      // User cancelled
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +71,41 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          {/* Folder Picker */}
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>
+              Project Folder
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                placeholder="Select a folder..."
+                className="flex-1 px-3 py-2 rounded text-xs outline-none"
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                }}
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={handleBrowse}
+                className="px-3 py-2 rounded text-xs font-medium flex items-center gap-1.5 transition-colors hover:opacity-90"
+                style={{
+                  background: 'var(--accent)',
+                  color: 'var(--bg-primary)',
+                }}
+              >
+                <FolderOpen size={13} />
+                Browse
+              </button>
+            </div>
+          </div>
+
+          {/* Project Name */}
           <div>
             <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>
               Project Name
@@ -58,35 +114,14 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="my-project"
+              placeholder="Auto-filled from folder name"
               className="w-full px-3 py-2 rounded text-xs outline-none"
               style={{
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
                 color: 'var(--text-primary)',
               }}
-              autoFocus
             />
-          </div>
-
-          <div>
-            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>
-              Project Path
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="/home/user/projects/my-project"
-                className="flex-1 px-3 py-2 rounded text-xs outline-none"
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-              />
-            </div>
           </div>
 
           {error && (
