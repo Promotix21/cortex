@@ -4,6 +4,7 @@ import { initDb, closeDb } from './db/index.js';
 import { projectsRouter } from './routes/projects.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { terminalsRouter } from './routes/terminals.js';
+import { chatRouter } from './routes/chat.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getTerminalManager } from './terminals/terminal-manager.js';
 
@@ -37,6 +38,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/projects', projectsRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/terminals', terminalsRouter);
+app.use('/api/chat', chatRouter);
 
 // Start server
 const server = app.listen(PORT, '127.0.0.1', () => {

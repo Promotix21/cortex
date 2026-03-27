@@ -91,6 +91,19 @@ export const api = {
   killTerminal: (id: string) =>
     request<{ success: boolean }>(`/api/terminals/${id}`, { method: 'DELETE' }),
 
+  // Chat
+  getChatHistory: (projectId: string) =>
+    request<{ history: any[] }>(`/api/chat/${projectId}`),
+  clearChat: (projectId: string) =>
+    request<{ success: boolean }>(`/api/chat/${projectId}`, { method: 'DELETE' }),
+  getProjectBrain: (projectId: string) =>
+    request<{ brain: any }>(`/api/chat/brain/${projectId}`),
+  updateProjectBrain: (projectId: string, fields: any) =>
+    request<{ brain: any }>(`/api/chat/brain/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify(fields),
+    }),
+
   // Health
   health: () => request<{ status: string; activeSessions: number }>('/api/health'),
 };
