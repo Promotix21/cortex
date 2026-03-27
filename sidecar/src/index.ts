@@ -5,6 +5,8 @@ import { projectsRouter } from './routes/projects.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { terminalsRouter } from './routes/terminals.js';
 import { chatRouter } from './routes/chat.js';
+import { notesRouter, tasksRouter } from './routes/notes.js';
+import { gitRouter } from './routes/git.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getTerminalManager } from './terminals/terminal-manager.js';
 
@@ -39,6 +41,9 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/terminals', terminalsRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/notes', notesRouter);
+app.use('/api/tasks', tasksRouter);
+app.use('/api/git', gitRouter);
 
 // Start server
 const server = app.listen(PORT, '127.0.0.1', () => {

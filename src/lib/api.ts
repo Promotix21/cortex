@@ -91,6 +91,37 @@ export const api = {
   killTerminal: (id: string) =>
     request<{ success: boolean }>(`/api/terminals/${id}`, { method: 'DELETE' }),
 
+  // Notes
+  getNote: (projectId: string) => request<{ note: any }>(`/api/notes/${projectId}`),
+  saveNote: (projectId: string, content: string) =>
+    request<{ success: boolean }>(`/api/notes/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+
+  // Tasks
+  getTasks: (projectId: string) => request<{ tasks: any[] }>(`/api/tasks/${projectId}`),
+  createTask: (projectId: string, title: string) =>
+    request<{ task: any }>(`/api/tasks/${projectId}`, {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
+  updateTask: (id: string, fields: any) =>
+    request<{ task: any }>(`/api/tasks/item/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(fields),
+    }),
+  deleteTask: (id: string) =>
+    request<{ success: boolean }>(`/api/tasks/item/${id}`, { method: 'DELETE' }),
+
+  // Git
+  getGitStatus: (projectId: string) => request<any>(`/api/git/${projectId}/status`),
+  getGitLog: (projectId: string, limit = 20) => request<{ commits: any[] }>(`/api/git/${projectId}/log?limit=${limit}`),
+  getGitDiff: (projectId: string) => request<{ diff: string; stagedDiff: string }>(`/api/git/${projectId}/diff`),
+  getGitBranches: (projectId: string) => request<{ current: string; branches: string[] }>(`/api/git/${projectId}/branches`),
+  gitPull: (projectId: string) => request<any>(`/api/git/${projectId}/pull`, { method: 'POST' }),
+  gitPush: (projectId: string) => request<any>(`/api/git/${projectId}/push`, { method: 'POST' }),
+
   // Chat
   getChatHistory: (projectId: string) =>
     request<{ history: any[] }>(`/api/chat/${projectId}`),

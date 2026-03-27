@@ -3,6 +3,9 @@ import { useProjectStore } from '@/stores/project-store';
 import { ProjectSessions } from '@/components/sessions/ProjectSessions';
 import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { ChatPanel } from '@/components/chat/ChatPanel';
+import { NotesPanel } from './NotesPanel';
+import { TasksPanel } from './TasksPanel';
+import { GitPanel } from './GitPanel';
 import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare } from 'lucide-react';
 
 type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'chat';
@@ -72,8 +75,8 @@ export function WorkspaceTabs() {
       <div className={`flex-1 overflow-auto ${activeTab !== 'terminal' && activeTab !== 'chat' ? 'p-4' : ''}`}>
         {activeTab === 'overview' && <OverviewPanel project={activeProject} />}
         {activeTab === 'terminal' && <TerminalPanel />}
-        {activeTab === 'git' && <PlaceholderPanel label="Git" phase={5} />}
-        {activeTab === 'notes' && <PlaceholderPanel label="Notes" phase={5} />}
+        {activeTab === 'git' && <GitPanel />}
+        {activeTab === 'notes' && <NotesAndTasksPanel />}
         {activeTab === 'chat' && <ChatPanel />}
       </div>
     </div>
@@ -148,17 +151,11 @@ function ActionChip({ label }: { label: string }) {
   );
 }
 
-function PlaceholderPanel({ label, phase }: { label: string; phase: number }) {
+function NotesAndTasksPanel() {
   return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-          {label} — Phase {phase}
-        </p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-          Coming soon
-        </p>
-      </div>
+    <div className="grid grid-cols-2 gap-6 h-full">
+      <NotesPanel />
+      <TasksPanel />
     </div>
   );
 }
