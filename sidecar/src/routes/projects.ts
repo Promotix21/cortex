@@ -3,6 +3,8 @@ import { getDb } from '../db/index.js';
 import { v4 as uuid } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { scanProject } from '../intelligence/project-scanner.js';
+import { indexProject, getProjectStructureSummary } from '../intelligence/file-indexer.js';
 
 export const projectsRouter: ReturnType<typeof Router> = Router();
 
@@ -107,6 +109,10 @@ projectsRouter.post('/', (req, res) => {
     `).run(uuid(), id);
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+
+    // Auto-scan project: index files + populate brain (non-blocking)
+    scanProject(id, projectPath).catch(() => {});
+
     res.status(201).json({ project });
   } catch (err: any) {
     if (err.message?.includes('UNIQUE constraint failed')) {
@@ -154,4 +160,45 @@ projectsRouter.delete('/:id', (req, res) => {
 
   db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+// POST /api/projects/:id/scan — manually trigger project scan
+projectsRouter.post('/:id/scan', async (req, res) => {
+  const db = getDb();
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  try {
+    const result = await scanProject(project.id, project.path);
+    res.json({ scan: result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/projects/:id/files — get file index for a project
+projectsRouter.get('/:id/files', (req, res) => {
+  const db = getDb();
+  const { type } = req.query;
+
+  let query = 'SELECT * FROM file_index WHERE project_id = ?';
+  const params: any[] = [req.params.id];
+
+  if (type) {
+    query += ' AND file_type = ?';
+    params.push(type);
+  }
+
+  query += ' ORDER BY file_type, file_path';
+  const files = db.prepare(query).all(...params);
+  res.json({ files, total: files.length });
+});
+
+// GET /api/projects/:id/structure — get condensed structure summary
+projectsRouter.get('/:id/structure', (req, res) => {
+  const summary = getProjectStructureSummary(req.params.id);
+  res.json({ summary });
 });
