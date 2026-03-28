@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { spawn } from 'child_process';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
 
@@ -144,22 +144,15 @@ export function clearChatHistory(projectId: string): void {
 }
 
 /**
- * Send a message and get streaming response
- * Returns an async generator yielding text chunks
+ * Send a message using Claude CLI (Max subscription) and stream the response.
+ * Uses `claude -p "prompt" --output-format stream-json` for streaming.
+ * Falls back to non-streaming if stream format isn't available.
  */
 export async function* sendMessage(
   projectId: string,
   projectName: string,
   userMessage: string,
-  apiKey?: string
 ): AsyncGenerator<{ type: 'chunk' | 'done' | 'error'; content: string }> {
-  const key = apiKey || process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    yield { type: 'error', content: 'No API key configured. Set ANTHROPIC_API_KEY environment variable or provide it in settings.' };
-    return;
-  }
-
-  const client = new Anthropic({ apiKey: key });
   const brain = getProjectBrain(projectId);
   const systemPrompt = buildSystemPrompt(projectName, brain);
   const session = getOrCreateSession(projectId);
@@ -173,53 +166,90 @@ export async function* sendMessage(
   };
   session.history.push(userMsg);
 
-  // Build messages for API (last 20 messages to stay within context)
-  const recentHistory = session.history.slice(-20);
-  const apiMessages = recentHistory.map(m => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
+  // Build the full prompt with context
+  const contextParts: string[] = [];
+  if (systemPrompt) contextParts.push(systemPrompt);
+
+  // Include recent chat history for continuity
+  const recentHistory = session.history.slice(-10, -1); // exclude current message
+  if (recentHistory.length > 0) {
+    contextParts.push('\n## Recent conversation:');
+    for (const msg of recentHistory) {
+      contextParts.push(`${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`);
+    }
+  }
+
+  contextParts.push(`\nUser: ${userMessage}`);
+  const fullPrompt = contextParts.join('\n');
 
   try {
-    const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: apiMessages,
+    // Use claude CLI with --print flag for non-interactive output
+    const claude = spawn('claude', ['-p', fullPrompt, '--no-input'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
     });
 
     let fullResponse = '';
+    let hasOutput = false;
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        const text = event.delta.text;
-        fullResponse += text;
-        yield { type: 'chunk', content: text };
-      }
+    // Stream stdout
+    for await (const chunk of claude.stdout) {
+      const text = chunk.toString();
+      fullResponse += text;
+      hasOutput = true;
+      yield { type: 'chunk', content: text };
     }
 
-    // Save assistant message to history
-    const assistantMsg: ChatMessage = {
-      id: uuid(),
-      role: 'assistant',
-      content: fullResponse,
-      timestamp: new Date().toISOString(),
-    };
-    session.history.push(assistantMsg);
-    saveHistory(projectId, session.history);
+    // Capture stderr for errors
+    let stderr = '';
+    for await (const chunk of claude.stderr) {
+      stderr += chunk.toString();
+    }
 
-    yield { type: 'done', content: fullResponse };
+    // Wait for process to exit
+    await new Promise<void>((resolve, reject) => {
+      claude.on('close', (code) => {
+        if (code === 0 || hasOutput) {
+          resolve();
+        } else {
+          reject(new Error(stderr || `Claude CLI exited with code ${code}`));
+        }
+      });
+      claude.on('error', reject);
+    });
+
+    // Save assistant message to history
+    if (fullResponse.trim()) {
+      const assistantMsg: ChatMessage = {
+        id: uuid(),
+        role: 'assistant',
+        content: fullResponse.trim(),
+        timestamp: new Date().toISOString(),
+      };
+      session.history.push(assistantMsg);
+    }
+
+    saveHistory(projectId, session.history);
+    yield { type: 'done', content: fullResponse.trim() };
+
   } catch (err: any) {
-    // Still save the user message even if API fails
+    // Save user message even if Claude fails
     saveHistory(projectId, session.history);
 
     const errorMsg = err.message || 'Unknown error';
-    if (errorMsg.includes('authentication') || errorMsg.includes('api_key')) {
-      yield { type: 'error', content: 'Invalid API key. Check your ANTHROPIC_API_KEY.' };
-    } else if (errorMsg.includes('rate_limit')) {
-      yield { type: 'error', content: 'Rate limited. Please wait a moment and try again.' };
+
+    if (errorMsg.includes('ENOENT') || errorMsg.includes('not found')) {
+      yield {
+        type: 'error',
+        content: 'Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code\nThen authenticate with: claude login',
+      };
+    } else if (errorMsg.includes('auth') || errorMsg.includes('login') || errorMsg.includes('unauthorized')) {
+      yield {
+        type: 'error',
+        content: 'Claude CLI not authenticated. Run: claude login\nThis will open your browser to sign in with your Claude Max account.',
+      };
     } else {
-      yield { type: 'error', content: `API error: ${errorMsg}` };
+      yield { type: 'error', content: `Claude error: ${errorMsg}` };
     }
   }
 }

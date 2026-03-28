@@ -18,7 +18,7 @@ chatRouter.get('/:projectId', (req, res) => {
 
 // POST /api/chat/:projectId — send a message (streaming via SSE)
 chatRouter.post('/:projectId', async (req, res) => {
-  const { message, api_key } = req.body;
+  const { message } = req.body;
 
   if (!message) {
     res.status(400).json({ error: 'message is required' });
@@ -40,7 +40,7 @@ chatRouter.post('/:projectId', async (req, res) => {
   res.flushHeaders();
 
   try {
-    for await (const event of sendMessage(req.params.projectId, project.name, message, api_key)) {
+    for await (const event of sendMessage(req.params.projectId, project.name, message)) {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     }
   } catch (err: any) {

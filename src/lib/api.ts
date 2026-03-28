@@ -159,4 +159,19 @@ export const api = {
 
   // Health
   health: () => request<{ status: string; activeSessions: number }>('/api/health'),
+
+  // Settings
+  getSettings: () => request<{ settings: Record<string, string> }>('/api/settings'),
+  saveSetting: (key: string, value: string) =>
+    request<{ success: boolean }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ key, value }),
+    }),
+  checkClaudeStatus: () =>
+    request<{ installed: boolean; authenticated: boolean; version: string | null }>('/api/settings/claude-status'),
+  validateApiKey: (apiKey: string) =>
+    request<{ valid: boolean; error?: string }>('/api/settings/validate-key', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey }),
+    }),
 };

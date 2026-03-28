@@ -13,6 +13,7 @@ import { referenceRouter } from './routes/reference.js';
 import { policiesRouter, playbooksRouter } from './routes/policies.js';
 import { checkPolicy } from './routes/policy-check.js';
 import { workspaceRouter, contextRouter } from './routes/workspace.js';
+import { settingsRouter } from './routes/settings.js';
 import { getBridgeClient } from './bridge/bridge-client.js';
 import { getBackgroundWorker } from './intelligence/background-worker.js';
 import { jobsRouter } from './routes/jobs.js';
@@ -64,6 +65,7 @@ app.use('/api/playbooks', playbooksRouter);
 app.use('/api/workspace', workspaceRouter);
 app.use('/api/context', contextRouter);
 app.use('/api/jobs', jobsRouter);
+app.use('/api/settings', settingsRouter);
 
 // Start bridge client polling
 const bridgeClient = getBridgeClient();

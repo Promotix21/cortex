@@ -9,12 +9,13 @@ import { GitPanel } from './GitPanel';
 import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
 import { ErrorPanel } from '@/components/bridge/ErrorPanel';
 import { ReferencePanel } from './ReferencePanel';
+import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import {
   LayoutDashboard, Terminal, GitBranch, FileText,
-  MessageSquare, Brain, Book, AlertTriangle, FolderOpen,
+  MessageSquare, Brain, Book, AlertTriangle, FolderOpen, Settings,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'intelligence' | 'reference' | 'errors' | 'chat';
+type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'intelligence' | 'reference' | 'errors' | 'chat' | 'settings';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -25,6 +26,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'reference', label: 'Reference', icon: Book },
   { id: 'errors', label: 'Errors', icon: AlertTriangle },
   { id: 'chat', label: 'AI Chat', icon: MessageSquare },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 export function WorkspaceTabs() {
@@ -94,6 +96,7 @@ export function WorkspaceTabs() {
         {activeTab === 'reference' && <ReferencePanel />}
         {activeTab === 'errors' && <ErrorPanel />}
         {activeTab === 'chat' && <ChatPanel />}
+        {activeTab === 'settings' && <SettingsPanel />}
       </div>
     </div>
   );
