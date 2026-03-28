@@ -38,6 +38,7 @@ An AI-native desktop command center for developers managing multiple projects si
 20. [Context Construction Algorithm](#20-context-construction-algorithm)
 21. [Acceptance Criteria](#21-acceptance-criteria)
 22. [Post-MVP Roadmap](#22-post-mvp-roadmap)
+23. [Remotion Studio Integration](#23-remotion-studio-integration)
 
 ---
 
@@ -143,6 +144,13 @@ Cortex becomes **infrastructure that Claude Code users depend on** — not just 
 - On launch, Cortex restores the last active project: open terminals, active tab, AI chat position, layout state
 - Zero setup on restart — this is the core productivity promise
 - Persisted in `workspace` table as JSON state
+
+### 4.7 Remotion Studio (Promotion Engine)
+
+- **Baked-in Video Generation**: Generate programmatic video assets directly within Cortex
+- **Promotion Ideas**: AI-generated marketing angles and feature reels based on project milestones
+- **Interactive Steps**: Videos that follow a structured, step-by-step sequence for technical walkthroughs
+- **One-Click Render**: Export `.mp4` walkthroughs using the project's Remotion templates
 
 ---
 
@@ -1261,7 +1269,119 @@ This builds user trust and helps debugging when AI seems to "not know" something
 
 ---
 
-## 22. Post-MVP Roadmap
+## 22. Server & Deployment Intelligence
+
+> **Projects don't exist in isolation — they run on servers. Cortex should know where.**
+
+### 22.1 Server Registry
+
+Shared entities (not per-project) representing deployment targets:
+
+| Field | Description |
+|---|---|
+| `id` | UUID |
+| `name` | e.g., "prod-fly", "staging-do", "dev-local" |
+| `provider` | e.g., "Fly.io", "DigitalOcean", "AWS", "Hetzner", "Local" |
+| `host` | IP/hostname |
+| `ssh_user` | SSH username (optional) |
+| `ssh_port` | SSH port (default 22) |
+| `deploy_url` | Production URL |
+| `notes` | Free-form server notes |
+| `co_deployed_apps` | JSON array of other project names on this server |
+
+### 22.2 Project-Server Binding
+
+| Field | Description |
+|---|---|
+| `project_id` | Which project |
+| `server_id` | Which server |
+| `deploy_branch` | e.g., "main" |
+| `deploy_command` | e.g., "fly deploy", "git push dokku main" |
+| `env_file_path` | Path to .env on server (for reference, not stored) |
+| `last_deployed` | Timestamp |
+
+### 22.3 Deployment Context Files
+
+Projects often have deployment documentation in markdown files (e.g., `DEPLOY.md`, `SERVER.md`, `ops/runbook.md`). Cortex should:
+
+1. **Auto-detect** deployment docs during project scan (pattern match `deploy*`, `server*`, `ops/*`, `runbook*`)
+2. **Parse and index** key information (SSH commands, deploy steps, server URLs)
+3. **Inject into AI context** when the user asks deployment-related questions
+4. **Never push to GitHub** — server credentials and deployment details stay local-only
+
+### 22.4 Server Dashboard
+
+- View all servers and which projects are deployed where
+- Quick SSH connect (opens terminal with `ssh user@host`)
+- Deploy status per project-server binding
+- Server health indicators (optional: ping check)
+
+### 22.5 AI Context Injection for Deployments
+
+When a Claude Code session or AI Chat interaction involves deployment topics, automatically include:
+- Server name, provider, URL
+- Deploy command and branch
+- Co-deployed applications (to avoid conflicts)
+- Relevant content from deployment docs
+
+**Privacy:** Server details stored in local SQLite only. SSH keys never stored. Credentials never logged. `.env` contents never captured (only path reference).
+
+---
+
+## 23. Session Context Injection
+
+> **The gap between Cortex's intelligence and Claude Code's context.**
+
+### 23.1 The Problem
+
+Currently, Cortex has project intelligence (brain, patterns, debug memory, file index) but doesn't inject it into Claude Code sessions. Claude Code only reads its own `CLAUDE.md` file.
+
+### 23.2 Solution: Pre-Session Context Assembly
+
+Before spawning a Claude Code session, Cortex should:
+
+1. **Build a context document** from project brain + relevant patterns + recent errors
+2. **Write it to a temporary `.cortex-context.md`** in the project directory
+3. **Add `.cortex-context.md` to the project's CLAUDE.md** as an include/reference
+4. **Clean up** the temp file when the session ends
+
+### 23.3 Context Document Structure
+
+```markdown
+# Cortex Project Intelligence (auto-generated)
+
+## Project Summary
+{brain.summary}
+
+## Architecture
+{brain.architectureNotes}
+
+## Conventions
+{brain.conventions}
+
+## Known Issues
+{brain.knownIssues}
+
+## Recent Errors (last 30 min)
+{captured_errors}
+
+## Verified Patterns
+{patterns where confidence = 'verified'}
+
+## Server/Deployment Context
+{server details if bound}
+```
+
+### 23.4 Implementation
+
+- Context is regenerated on each session start (not cached)
+- Token budget from Context Budget Manager controls what's included
+- `.cortex-context.md` added to `.gitignore` automatically
+- Transparency: show in UI what context was injected
+
+---
+
+## 24. Post-MVP Roadmap
 
 - Vector search via ChromaDB/LanceDB for semantic pattern matching
 - Local model summarization (Ollama) for auto-generating project brain entries
@@ -1284,6 +1404,23 @@ This builds user trust and helps debugging when AI seems to "not know" something
 - AI-generated file summaries for file awareness index
 - Agent task queue for background AI operations
 - Community playbook sharing and marketplace
+
+---
+
+## 23. Remotion Studio Integration
+
+### 23.1 Programmatic Video Engine
+Cortex leverages **Remotion 4** to allow the AI to "ship content, not just code." The AI Orchestrator can trigger video renders to generate project demos.
+
+### 23.2 Feature Set
+- **Auto-Promo Reels**: Generate an `.mp4` feature reel when a project phase is completed.
+- **Interactive Walkthroughs**: Step-by-step video sequences (`remotion-demo` pattern) for onboarding or client demos.
+- **Milestone Summaries**: A "Generate Update Video" button that summarizes git changes since the last session into a visual reel.
+
+### 23.3 Technical Implementation
+- **Sidecar logic**: Express backend triggers `remotion render` via CLI.
+- **Template Library**: A set of React-based Remotion templates stored locally.
+- **Asset Pipeline**: Screenshots captured by the Console Bridge flow directly into Remotion templates for real-time app demos.
 
 ---
 
