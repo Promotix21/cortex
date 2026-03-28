@@ -29,5 +29,12 @@ npm-debug.log*
 *.db
 *.db-wal
 *.db-shm
+
+# Cortex Intelligence (Local-Only — NEVER push)
+/intelligence/
+.cortex-context.md
+NEXT_SESSION_PROMPT.md
+HANDOFF.md
+CORTEX_INTELLIGENCE_MASTER.md
 remotion-demo/
 assets/*.mp4
