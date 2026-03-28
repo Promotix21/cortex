@@ -22,7 +22,7 @@ Use `pnpm`. Always. Add `onlyBuiltDependencies` for native modules (better-sqlit
 Strict mode. No `any` in new code (existing `any` is tech debt). Run `npx tsc --noEmit` before committing.
 
 ### Git Commits
-Co-Author: `Co-Authored-By: Rajesh Kumar <noreply@anthropic.com>` — NEVER use "Claude" or any AI name.
+Co-Author: `Co-Authored-By: WebXExpert <Promotix21@users.noreply.github.com>` — NEVER use "Claude" or any AI name.
 
 ### Intelligence Data
 All intelligence (brain, patterns, debug memory, server info) is LOCAL ONLY. Never push to GitHub. Files like `.cortex-context.md`, `NEXT_SESSION_PROMPT.md`, `CORTEX_INTELLIGENCE_MASTER.md` are gitignored.
