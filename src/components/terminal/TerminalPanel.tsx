@@ -43,7 +43,7 @@ export function TerminalPanel() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-tertiary)' }}>
-        <p className="text-xs">Select a project to use terminals</p>
+        <p style={{ fontSize: 14 }}>Select a project to use terminals</p>
       </div>
     );
   }
@@ -65,8 +65,8 @@ export function TerminalPanel() {
     <div className="flex flex-col h-full">
       {/* Tab Bar */}
       <div
-        className="flex items-center border-b overflow-x-auto"
-        style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}
+        className="flex items-center overflow-x-auto"
+        style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}
       >
         {projectTerminals.map(t => {
           const Icon = typeIcons[t.type] || Terminal;
@@ -74,40 +74,45 @@ export function TerminalPanel() {
           return (
             <div
               key={t.id}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer shrink-0 relative group"
+              className="flex items-center cursor-pointer shrink-0 relative group"
               style={{
+                gap: 8,
+                padding: '10px 16px',
+                fontSize: 14,
                 color: isActive ? 'var(--text-primary)' : 'var(--text-tertiary)',
                 background: isActive ? 'var(--bg-primary)' : 'transparent',
               }}
               onClick={() => setActiveTerminal(t.id)}
             >
-              <Icon size={11} style={{ color: typeColors[t.type] }} />
+              <Icon size={14} style={{ color: typeColors[t.type] }} />
               <span className="max-w-24 truncate">{t.name}</span>
               {t.status !== 'running' && (
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--error)' }} />
+                <span className="rounded-full" style={{ width: 7, height: 7, background: 'var(--error)' }} />
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); killTerminal(t.id); }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--bg-hover)] transition-opacity"
+                className="opacity-0 group-hover:opacity-100 rounded hover:bg-[var(--bg-hover)] transition-opacity"
+                style={{ padding: 4 }}
               >
-                <X size={10} style={{ color: 'var(--text-tertiary)' }} />
+                <X size={14} style={{ color: 'var(--text-tertiary)' }} />
               </button>
               {isActive && (
-                <div className="absolute bottom-0 left-1 right-1 h-0.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                <div className="absolute bottom-0 left-1 right-1 rounded-full" style={{ height: 2, background: 'var(--accent)' }} />
               )}
             </div>
           );
         })}
 
         {/* Add Terminal Dropdown */}
-        <div className="flex items-center gap-0.5 px-1 ml-1">
+        <div className="flex items-center" style={{ gap: 4, padding: '0 8px', marginLeft: 4 }}>
           <button
             onClick={() => handleSpawn('shell')}
             disabled={spawning}
-            className="p-1 rounded hover:bg-[var(--bg-hover)] transition-colors"
+            className="rounded hover:bg-[var(--bg-hover)] transition-colors"
+            style={{ padding: 6 }}
             title="New Shell"
           >
-            <Plus size={12} style={{ color: 'var(--text-tertiary)' }} />
+            <Plus size={16} style={{ color: 'var(--text-tertiary)' }} />
           </button>
         </div>
 
@@ -115,20 +120,22 @@ export function TerminalPanel() {
 
         {/* Terminal Actions */}
         {activeTerminalId && (
-          <div className="flex items-center gap-0.5 px-2">
+          <div className="flex items-center" style={{ gap: 4, padding: '0 12px' }}>
             <button
               onClick={() => clearTerminal(activeTerminalId)}
-              className="p-1 rounded hover:bg-[var(--bg-hover)] transition-colors"
+              className="rounded hover:bg-[var(--bg-hover)] transition-colors"
+              style={{ padding: 6 }}
               title="Clear"
             >
-              <Eraser size={11} style={{ color: 'var(--text-tertiary)' }} />
+              <Eraser size={16} style={{ color: 'var(--text-tertiary)' }} />
             </button>
             <button
               onClick={() => restartTerminal(activeTerminalId)}
-              className="p-1 rounded hover:bg-[var(--bg-hover)] transition-colors"
+              className="rounded hover:bg-[var(--bg-hover)] transition-colors"
+              style={{ padding: 6 }}
               title="Restart"
             >
-              <RotateCw size={11} style={{ color: 'var(--text-tertiary)' }} />
+              <RotateCw size={16} style={{ color: 'var(--text-tertiary)' }} />
             </button>
           </div>
         )}
@@ -137,24 +144,27 @@ export function TerminalPanel() {
       {/* Terminal Content */}
       <div className="flex-1 relative" style={{ background: '#1e1e2e' }}>
         {projectTerminals.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
-            <Terminal size={28} style={{ color: 'var(--text-tertiary)' }} />
-            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>No terminals open</p>
-            <div className="flex gap-2">
+          <div className="flex flex-col items-center justify-center h-full" style={{ gap: 16 }}>
+            <Terminal size={36} style={{ color: 'var(--text-tertiary)' }} />
+            <p style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>No terminals open</p>
+            <div className="flex" style={{ gap: 12 }}>
               {(['shell', 'dev_server', 'git'] as TerminalType[]).map(type => {
                 const Icon = typeIcons[type];
                 return (
                   <button
                     key={type}
                     onClick={() => handleSpawn(type)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] transition-colors"
+                    className="flex items-center rounded-xl transition-colors"
                     style={{
+                      gap: 8,
+                      padding: '10px 20px',
+                      fontSize: 13,
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
                       color: 'var(--text-secondary)',
                     }}
                   >
-                    <Icon size={11} style={{ color: typeColors[type] }} />
+                    <Icon size={16} style={{ color: typeColors[type] }} />
                     {type.replace('_', ' ')}
                   </button>
                 );

@@ -24,7 +24,7 @@ export function ChatPanel() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-tertiary)' }}>
-        <p className="text-xs">Select a project to start chatting</p>
+        <p style={{ fontSize: 14 }}>Select a project to start chatting</p>
       </div>
     );
   }
@@ -33,38 +33,40 @@ export function ChatPanel() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0"
-        style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}
+        className="flex items-center shrink-0"
+        style={{ gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}
       >
-        <Brain size={14} style={{ color: 'var(--accent)' }} />
-        <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-primary)' }}>
+        <Brain size={18} style={{ color: 'var(--accent)' }} />
+        <span className="font-medium flex-1" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
           AI Chat — {project.name}
         </span>
         <button
           onClick={() => window.open(`http://localhost:4700/api/chat/${project.id}/export`, '_blank')}
-          className="p-1 rounded hover:bg-[var(--bg-hover)] transition-colors"
+          className="rounded hover:bg-[var(--bg-hover)] transition-colors"
+          style={{ padding: 6 }}
           title="Export chat"
         >
-          <Download size={12} style={{ color: 'var(--text-tertiary)' }} />
+          <Download size={16} style={{ color: 'var(--text-tertiary)' }} />
         </button>
         <button
           onClick={() => { if (confirm('Clear all chat history for this project?')) clearHistory(project.id); }}
-          className="p-1 rounded hover:bg-[var(--bg-hover)] transition-colors"
+          className="rounded hover:bg-[var(--bg-hover)] transition-colors"
+          style={{ padding: 6 }}
           title="Clear history"
         >
-          <Trash2 size={12} style={{ color: 'var(--text-tertiary)' }} />
+          <Trash2 size={16} style={{ color: 'var(--text-tertiary)' }} />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="flex-1 overflow-y-auto" style={{ padding: '16px 20px' }}>
         {messages.length === 0 && !streaming && (
-          <div className="text-center py-12">
-            <Brain size={28} className="mx-auto mb-3" style={{ color: 'var(--text-tertiary)' }} />
-            <p className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="text-center" style={{ paddingTop: 48, paddingBottom: 48 }}>
+            <Brain size={36} className="mx-auto" style={{ color: 'var(--text-tertiary)', marginBottom: 12 }} />
+            <p style={{ fontSize: 14, color: 'var(--text-tertiary)', marginBottom: 6 }}>
               Start a conversation about {project.name}
             </p>
-            <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
               AI has access to your Project Brain context
             </p>
           </div>
@@ -90,23 +92,23 @@ export function ChatPanel() {
 
         {/* Streaming indicator */}
         {streaming && !streamingContent && (
-          <div className="flex items-center gap-2 py-2">
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)', animationDelay: '0.2s' }} />
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)', animationDelay: '0.4s' }} />
+          <div className="flex items-center" style={{ gap: 10, padding: '10px 0' }}>
+            <div className="flex" style={{ gap: 5 }}>
+              <span className="rounded-full animate-pulse" style={{ width: 7, height: 7, background: 'var(--accent)' }} />
+              <span className="rounded-full animate-pulse" style={{ width: 7, height: 7, background: 'var(--accent)', animationDelay: '0.2s' }} />
+              <span className="rounded-full animate-pulse" style={{ width: 7, height: 7, background: 'var(--accent)', animationDelay: '0.4s' }} />
             </div>
-            <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>Thinking...</span>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Thinking...</span>
           </div>
         )}
 
         {/* Error */}
         {error && (
           <div
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs mt-2"
-            style={{ background: 'rgba(243, 139, 168, 0.1)', color: 'var(--error)' }}
+            className="flex items-center rounded-xl"
+            style={{ gap: 10, padding: '12px 16px', fontSize: 14, marginTop: 10, background: 'rgba(243, 139, 168, 0.1)', color: 'var(--error)' }}
           >
-            <AlertCircle size={14} />
+            <AlertCircle size={16} />
             {error}
           </div>
         )}

@@ -47,73 +47,73 @@ export function DebugList({ projectId }: { projectId: string }) {
   return (
     <div className="max-w-2xl">
       {/* Search + Add */}
-      <div className="flex gap-2 mb-4">
-        <div className="flex items-center gap-2 flex-1 px-2 py-1.5 rounded" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <Search size={12} style={{ color: 'var(--text-tertiary)' }} />
+      <div className="flex" style={{ gap: 12, marginBottom: 24 }}>
+        <div className="flex items-center flex-1 rounded-xl" style={{ gap: 10, padding: '12px 16px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <Search size={16} style={{ color: 'var(--text-tertiary)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search debug solutions..."
-            className="bg-transparent border-none outline-none text-xs flex-1" style={{ color: 'var(--text-primary)' }} />
+            className="bg-transparent border-none outline-none flex-1" style={{ fontSize: 14, color: 'var(--text-primary)' }} />
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="px-2.5 py-1.5 rounded text-xs" style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>
-          <Plus size={12} />
+        <button onClick={() => setShowForm(!showForm)} className="rounded-xl" style={{ padding: '10px 20px', fontSize: 14, background: 'var(--accent)', color: 'var(--bg-primary)' }}>
+          <Plus size={16} />
         </button>
       </div>
 
       {/* Create Form */}
       {showForm && (
-        <div className="rounded-lg p-3 mb-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+        <div className="rounded-xl" style={{ padding: 20, marginBottom: 24, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <input value={form.problem} onChange={e => setForm({ ...form, problem: e.target.value })} placeholder="Problem / Error message"
-            className="w-full mb-2 px-2 py-1.5 rounded text-xs bg-transparent outline-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+            className="w-full rounded-xl bg-transparent outline-none" style={{ marginBottom: 12, padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
           <textarea value={form.root_cause} onChange={e => setForm({ ...form, root_cause: e.target.value })} placeholder="Root cause"
-            rows={2} className="w-full mb-2 px-2 py-1.5 rounded text-xs bg-transparent outline-none resize-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+            rows={2} className="w-full rounded-xl bg-transparent outline-none resize-none" style={{ marginBottom: 12, padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
           <textarea value={form.solution} onChange={e => setForm({ ...form, solution: e.target.value })} placeholder="Solution"
-            rows={3} className="w-full mb-2 px-2 py-1.5 rounded text-xs bg-transparent outline-none resize-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-          <div className="flex gap-2 items-center mb-2">
+            rows={3} className="w-full rounded-xl bg-transparent outline-none resize-none" style={{ marginBottom: 12, padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+          <div className="flex items-center" style={{ gap: 12, marginBottom: 12 }}>
             <input value={form.error_signature} onChange={e => setForm({ ...form, error_signature: e.target.value })} placeholder="Error signature (for auto-matching)"
-              className="flex-1 px-2 py-1.5 rounded text-xs bg-transparent outline-none font-mono" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+              className="flex-1 rounded-xl bg-transparent outline-none font-mono" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex items-center" style={{ gap: 12 }}>
             <input value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} placeholder="Tags (comma-separated)"
-              className="flex-1 px-2 py-1.5 rounded text-xs bg-transparent outline-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+              className="flex-1 rounded-xl bg-transparent outline-none" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
             <select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value })}
-              className="px-2 py-1.5 rounded text-xs bg-transparent outline-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+              className="rounded-xl bg-transparent outline-none" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
               <option value="project">Project</option>
               <option value="reusable">Reusable</option>
             </select>
-            <button onClick={create} disabled={!form.problem.trim()} className="px-3 py-1.5 rounded text-xs disabled:opacity-30" style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>Save</button>
+            <button onClick={create} disabled={!form.problem.trim()} className="rounded-xl disabled:opacity-30" style={{ padding: '10px 20px', fontSize: 14, background: 'var(--accent)', color: 'var(--bg-primary)' }}>Save</button>
           </div>
         </div>
       )}
 
       {/* Debug List */}
       {items.map(d => (
-        <div key={d.id} className="rounded-lg px-3 py-2.5 mb-2 group" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2 mb-1">
-            <Bug size={12} style={{ color: 'var(--error)' }} />
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: confidenceColors[d.confidence] || 'var(--text-tertiary)' }} />
-            <span className="text-xs font-medium flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{d.problem}</span>
-            {d.scope === 'reusable' ? <Globe size={10} style={{ color: 'var(--accent)' }} /> : <Lock size={10} style={{ color: 'var(--text-tertiary)' }} />}
-            {d.usage_count > 0 && <span className="text-[9px]" style={{ color: 'var(--text-tertiary)' }}>used {d.usage_count}x</span>}
-            <button onClick={() => remove(d.id)} className="opacity-0 group-hover:opacity-100 p-0.5"><Trash2 size={10} style={{ color: 'var(--text-tertiary)' }} /></button>
+        <div key={d.id} className="rounded-xl group" style={{ padding: '16px 20px', marginBottom: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center" style={{ gap: 10, marginBottom: 8 }}>
+            <Bug size={16} style={{ color: 'var(--error)' }} />
+            <span className="rounded-full" style={{ width: 8, height: 8, background: confidenceColors[d.confidence] || 'var(--text-tertiary)' }} />
+            <span className="font-medium flex-1 truncate" style={{ fontSize: 14, color: 'var(--text-primary)' }}>{d.problem}</span>
+            {d.scope === 'reusable' ? <Globe size={14} style={{ color: 'var(--accent)' }} /> : <Lock size={14} style={{ color: 'var(--text-tertiary)' }} />}
+            {d.usage_count > 0 && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>used {d.usage_count}x</span>}
+            <button onClick={() => remove(d.id)} className="opacity-0 group-hover:opacity-100" style={{ padding: 4 }}><Trash2 size={14} style={{ color: 'var(--text-tertiary)' }} /></button>
           </div>
           {d.root_cause && (
-            <div className="text-[11px] mb-1" style={{ color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: 13, marginBottom: 6, color: 'var(--text-secondary)' }}>
               <strong style={{ color: 'var(--warning)' }}>Cause:</strong> {d.root_cause}
             </div>
           )}
           {d.solution && (
-            <div className="text-[11px] mb-1" style={{ color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: 13, marginBottom: 6, color: 'var(--text-secondary)' }}>
               <strong style={{ color: 'var(--success)' }}>Fix:</strong> {d.solution}
             </div>
           )}
           {d.error_signature && (
-            <div className="text-[9px] font-mono mt-1 px-1.5 py-0.5 rounded inline-block" style={{ background: 'var(--bg-hover)', color: 'var(--text-tertiary)' }}>
+            <div className="font-mono rounded-lg inline-block" style={{ fontSize: 12, marginTop: 6, padding: '4px 10px', background: 'var(--bg-hover)', color: 'var(--text-tertiary)' }}>
               sig: {d.error_signature}
             </div>
           )}
           {d.tags?.length > 0 && (
-            <div className="flex gap-1 mt-1.5 flex-wrap">
+            <div className="flex flex-wrap" style={{ gap: 8, marginTop: 10 }}>
               {d.tags.map((t: string) => (
-                <span key={t} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-hover)', color: 'var(--text-tertiary)' }}>{t}</span>
+                <span key={t} className="rounded-lg" style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-hover)', color: 'var(--text-tertiary)' }}>{t}</span>
               ))}
             </div>
           )}
@@ -121,7 +121,7 @@ export function DebugList({ projectId }: { projectId: string }) {
       ))}
 
       {items.length === 0 && !showForm && (
-        <p className="text-xs text-center py-8" style={{ color: 'var(--text-tertiary)' }}>No debug solutions yet. Never solve the same bug twice.</p>
+        <p className="text-center" style={{ fontSize: 14, padding: '32px 0', color: 'var(--text-tertiary)' }}>No debug solutions yet. Never solve the same bug twice.</p>
       )}
     </div>
   );

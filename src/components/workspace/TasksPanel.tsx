@@ -68,31 +68,31 @@ export function TasksPanel() {
 
   return (
     <div className="max-w-2xl">
-      <div className="flex items-center gap-2 mb-4">
-        <ListTodo size={16} style={{ color: 'var(--accent)' }} />
-        <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Tasks</h3>
-        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+      <div className="flex items-center" style={{ gap: 10, marginBottom: 24 }}>
+        <ListTodo size={18} style={{ color: 'var(--accent)' }} />
+        <h3 className="font-medium" style={{ fontSize: 16, color: 'var(--text-primary)' }}>Tasks</h3>
+        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
           {active.length} active · {done.length} done
         </span>
       </div>
 
       {/* Add Task */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex" style={{ gap: 12, marginBottom: 24 }}>
         <input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && addTask()}
           placeholder="Add a task..."
-          className="flex-1 px-3 py-1.5 rounded text-xs outline-none"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+          className="flex-1 rounded-xl outline-none"
+          style={{ padding: '12px 16px', fontSize: 14, background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
         />
         <button
           onClick={addTask}
           disabled={!newTitle.trim()}
-          className="px-2.5 py-1.5 rounded text-xs disabled:opacity-30"
-          style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}
+          className="rounded-xl disabled:opacity-30"
+          style={{ padding: '10px 20px', fontSize: 14, background: 'var(--accent)', color: 'var(--bg-primary)' }}
         >
-          <Plus size={12} />
+          <Plus size={16} />
         </button>
       </div>
 
@@ -103,26 +103,27 @@ export function TasksPanel() {
         return (
           <div
             key={task.id}
-            className="flex items-center gap-2.5 py-2 border-b group"
-            style={{ borderColor: 'var(--border)' }}
+            className="flex items-center group"
+            style={{ gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}
           >
             <button onClick={() => cycleStatus(task)} className="shrink-0" title={`Status: ${cfg.label} (click to cycle)`}>
-              <Icon size={14} style={{ color: cfg.color }} />
+              <Icon size={16} style={{ color: cfg.color }} />
             </button>
-            <span className="flex-1 text-xs" style={{ color: 'var(--text-primary)' }}>
+            <span className="flex-1" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
               {task.title}
             </span>
             <span
-              className="text-[9px] px-1.5 py-0.5 rounded"
-              style={{ background: 'var(--bg-surface)', color: cfg.color }}
+              className="rounded-lg"
+              style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-surface)', color: cfg.color }}
             >
               {cfg.label}
             </span>
             <button
               onClick={() => deleteTask(task.id)}
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--bg-hover)] transition-opacity"
+              className="opacity-0 group-hover:opacity-100 rounded hover:bg-[var(--bg-hover)] transition-opacity"
+              style={{ padding: 4 }}
             >
-              <Trash2 size={11} style={{ color: 'var(--text-tertiary)' }} />
+              <Trash2 size={14} style={{ color: 'var(--text-tertiary)' }} />
             </button>
           </div>
         );
@@ -130,24 +131,26 @@ export function TasksPanel() {
 
       {/* Done Tasks */}
       {done.length > 0 && (
-        <div className="mt-4">
-          <p className="text-[10px] uppercase tracking-wider mb-2 font-medium" style={{ color: 'var(--text-tertiary)' }}>
+        <div style={{ marginTop: 24 }}>
+          <p className="uppercase tracking-wider font-medium" style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-tertiary)' }}>
             Completed ({done.length})
           </p>
           {done.slice(0, 10).map(task => (
             <div
               key={task.id}
-              className="flex items-center gap-2.5 py-1.5 group"
+              className="flex items-center group"
+              style={{ gap: 12, padding: '10px 0' }}
             >
-              <Check size={14} style={{ color: 'var(--success)' }} />
-              <span className="flex-1 text-xs line-through" style={{ color: 'var(--text-tertiary)' }}>
+              <Check size={16} style={{ color: 'var(--success)' }} />
+              <span className="flex-1 line-through" style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
                 {task.title}
               </span>
               <button
                 onClick={() => deleteTask(task.id)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--bg-hover)] transition-opacity"
+                className="opacity-0 group-hover:opacity-100 rounded hover:bg-[var(--bg-hover)] transition-opacity"
+                style={{ padding: 4 }}
               >
-                <Trash2 size={11} style={{ color: 'var(--text-tertiary)' }} />
+                <Trash2 size={14} style={{ color: 'var(--text-tertiary)' }} />
               </button>
             </div>
           ))}
@@ -155,7 +158,7 @@ export function TasksPanel() {
       )}
 
       {tasks.length === 0 && (
-        <p className="text-xs text-center py-8" style={{ color: 'var(--text-tertiary)' }}>
+        <p className="text-center" style={{ fontSize: 14, padding: '32px 0', color: 'var(--text-tertiary)' }}>
           No tasks yet. Add one above.
         </p>
       )}

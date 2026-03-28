@@ -19,64 +19,67 @@ export function ChatMessage({ message, projectId: _projectId, isStreaming }: Cha
   };
 
   return (
-    <div className={`flex gap-2.5 mb-4 ${isUser ? '' : ''}`}>
+    <div className="flex" style={{ gap: 12, marginBottom: 20 }}>
       {/* Avatar */}
       <div
-        className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 mt-0.5"
+        className="rounded-lg flex items-center justify-center shrink-0"
         style={{
+          width: 32,
+          height: 32,
+          marginTop: 2,
           background: isUser ? 'var(--bg-surface)' : 'rgba(137, 180, 250, 0.15)',
           border: '1px solid var(--border)',
         }}
       >
         {isUser ? (
-          <User size={12} style={{ color: 'var(--text-secondary)' }} />
+          <User size={16} style={{ color: 'var(--text-secondary)' }} />
         ) : (
-          <Bot size={12} style={{ color: 'var(--accent)' }} />
+          <Bot size={16} style={{ color: 'var(--accent)' }} />
         )}
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] font-medium" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="flex items-center" style={{ gap: 8, marginBottom: 4 }}>
+          <span className="font-medium" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {isUser ? 'You' : 'Claude'}
           </span>
-          <span className="text-[9px]" style={{ color: 'var(--text-tertiary)' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
 
         <div
-          className="text-xs leading-relaxed whitespace-pre-wrap break-words"
-          style={{ color: isUser ? 'var(--text-primary)' : 'var(--text-secondary)' }}
+          className="leading-relaxed whitespace-pre-wrap break-words"
+          style={{ fontSize: 14, color: isUser ? 'var(--text-primary)' : 'var(--text-secondary)' }}
         >
           {message.content}
           {isStreaming && (
-            <span className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse" style={{ background: 'var(--accent)' }} />
+            <span className="inline-block animate-pulse" style={{ width: 6, height: 14, marginLeft: 2, background: 'var(--accent)' }} />
           )}
         </div>
 
         {/* Actions (assistant messages only, not streaming) */}
         {!isUser && !isStreaming && message.content && (
-          <div className="flex items-center gap-1 mt-1.5 opacity-0 hover:opacity-100 transition-opacity"
-            style={{ opacity: undefined }}
+          <div className="flex items-center transition-opacity"
+            style={{ gap: 6, marginTop: 8, opacity: undefined }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = '0')}
           >
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] hover:bg-[var(--bg-hover)] transition-colors"
-              style={{ color: 'var(--text-tertiary)' }}
+              className="flex items-center rounded hover:bg-[var(--bg-hover)] transition-colors"
+              style={{ gap: 4, padding: '4px 10px', fontSize: 12, color: 'var(--text-tertiary)' }}
             >
-              {copied ? <Check size={10} /> : <Copy size={10} />}
+              {copied ? <Check size={14} /> : <Copy size={14} />}
               {copied ? 'Copied' : 'Copy'}
             </button>
             <button
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] hover:bg-[var(--bg-hover)] transition-colors"
-              style={{ color: 'var(--text-tertiary)' }}
+              className="flex items-center rounded hover:bg-[var(--bg-hover)] transition-colors"
+              style={{ gap: 4, padding: '4px 10px', fontSize: 12, color: 'var(--text-tertiary)' }}
               title="Save as pattern (Phase 6)"
             >
-              <Bookmark size={10} />
+              <Bookmark size={14} />
               Save
             </button>
           </div>

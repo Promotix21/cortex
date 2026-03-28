@@ -52,66 +52,66 @@ export function PatternList({ projectId }: { projectId: string }) {
   return (
     <div className="max-w-2xl">
       {/* Search + Add */}
-      <div className="flex gap-2 mb-4">
-        <div className="flex items-center gap-2 flex-1 px-2 py-1.5 rounded" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <Search size={12} style={{ color: 'var(--text-tertiary)' }} />
+      <div className="flex" style={{ gap: 12, marginBottom: 24 }}>
+        <div className="flex items-center flex-1 rounded-xl" style={{ gap: 10, padding: '12px 16px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <Search size={16} style={{ color: 'var(--text-tertiary)' }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search patterns..."
-            className="bg-transparent border-none outline-none text-xs flex-1"
-            style={{ color: 'var(--text-primary)' }}
+            className="bg-transparent border-none outline-none flex-1"
+            style={{ fontSize: 14, color: 'var(--text-primary)' }}
           />
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="px-2.5 py-1.5 rounded text-xs" style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>
-          <Plus size={12} />
+        <button onClick={() => setShowForm(!showForm)} className="rounded-xl" style={{ padding: '10px 20px', fontSize: 14, background: 'var(--accent)', color: 'var(--bg-primary)' }}>
+          <Plus size={16} />
         </button>
       </div>
 
       {/* Create Form */}
       {showForm && (
-        <div className="rounded-lg p-3 mb-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+        <div className="rounded-xl" style={{ padding: 20, marginBottom: 24, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Pattern title"
-            className="w-full mb-2 px-2 py-1.5 rounded text-xs bg-transparent outline-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+            className="w-full rounded-xl bg-transparent outline-none" style={{ marginBottom: 12, padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
           <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Description"
-            rows={2} className="w-full mb-2 px-2 py-1.5 rounded text-xs bg-transparent outline-none resize-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+            rows={2} className="w-full rounded-xl bg-transparent outline-none resize-none" style={{ marginBottom: 12, padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
           <textarea value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="Code snippet"
-            rows={4} className="w-full mb-2 px-2 py-1.5 rounded text-xs bg-transparent outline-none resize-none font-mono" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-          <div className="flex gap-2 items-center">
+            rows={4} className="w-full rounded-xl bg-transparent outline-none resize-none font-mono" style={{ marginBottom: 12, padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+          <div className="flex items-center" style={{ gap: 12 }}>
             <input value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} placeholder="Tags (comma-separated)"
-              className="flex-1 px-2 py-1.5 rounded text-xs bg-transparent outline-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+              className="flex-1 rounded-xl bg-transparent outline-none" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
             <select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value })}
-              className="px-2 py-1.5 rounded text-xs bg-transparent outline-none" style={{ border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+              className="rounded-xl bg-transparent outline-none" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
               <option value="project">Project</option>
               <option value="reusable">Reusable</option>
             </select>
-            <button onClick={create} disabled={!form.title.trim()} className="px-3 py-1.5 rounded text-xs disabled:opacity-30" style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>Save</button>
+            <button onClick={create} disabled={!form.title.trim()} className="rounded-xl disabled:opacity-30" style={{ padding: '10px 20px', fontSize: 14, background: 'var(--accent)', color: 'var(--bg-primary)' }}>Save</button>
           </div>
         </div>
       )}
 
       {/* Pattern List */}
       {patterns.map(p => (
-        <div key={p.id} className="rounded-lg px-3 py-2.5 mb-2 group" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: confidenceColors[p.confidence] || 'var(--text-tertiary)' }} />
-            <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-primary)' }}>{p.title}</span>
-            {p.scope === 'reusable' ? <Globe size={10} style={{ color: 'var(--accent)' }} /> : <Lock size={10} style={{ color: 'var(--text-tertiary)' }} />}
-            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div key={p.id} className="rounded-xl group" style={{ padding: '16px 20px', marginBottom: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center" style={{ gap: 10, marginBottom: 8 }}>
+            <span className="rounded-full" style={{ width: 8, height: 8, background: confidenceColors[p.confidence] || 'var(--text-tertiary)' }} />
+            <span className="font-medium flex-1" style={{ fontSize: 14, color: 'var(--text-primary)' }}>{p.title}</span>
+            {p.scope === 'reusable' ? <Globe size={14} style={{ color: 'var(--accent)' }} /> : <Lock size={14} style={{ color: 'var(--text-tertiary)' }} />}
+            <div className="flex opacity-0 group-hover:opacity-100 transition-opacity" style={{ gap: 4 }}>
               {[1, 2, 3, 4, 5].map(n => (
-                <button key={n} onClick={() => rate(p.id, n)} className="p-0.5">
-                  <Star size={9} fill={p.user_rating >= n ? 'var(--warning)' : 'none'} style={{ color: p.user_rating >= n ? 'var(--warning)' : 'var(--text-tertiary)' }} />
+                <button key={n} onClick={() => rate(p.id, n)} style={{ padding: 4 }}>
+                  <Star size={14} fill={p.user_rating >= n ? 'var(--warning)' : 'none'} style={{ color: p.user_rating >= n ? 'var(--warning)' : 'var(--text-tertiary)' }} />
                 </button>
               ))}
-              <button onClick={() => remove(p.id)} className="p-0.5 ml-1"><Trash2 size={10} style={{ color: 'var(--text-tertiary)' }} /></button>
+              <button onClick={() => remove(p.id)} style={{ padding: 4, marginLeft: 6 }}><Trash2 size={14} style={{ color: 'var(--text-tertiary)' }} /></button>
             </div>
           </div>
-          {p.description && <p className="text-[11px] mb-1" style={{ color: 'var(--text-secondary)' }}>{p.description}</p>}
-          {p.code && <pre className="text-[10px] p-2 rounded mt-1 overflow-auto max-h-24" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{p.code}</pre>}
+          {p.description && <p style={{ fontSize: 13, marginBottom: 6, color: 'var(--text-secondary)' }}>{p.description}</p>}
+          {p.code && <pre className="rounded-xl overflow-auto" style={{ fontSize: 12, padding: 12, marginTop: 8, maxHeight: 120, background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{p.code}</pre>}
           {p.tags?.length > 0 && (
-            <div className="flex gap-1 mt-1.5 flex-wrap">
+            <div className="flex flex-wrap" style={{ gap: 8, marginTop: 10 }}>
               {p.tags.map((t: string) => (
-                <span key={t} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-hover)', color: 'var(--text-tertiary)' }}>{t}</span>
+                <span key={t} className="rounded-lg" style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-hover)', color: 'var(--text-tertiary)' }}>{t}</span>
               ))}
             </div>
           )}
@@ -119,7 +119,7 @@ export function PatternList({ projectId }: { projectId: string }) {
       ))}
 
       {patterns.length === 0 && !showForm && (
-        <p className="text-xs text-center py-8" style={{ color: 'var(--text-tertiary)' }}>No patterns yet. Save reusable code snippets here.</p>
+        <p className="text-center" style={{ fontSize: 14, padding: '32px 0', color: 'var(--text-tertiary)' }}>No patterns yet. Save reusable code snippets here.</p>
       )}
     </div>
   );

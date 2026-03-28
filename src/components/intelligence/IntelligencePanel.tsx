@@ -14,7 +14,7 @@ export function IntelligencePanel() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-tertiary)' }}>
-        <p className="text-xs">Select a project to manage intelligence</p>
+        <p style={{ fontSize: 14 }}>Select a project to manage intelligence</p>
       </div>
     );
   }
@@ -28,19 +28,23 @@ export function IntelligencePanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Sub-tabs */}
-      <div className="flex items-center gap-1 mb-4">
+      <div className="flex items-center" style={{ gap: 8, marginBottom: 24 }}>
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+            className="flex items-center transition-colors"
             style={{
+              gap: 8,
+              padding: '10px 20px',
+              borderRadius: 12,
+              fontSize: 14,
               background: activeTab === id ? 'var(--bg-surface)' : 'transparent',
               color: activeTab === id ? 'var(--text-primary)' : 'var(--text-tertiary)',
               border: activeTab === id ? '1px solid var(--border)' : '1px solid transparent',
             }}
           >
-            <Icon size={12} />
+            <Icon size={16} />
             {label}
           </button>
         ))}

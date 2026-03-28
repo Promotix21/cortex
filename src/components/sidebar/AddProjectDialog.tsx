@@ -58,32 +58,34 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="rounded-lg p-5 w-[420px]"
-        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+        className="rounded-xl"
+        style={{ padding: 24, width: 460, background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+          <h2 className="font-semibold" style={{ fontSize: 16, color: 'var(--text-primary)' }}>
             Add Project
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--bg-hover)]">
-            <X size={14} style={{ color: 'var(--text-tertiary)' }} />
+          <button onClick={onClose} className="rounded hover:bg-[var(--bg-hover)]" style={{ padding: 6 }}>
+            <X size={16} style={{ color: 'var(--text-tertiary)' }} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col" style={{ gap: 16 }}>
           {/* Folder Picker */}
           <div>
-            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>
+            <label className="block" style={{ fontSize: 14, marginBottom: 6, color: 'var(--text-secondary)' }}>
               Project Folder
             </label>
-            <div className="flex gap-2">
+            <div className="flex" style={{ gap: 12 }}>
               <input
                 type="text"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
                 placeholder="Select a folder..."
-                className="flex-1 px-3 py-2 rounded text-xs outline-none"
+                className="flex-1 rounded-xl outline-none"
                 style={{
+                  padding: '12px 16px',
+                  fontSize: 14,
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border)',
                   color: 'var(--text-primary)',
@@ -93,13 +95,16 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
               <button
                 type="button"
                 onClick={handleBrowse}
-                className="px-3 py-2 rounded text-xs font-medium flex items-center gap-1.5 transition-colors hover:opacity-90"
+                className="rounded-xl font-medium flex items-center transition-colors hover:opacity-90"
                 style={{
+                  gap: 8,
+                  padding: '10px 20px',
+                  fontSize: 14,
                   background: 'var(--accent)',
                   color: 'var(--bg-primary)',
                 }}
               >
-                <FolderOpen size={13} />
+                <FolderOpen size={16} />
                 Browse
               </button>
             </div>
@@ -107,7 +112,7 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
 
           {/* Project Name */}
           <div>
-            <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary)' }}>
+            <label className="block" style={{ fontSize: 14, marginBottom: 6, color: 'var(--text-secondary)' }}>
               Project Name
             </label>
             <input
@@ -115,8 +120,10 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Auto-filled from folder name"
-              className="w-full px-3 py-2 rounded text-xs outline-none"
+              className="w-full rounded-xl outline-none"
               style={{
+                padding: '12px 16px',
+                fontSize: 14,
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
                 color: 'var(--text-primary)',
@@ -125,17 +132,19 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
           </div>
 
           {error && (
-            <p className="text-xs" style={{ color: 'var(--error)' }}>
+            <p style={{ fontSize: 14, color: 'var(--error)' }}>
               {error}
             </p>
           )}
 
-          <div className="flex gap-2 justify-end mt-2">
+          <div className="flex justify-end" style={{ gap: 12, marginTop: 8 }}>
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded text-xs"
+              className="rounded-xl"
               style={{
+                padding: '10px 20px',
+                fontSize: 14,
                 background: 'var(--bg-surface)',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--border)',
@@ -146,8 +155,10 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
             <button
               type="submit"
               disabled={submitting || !name.trim() || !path.trim()}
-              className="px-3 py-1.5 rounded text-xs font-medium disabled:opacity-50"
+              className="rounded-xl font-medium disabled:opacity-50"
               style={{
+                padding: '10px 20px',
+                fontSize: 14,
                 background: 'var(--accent)',
                 color: 'var(--bg-primary)',
               }}

@@ -42,21 +42,21 @@ export function NotesPanel() {
   return (
     <div className="flex flex-col h-full max-w-3xl">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <FileText size={16} style={{ color: 'var(--accent)' }} />
-        <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+      <div className="flex items-center" style={{ gap: 10, marginBottom: 16 }}>
+        <FileText size={18} style={{ color: 'var(--accent)' }} />
+        <h3 className="font-medium" style={{ fontSize: 16, color: 'var(--text-primary)' }}>
           Notes
         </h3>
         <div className="flex-1" />
-        <div className="flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="flex items-center" style={{ gap: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
           {saved ? (
             <>
-              <Check size={10} style={{ color: 'var(--success)' }} />
+              <Check size={14} style={{ color: 'var(--success)' }} />
               <span>Saved</span>
             </>
           ) : (
             <>
-              <Save size={10} />
+              <Save size={14} />
               <span>Saving...</span>
             </>
           )}
@@ -68,9 +68,11 @@ export function NotesPanel() {
         value={content}
         onChange={e => handleChange(e.target.value)}
         placeholder="Write notes for this project... (Markdown supported)"
-        className="flex-1 w-full bg-transparent border rounded-lg p-4 text-xs outline-none resize-none"
+        className="flex-1 w-full bg-transparent rounded-xl outline-none resize-none"
         style={{
-          borderColor: 'var(--border)',
+          padding: 20,
+          fontSize: 14,
+          border: '1px solid var(--border)',
           color: 'var(--text-primary)',
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
           lineHeight: 1.7,

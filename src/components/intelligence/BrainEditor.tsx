@@ -40,19 +40,19 @@ export function BrainEditor({ projectId }: { projectId: string }) {
 
   return (
     <div className="max-w-2xl">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+      <div className="flex items-center" style={{ gap: 10, marginBottom: 24 }}>
+        <span className="font-medium" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
           Project Brain — auto-injected into AI context
         </span>
         <div className="flex-1" />
-        <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-          {saved ? <><Check size={10} style={{ color: 'var(--success)' }} /> Saved</> : <><Save size={10} /> Saving...</>}
+        <div className="flex items-center" style={{ gap: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
+          {saved ? <><Check size={14} style={{ color: 'var(--success)' }} /> Saved</> : <><Save size={14} /> Saving...</>}
         </div>
       </div>
 
       {fields.map(({ key, label, placeholder }) => (
-        <div key={key} className="mb-4">
-          <label className="text-[10px] uppercase tracking-wider font-medium block mb-1" style={{ color: 'var(--text-tertiary)' }}>
+        <div key={key} style={{ marginBottom: 24 }}>
+          <label className="uppercase tracking-wider font-medium block" style={{ fontSize: 13, marginBottom: 8, color: 'var(--text-tertiary)' }}>
             {label}
           </label>
           <textarea
@@ -60,8 +60,8 @@ export function BrainEditor({ projectId }: { projectId: string }) {
             onChange={e => handleChange(key, e.target.value)}
             placeholder={placeholder}
             rows={3}
-            className="w-full bg-transparent border rounded px-3 py-2 text-xs outline-none resize-none"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', lineHeight: 1.6 }}
+            className="w-full bg-transparent rounded-xl outline-none resize-none"
+            style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)', lineHeight: 1.6 }}
           />
         </div>
       ))}

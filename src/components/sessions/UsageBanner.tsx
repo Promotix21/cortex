@@ -18,33 +18,33 @@ export function UsageBanner({ usage, getProjectName }: UsageBannerProps) {
 
   return (
     <div
-      className="rounded-lg px-4 py-3 mb-4"
-      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+      className="rounded-xl"
+      style={{ padding: '16px 20px', marginBottom: 24, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
     >
       {/* Today's Summary */}
-      <div className="flex items-center gap-4 mb-2">
-        <div className="flex items-center gap-1.5">
-          <BarChart3 size={12} style={{ color: 'var(--accent)' }} />
-          <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--text-tertiary)' }}>
+      <div className="flex items-center" style={{ gap: 16, marginBottom: 12 }}>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <BarChart3 size={16} style={{ color: 'var(--accent)' }} />
+          <span className="uppercase tracking-wider font-medium" style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
             Today
           </span>
         </div>
-        <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          <Hash size={11} />
+        <div className="flex items-center" style={{ gap: 6, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <Hash size={14} />
           <span>{usage.today.promptCount} prompts</span>
         </div>
-        <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          <Zap size={11} />
+        <div className="flex items-center" style={{ gap: 6, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <Zap size={14} />
           <span>~{formatTokens(totalTokens)} tokens</span>
         </div>
-        <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+        <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
           {usage.today.sessionCount} session{usage.today.sessionCount !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Per-Project Breakdown */}
       {sortedProjects.length > 0 && totalTokens > 0 && (
-        <div className="flex gap-1 h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-hover)' }}>
+        <div className="flex rounded-full overflow-hidden" style={{ gap: 4, height: 8, background: 'var(--bg-hover)' }}>
           {sortedProjects.map((p, i) => {
             const pct = totalTokens > 0 ? (p.tokenTotal / totalTokens) * 100 : 0;
             if (pct < 1) return null;
@@ -66,17 +66,17 @@ export function UsageBanner({ usage, getProjectName }: UsageBannerProps) {
 
       {/* Legend */}
       {sortedProjects.length > 0 && totalTokens > 0 && (
-        <div className="flex gap-3 mt-2 flex-wrap">
+        <div className="flex flex-wrap" style={{ gap: 14, marginTop: 10 }}>
           {sortedProjects.slice(0, 5).map((p, i) => {
             const pct = totalTokens > 0 ? (p.tokenTotal / totalTokens) * 100 : 0;
             const colors = ['var(--accent)', 'var(--success)', 'var(--warning)', 'var(--error)', '#7F77DD'];
             return (
-              <div key={p.projectId} className="flex items-center gap-1">
+              <div key={p.projectId} className="flex items-center" style={{ gap: 6 }}>
                 <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: colors[i % colors.length] }}
+                  className="rounded-full"
+                  style={{ width: 8, height: 8, background: colors[i % colors.length] }}
                 />
-                <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                   {getProjectName(p.projectId)} {Math.round(pct)}%
                 </span>
               </div>
