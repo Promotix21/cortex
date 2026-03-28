@@ -30,6 +30,13 @@ app.use(express.json());
 // Initialize database
 initDb();
 
+// Clean up stale sessions from previous runs
+const dbClean = getDb();
+const staleCount = dbClean.prepare("UPDATE claude_sessions SET status = 'completed' WHERE status = 'running' OR status = 'idle'").run();
+if (staleCount.changes > 0) {
+  console.log(`[cleanup] Marked ${staleCount.changes} stale session(s) as completed`);
+}
+
 // Initialize managers
 const sessionManager = getSessionManager();
 const terminalManager = getTerminalManager();

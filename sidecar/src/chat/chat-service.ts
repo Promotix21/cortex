@@ -183,8 +183,9 @@ export async function* sendMessage(
   const fullPrompt = contextParts.join('\n');
 
   try {
-    // Use claude CLI with --print flag for non-interactive output
-    const claude = spawn('claude', ['-p', fullPrompt, '--no-input'], {
+    // Use login shell to ensure claude is in PATH (nvm etc.)
+    const shell = process.env.SHELL || '/bin/bash';
+    const claude = spawn(shell, ['-lc', `claude -p ${JSON.stringify(fullPrompt)}`], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
     });

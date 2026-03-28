@@ -82,10 +82,16 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
     term.loadAddon(webLinksAddon);
 
     term.open(containerRef.current);
-    fitAddon.fit();
 
     termRef.current = term;
     fitRef.current = fitAddon;
+
+    // Delay fit to ensure container has layout dimensions
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+      // Notify sidecar of initial size
+      api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
+    });
 
     // Send keystrokes to sidecar
     term.onData((data) => {
@@ -97,12 +103,15 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
       api.resizeTerminal(terminalId, cols, rows).catch(() => {});
     });
 
-    // Load initial output
+    // Load initial output after fit
     if (!initialLoadDone.current) {
       initialLoadDone.current = true;
-      api.getTerminalOutput(terminalId).then(({ output }) => {
-        if (output) term.write(output);
-      }).catch(() => {});
+      setTimeout(() => {
+        api.getTerminalOutput(terminalId).then(({ output }) => {
+          if (output) term.write(output);
+          fitAddon.fit();
+        }).catch(() => {});
+      }, 200);
     }
 
     // Start polling for output
