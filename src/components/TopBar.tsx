@@ -15,16 +15,21 @@ export function TopBar() {
 
   return (
     <div
-      className="flex items-center px-4 py-1.5 border-b select-none"
+      className="flex items-center px-5 py-2.5 border-b select-none"
       style={{
         background: 'var(--bg-tertiary)',
         borderColor: 'var(--border)',
       }}
     >
-      <div className="flex items-center gap-2">
-        <Brain size={16} style={{ color: 'var(--accent)' }} />
-        <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+          <Brain size={18} style={{ color: 'var(--accent)' }} />
+        </div>
+        <span className="text-base font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
           Cortex
+        </span>
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-surface)', color: 'var(--text-tertiary)' }}>
+          alpha
         </span>
       </div>
 
@@ -33,18 +38,20 @@ export function TopBar() {
       {/* Session Dashboard Toggle */}
       <button
         onClick={toggleDashboard}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors hover:bg-[var(--bg-hover)]"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors"
         style={{
-          color: activeCount > 0 ? 'var(--text-primary)' : 'var(--text-tertiary)',
+          background: activeCount > 0 ? 'var(--success-dim)' : 'var(--bg-surface)',
+          color: activeCount > 0 ? 'var(--success)' : 'var(--text-tertiary)',
+          border: `1px solid ${activeCount > 0 ? 'rgba(166, 227, 161, 0.2)' : 'var(--border)'}`,
         }}
       >
-        <Zap size={12} style={{ color: activeCount > 0 ? 'var(--running)' : 'var(--text-tertiary)' }} />
-        <span>
+        <Zap size={15} style={{ color: activeCount > 0 ? 'var(--running)' : 'var(--text-tertiary)' }} />
+        <span className="font-medium">
           {activeCount > 0
-            ? `${activeCount} session${activeCount > 1 ? 's' : ''}`
-            : 'Sessions'}
+            ? `${activeCount} session${activeCount > 1 ? 's' : ''} active`
+            : 'No sessions'}
         </span>
-        <ChevronDown size={10} />
+        <ChevronDown size={14} />
       </button>
     </div>
   );

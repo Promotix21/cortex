@@ -33,13 +33,13 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
     return (
       <button
         onClick={() => setShowInput(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
         style={{
           background: 'var(--accent)',
           color: 'var(--bg-primary)',
         }}
       >
-        <Play size={12} />
+        <Play size={14} />
         Start Claude Code
       </button>
     );
@@ -52,7 +52,7 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
         value={sessionName}
         onChange={(e) => setSessionName(e.target.value)}
         placeholder={`${projectName}-session`}
-        className="px-2 py-1 rounded text-xs outline-none w-48"
+        className="px-3 py-2 rounded-lg text-sm outline-none w-56"
         style={{
           background: 'var(--bg-surface)',
           border: '1px solid var(--border)',
@@ -67,18 +67,18 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
       <button
         onClick={handleSpawn}
         disabled={spawning}
-        className="px-2 py-1 rounded text-xs font-medium disabled:opacity-50"
+        className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
         style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}
       >
         {spawning ? '...' : 'Start'}
       </button>
       <button
         onClick={() => setShowInput(false)}
-        className="p-1 rounded hover:bg-[var(--bg-hover)]"
+        className="p-2 rounded-lg hover:bg-[var(--bg-hover)]"
       >
-        <X size={12} style={{ color: 'var(--text-tertiary)' }} />
+        <X size={16} style={{ color: 'var(--text-tertiary)' }} />
       </button>
-      {error && <span className="text-[10px]" style={{ color: 'var(--error)' }}>{error}</span>}
+      {error && <span className="text-xs" style={{ color: 'var(--error)' }}>{error}</span>}
     </div>
   );
 }

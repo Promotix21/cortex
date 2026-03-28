@@ -25,7 +25,7 @@ export function StatusBar() {
 
   return (
     <div
-      className="flex items-center px-3 py-1 text-[11px] border-t gap-4"
+      className="flex items-center px-5 py-1.5 text-xs font-medium border-t gap-5"
       style={{
         background: 'var(--bg-tertiary)',
         borderColor: 'var(--border)',
@@ -33,11 +33,11 @@ export function StatusBar() {
       }}
     >
       {/* Sidecar Status */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         {sidecarConnected ? (
-          <Wifi size={10} style={{ color: 'var(--success)' }} />
+          <Wifi size={13} style={{ color: 'var(--success)' }} />
         ) : (
-          <WifiOff size={10} style={{ color: 'var(--error)' }} />
+          <WifiOff size={13} style={{ color: 'var(--error)' }} />
         )}
         <span>Sidecar: {sidecarConnected ? 'Connected' : 'Disconnected'}</span>
       </div>
@@ -46,8 +46,8 @@ export function StatusBar() {
       {activeProject && (
         <>
           <span style={{ color: 'var(--border)' }}>|</span>
-          <div className="flex items-center gap-1.5">
-            <Circle size={6} fill="var(--success)" style={{ color: 'var(--success)' }} />
+          <div className="flex items-center gap-2">
+            <Circle size={8} fill="var(--success)" style={{ color: 'var(--success)' }} />
             <span>{activeProject.name}</span>
           </div>
           <span>{activeProject.type}</span>
@@ -59,8 +59,8 @@ export function StatusBar() {
       {activeSessions.length > 0 && (
         <>
           <span style={{ color: 'var(--border)' }}>|</span>
-          <div className="flex items-center gap-1.5">
-            <Zap size={10} style={{ color: 'var(--running)' }} />
+          <div className="flex items-center gap-2">
+            <Zap size={13} style={{ color: 'var(--running)' }} />
             <span>{activeSessions.length} Claude session{activeSessions.length > 1 ? 's' : ''}</span>
           </div>
         </>

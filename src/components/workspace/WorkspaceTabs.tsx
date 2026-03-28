@@ -9,7 +9,10 @@ import { GitPanel } from './GitPanel';
 import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
 import { ErrorPanel } from '@/components/bridge/ErrorPanel';
 import { ReferencePanel } from './ReferencePanel';
-import { LayoutDashboard, Terminal, GitBranch, FileText, MessageSquare, Brain, Book, AlertTriangle } from 'lucide-react';
+import {
+  LayoutDashboard, Terminal, GitBranch, FileText,
+  MessageSquare, Brain, Book, AlertTriangle, FolderOpen,
+} from 'lucide-react';
 
 type Tab = 'overview' | 'terminal' | 'git' | 'notes' | 'intelligence' | 'reference' | 'errors' | 'chat';
 
@@ -32,10 +35,13 @@ export function WorkspaceTabs() {
     return (
       <div className="flex-1 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
         <div className="text-center">
-          <p className="text-lg font-medium mb-1" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: 'var(--bg-surface)' }}>
+            <FolderOpen size={36} style={{ color: 'var(--text-tertiary)' }} />
+          </div>
+          <p className="text-xl font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
             No project selected
           </p>
-          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
             Select a project from the sidebar or add a new one
           </p>
         </div>
@@ -43,42 +49,43 @@ export function WorkspaceTabs() {
     );
   }
 
+  const fullHeightTabs = ['terminal', 'chat'];
+
   return (
     <div className="flex-1 flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       {/* Tab Bar */}
       <div
-        className="flex items-center border-b px-2"
+        className="flex items-center border-b px-1"
         style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}
       >
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs transition-colors relative"
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative"
             style={{
               color: activeTab === id ? 'var(--text-primary)' : 'var(--text-tertiary)',
             }}
           >
-            <Icon size={13} />
+            <Icon size={16} />
             {label}
             {activeTab === id && (
               <div
-                className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full"
+                className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full"
                 style={{ background: 'var(--accent)' }}
               />
             )}
           </button>
         ))}
 
-        {/* Project name in tab bar */}
         <div className="flex-1" />
-        <span className="text-xs px-3" style={{ color: 'var(--text-tertiary)' }}>
+        <span className="text-sm px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>
           {activeProject.name}
         </span>
       </div>
 
       {/* Tab Content */}
-      <div className={`flex-1 overflow-auto ${activeTab !== 'terminal' && activeTab !== 'chat' ? 'p-4' : ''}`}>
+      <div className={`flex-1 overflow-auto ${!fullHeightTabs.includes(activeTab) ? 'p-6' : ''}`}>
         {activeTab === 'overview' && <OverviewPanel project={activeProject} />}
         {activeTab === 'terminal' && <TerminalPanel />}
         {activeTab === 'git' && <GitPanel />}
@@ -94,67 +101,81 @@ export function WorkspaceTabs() {
 
 function OverviewPanel({ project }: { project: any }) {
   return (
-    <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-        {project.name}
-      </h2>
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <InfoCard label="Path" value={project.path} />
-        <InfoCard label="Type" value={project.type} />
-        <InfoCard label="Status" value={project.status} />
-        <InfoCard label="Git" value={project.git_enabled ? 'Enabled' : 'Disabled'} />
+    <div>
+      {/* Project Header */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+          <LayoutDashboard size={22} style={{ color: 'var(--accent)' }} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+            {project.name}
+          </h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+            {project.path}
+          </p>
+        </div>
       </div>
 
-      {/* Claude Code Sessions — THE feature */}
-      <div className="mb-4">
+      {/* Info Cards Grid */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <InfoCard label="Type" value={project.type} accent="var(--accent)" />
+        <InfoCard label="Status" value={project.status} accent="var(--success)" />
+        <InfoCard label="Git" value={project.git_enabled ? 'Enabled' : 'Disabled'} accent={project.git_enabled ? 'var(--success)' : 'var(--text-tertiary)'} />
+        <InfoCard label="Dev Port" value={project.dev_server_port || 'Not set'} accent="var(--warning)" />
+      </div>
+
+      {/* Claude Code Sessions */}
+      <div className="mb-6">
         <ProjectSessions projectId={project.id} projectName={project.name} />
       </div>
 
+      {/* Quick Actions */}
       <div
-        className="rounded-lg p-4"
+        className="rounded-xl p-5"
         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
       >
-        <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+        <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           Quick Actions
         </h3>
-        <div className="flex gap-2 flex-wrap">
-          <ActionChip label="Open Terminal" />
-          <ActionChip label="Start AI Chat" />
-          <ActionChip label="View Git Status" />
-          <ActionChip label="Edit Brain" />
+        <div className="flex gap-3 flex-wrap">
+          <ActionChip label="Open Terminal" icon={Terminal} />
+          <ActionChip label="Start AI Chat" icon={MessageSquare} />
+          <ActionChip label="View Git Status" icon={GitBranch} />
+          <ActionChip label="Edit Brain" icon={Brain} />
         </div>
       </div>
     </div>
   );
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
     <div
-      className="rounded-lg px-3 py-2.5"
+      className="rounded-xl px-5 py-4"
       style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
     >
-      <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--text-tertiary)' }}>
+      <div className="text-xs uppercase tracking-wider font-semibold mb-1.5" style={{ color: 'var(--text-tertiary)' }}>
         {label}
       </div>
-      <div className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+      <div className="text-base font-semibold capitalize" style={{ color: accent }}>
         {value}
       </div>
     </div>
   );
 }
 
-function ActionChip({ label }: { label: string }) {
+function ActionChip({ label, icon: Icon }: { label: string; icon: React.ElementType }) {
   return (
     <button
-      className="px-3 py-1.5 rounded text-xs transition-colors"
+      className="flex items-center gap-2.5 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors hover:border-[var(--accent)]"
       style={{
         background: 'var(--bg-hover)',
         color: 'var(--text-secondary)',
         border: '1px solid var(--border)',
       }}
     >
+      <Icon size={16} style={{ color: 'var(--accent)' }} />
       {label}
     </button>
   );
