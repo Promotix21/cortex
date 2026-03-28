@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { execSync } from 'child_process';
+import fs from 'fs';
 
 export const settingsRouter: ReturnType<typeof Router> = Router();
 
@@ -10,31 +11,7 @@ function ensureTable(): void {
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
 }
 
-// GET /api/settings — return all settings as object
-settingsRouter.get('/', (_req, res) => {
-  ensureTable();
-  const db = getDb();
-  const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
-  const settings: Record<string, string> = {};
-  for (const row of rows) {
-    settings[row.key] = row.value;
-  }
-  res.json({ settings });
-});
-
-// PUT /api/settings — save a single setting
-settingsRouter.put('/', (req, res) => {
-  ensureTable();
-  const { key, value } = req.body;
-  if (!key) {
-    res.status(400).json({ error: 'key is required' });
-    return;
-  }
-  const db = getDb();
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(key, value ?? '');
-  res.json({ success: true });
-});
+// IMPORTANT: Specific routes MUST come before parameterized routes in Express 5
 
 // GET /api/settings/claude-status — check Claude CLI status
 settingsRouter.get('/claude-status', (_req, res) => {
@@ -42,23 +19,37 @@ settingsRouter.get('/claude-status', (_req, res) => {
   let authenticated = false;
   let version: string | null = null;
 
+  const shellCmd = (cmd: string) => {
+    const shell = process.env.SHELL || '/bin/bash';
+    return execSync(`${shell} -lc '${cmd}'`, {
+      encoding: 'utf-8',
+      timeout: 10000,
+      env: { ...process.env, HOME: process.env.HOME || '/home/' + (process.env.USER || 'user') },
+    }).trim();
+  };
+
   try {
-    const whichResult = execSync('which claude', { encoding: 'utf-8', timeout: 5000 }).trim();
+    const whichResult = shellCmd('which claude');
     installed = whichResult.length > 0;
   } catch {
-    installed = false;
+    const commonPaths = [
+      `${process.env.HOME}/.nvm/versions/node/${process.version}/bin/claude`,
+      `${process.env.HOME}/.npm-global/bin/claude`,
+      '/usr/local/bin/claude',
+      '/usr/bin/claude',
+    ];
+    for (const p of commonPaths) {
+      if (fs.existsSync(p)) { installed = true; break; }
+    }
   }
 
   if (installed) {
     try {
-      const versionOutput = execSync('claude --version', { encoding: 'utf-8', timeout: 10000 }).trim();
-      version = versionOutput || null;
-      // If we got a version, CLI is installed and accessible
-      // Check auth by trying to run a quick status-like command
-      // claude --version succeeding + having config typically means authenticated
+      const versionOutput = shellCmd('claude --version');
+      version = versionOutput.split('\n')[0] || null;
       authenticated = true;
     } catch {
-      version = null;
+      installed = true;
       authenticated = false;
     }
   }
@@ -94,7 +85,6 @@ settingsRouter.post('/validate-key', async (req, res) => {
     } else if (response.status === 401) {
       res.json({ valid: false, error: 'Invalid API key' });
     } else {
-      // 400 or 429 still means the key is valid (it authenticated)
       const status = response.status;
       if (status === 400 || status === 429 || status === 529) {
         res.json({ valid: true });
@@ -106,4 +96,30 @@ settingsRouter.post('/validate-key', async (req, res) => {
     const message = err instanceof Error ? err.message : 'Unknown error';
     res.json({ valid: false, error: message });
   }
+});
+
+// GET /api/settings — return all settings as object
+settingsRouter.get('/', (_req, res) => {
+  ensureTable();
+  const db = getDb();
+  const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
+  const settings: Record<string, string> = {};
+  for (const row of rows) {
+    settings[row.key] = row.value;
+  }
+  res.json({ settings });
+});
+
+// PUT /api/settings — save a single setting
+settingsRouter.put('/', (req, res) => {
+  ensureTable();
+  const { key, value } = req.body;
+  if (!key) {
+    res.status(400).json({ error: 'key is required' });
+    return;
+  }
+  const db = getDb();
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, value ?? '');
+  res.json({ success: true });
 });
