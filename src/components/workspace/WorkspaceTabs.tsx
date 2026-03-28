@@ -56,7 +56,9 @@ export function WorkspaceTabs() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      <div className={`flex-1 overflow-auto ${!fullHeightActivities.includes(activeActivity) ? 'p-6' : ''}`}>
+      <div className={`flex-1 overflow-auto ${!fullHeightActivities.includes(activeActivity) ? '' : ''}`}
+        style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
+      >
         {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
         {activeActivity === 'terminal' && <TerminalPanel />}
         {activeActivity === 'git' && <GitPanel />}
@@ -78,52 +80,50 @@ function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id:
   return (
     <div>
       {/* Project Header */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center" style={{ gap: 20, marginBottom: 32 }}>
         <div
-          className="w-12 h-12 rounded-xl flex items-center justify-center"
-          style={{ background: 'var(--accent-dim)' }}
+          className="flex items-center justify-center rounded-2xl"
+          style={{
+            width: 56,
+            height: 56,
+            background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
+            border: '1px solid rgba(137,180,250,0.15)',
+          }}
         >
-          <LayoutDashboard size={22} style={{ color: 'var(--accent)' }} />
+          <LayoutDashboard size={26} style={{ color: 'var(--accent)' }} />
         </div>
         <div>
-          <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
             {project.name}
           </h2>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+          <p style={{ fontSize: 14, marginTop: 4, color: 'var(--text-tertiary)' }}>
             {project.path}
           </p>
         </div>
       </div>
 
       {/* Info Cards Grid */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-4" style={{ gap: 16, marginBottom: 32 }}>
         <InfoCard label="Type" value={project.type} accent="var(--accent)" />
         <InfoCard label="Status" value={project.status} accent="var(--success)" />
-        <InfoCard
-          label="Git"
-          value={project.git_enabled ? 'Enabled' : 'Disabled'}
-          accent={project.git_enabled ? 'var(--success)' : 'var(--text-tertiary)'}
-        />
+        <InfoCard label="Git" value={project.git_enabled ? 'Enabled' : 'Disabled'} accent={project.git_enabled ? 'var(--success)' : 'var(--text-tertiary)'} />
         <InfoCard label="Dev Port" value={project.dev_server_port || 'Not set'} accent="var(--warning)" />
       </div>
 
       {/* Claude Code Sessions */}
-      <div className="mb-6">
+      <div style={{ marginBottom: 32 }}>
         <ProjectSessions projectId={project.id} projectName={project.name} />
       </div>
 
       {/* Quick Actions */}
       <div
-        className="rounded-xl p-5"
-        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+        className="rounded-2xl"
+        style={{ padding: '24px 28px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
       >
-        <h3
-          className="text-sm font-semibold mb-3 uppercase tracking-wider"
-          style={{ color: 'var(--text-tertiary)' }}
-        >
+        <h3 style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16, color: 'var(--text-tertiary)' }}>
           Quick Actions
         </h3>
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex flex-wrap" style={{ gap: 12 }}>
           <ActionChip label="Open Terminal" icon={Terminal} onClick={() => onNavigate('terminal')} />
           <ActionChip label="Start AI Chat" icon={MessageSquare} onClick={() => onNavigate('chat')} />
           <ActionChip label="View Git Status" icon={GitBranch} onClick={() => onNavigate('git')} />
@@ -137,16 +137,13 @@ function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id:
 function InfoCard({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
     <div
-      className="rounded-xl px-5 py-4"
-      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+      className="rounded-xl"
+      style={{ padding: '20px 22px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
     >
-      <div
-        className="text-xs uppercase tracking-wider font-semibold mb-1.5"
-        style={{ color: 'var(--text-tertiary)' }}
-      >
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8, color: 'var(--text-tertiary)' }}>
         {label}
       </div>
-      <div className="text-base font-semibold capitalize" style={{ color: accent }}>
+      <div className="capitalize" style={{ fontSize: 18, fontWeight: 700, color: accent }}>
         {value}
       </div>
     </div>
@@ -157,14 +154,18 @@ function ActionChip({ label, icon: Icon, onClick }: { label: string; icon: React
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2.5 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors hover:border-[var(--accent)]"
+      className="flex items-center rounded-xl transition-all"
       style={{
+        gap: 12,
+        padding: '14px 22px',
+        fontSize: 14,
+        fontWeight: 600,
         background: 'var(--bg-hover)',
         color: 'var(--text-secondary)',
         border: '1px solid var(--border)',
       }}
     >
-      <Icon size={16} style={{ color: 'var(--accent)' }} />
+      <Icon size={20} style={{ color: 'var(--accent)' }} />
       {label}
     </button>
   );

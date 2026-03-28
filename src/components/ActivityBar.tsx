@@ -31,46 +31,50 @@ const bottomActivities: ActivityItem[] = [
 
 function ActivityIcon({ item, isActive }: { item: ActivityItem; isActive: boolean }) {
   const setActivity = useNavigationStore((s) => s.setActivity);
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const Icon = item.icon;
 
   return (
     <div className="relative">
       <button
         onClick={() => setActivity(item.id)}
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         className="w-full flex items-center justify-center relative"
         style={{
-          height: 48,
-          color: isActive ? 'var(--text-primary)' : 'var(--text-tertiary)',
-          background: isActive ? 'var(--accent-dim)' : 'transparent',
-          transition: 'color 0.15s ease, background 0.15s ease',
+          height: 56,
+          color: isActive ? 'var(--accent)' : hovered ? 'var(--text-secondary)' : 'var(--text-tertiary)',
+          background: isActive ? 'var(--accent-dim)' : hovered ? 'var(--bg-hover)' : 'transparent',
+          transition: 'all 0.15s ease',
         }}
       >
-        {/* Active left border indicator */}
         {isActive && (
           <div
-            className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r"
+            className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full"
             style={{
               width: 3,
-              height: 24,
+              height: 28,
               background: 'var(--accent)',
             }}
           />
         )}
-        <Icon size={22} />
+        <Icon size={24} strokeWidth={isActive ? 2.2 : 1.8} />
       </button>
 
       {/* Tooltip */}
-      {showTooltip && (
+      {hovered && (
         <div
-          className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap z-50"
+          className="absolute left-full top-1/2 -translate-y-1/2 whitespace-nowrap z-50"
           style={{
+            marginLeft: 10,
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
             background: 'var(--bg-elevated)',
             color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            border: '1px solid var(--border-active)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
           }}
         >
           {item.label}
@@ -87,8 +91,8 @@ export function ActivityBar() {
     <div
       className="flex flex-col h-full border-r shrink-0"
       style={{
-        width: 52,
-        minWidth: 52,
+        width: 60,
+        minWidth: 60,
         background: 'var(--bg-tertiary)',
         borderColor: 'var(--border)',
       }}
@@ -96,18 +100,23 @@ export function ActivityBar() {
       {/* Logo */}
       <div
         className="flex items-center justify-center"
-        style={{ height: 52 }}
+        style={{ height: 62, borderBottom: '1px solid var(--border)' }}
       >
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: 'var(--accent-dim)' }}
+          className="flex items-center justify-center rounded-xl"
+          style={{
+            width: 40,
+            height: 40,
+            background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
+            border: '1px solid rgba(137,180,250,0.15)',
+          }}
         >
-          <Brain size={18} style={{ color: 'var(--accent)' }} />
+          <Brain size={22} style={{ color: 'var(--accent)' }} />
         </div>
       </div>
 
       {/* Top activities */}
-      <div className="flex flex-col mt-1">
+      <div className="flex flex-col" style={{ paddingTop: 8 }}>
         {topActivities.map((item) => (
           <ActivityIcon
             key={item.id}
@@ -117,11 +126,10 @@ export function ActivityBar() {
         ))}
       </div>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
       {/* Bottom activities */}
-      <div className="flex flex-col mb-2">
+      <div className="flex flex-col" style={{ paddingBottom: 8 }}>
         {bottomActivities.map((item) => (
           <ActivityIcon
             key={item.id}
