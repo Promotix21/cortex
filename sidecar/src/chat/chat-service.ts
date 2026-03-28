@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
 import { getMasterpieceContext } from '../intelligence/masterpiece-context.js';
+import { getChatProvider, getSelectedModel, sendOpenRouterMessage } from './openrouter.js';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -161,9 +162,7 @@ export function clearChatHistory(projectId: string): void {
 }
 
 /**
- * Send a message using Claude CLI (Max subscription) and stream the response.
- * Uses `claude -p "prompt" --output-format stream-json` for streaming.
- * Falls back to non-streaming if stream format isn't available.
+ * Send a message — routes to Claude CLI or OpenRouter based on settings.
  */
 export async function* sendMessage(
   projectId: string,
@@ -183,12 +182,80 @@ export async function* sendMessage(
   };
   session.history.push(userMsg);
 
+  const provider = getChatProvider();
+
+  if (provider === 'openrouter') {
+    // Route to OpenRouter (Llama, Gemini, GPT, DeepSeek, etc.)
+    yield* sendViaOpenRouter(projectId, systemPrompt, session, userMessage);
+  } else {
+    // Default: Claude CLI via Max subscription
+    yield* sendViaClaude(projectId, systemPrompt, session, userMessage);
+  }
+}
+
+/**
+ * Send via OpenRouter API (multi-model)
+ */
+async function* sendViaOpenRouter(
+  projectId: string,
+  systemPrompt: string,
+  session: { id: string; history: ChatMessage[] },
+  userMessage: string,
+): AsyncGenerator<{ type: 'chunk' | 'done' | 'error'; content: string }> {
+  const modelId = getSelectedModel();
+
+  // Build messages array for OpenRouter (OpenAI format)
+  const recentHistory = session.history.slice(-10, -1);
+  const messages: { role: 'user' | 'assistant'; content: string }[] = recentHistory.map(m => ({
+    role: m.role,
+    content: m.content,
+  }));
+  messages.push({ role: 'user', content: userMessage });
+
+  try {
+    let fullResponse = '';
+    for await (const chunk of sendOpenRouterMessage(modelId, systemPrompt, messages)) {
+      if (chunk.type === 'chunk') {
+        fullResponse += chunk.content;
+        yield chunk;
+      } else if (chunk.type === 'error') {
+        saveHistory(projectId, session.history);
+        yield chunk;
+        return;
+      } else if (chunk.type === 'done') {
+        // Save assistant message
+        if (fullResponse.trim()) {
+          session.history.push({
+            id: uuid(),
+            role: 'assistant',
+            content: fullResponse.trim(),
+            timestamp: new Date().toISOString(),
+          });
+        }
+        saveHistory(projectId, session.history);
+        yield { type: 'done', content: fullResponse.trim() };
+      }
+    }
+  } catch (err: any) {
+    saveHistory(projectId, session.history);
+    yield { type: 'error', content: `OpenRouter error: ${err.message}` };
+  }
+}
+
+/**
+ * Send via Claude CLI (Max subscription)
+ */
+async function* sendViaClaude(
+  projectId: string,
+  systemPrompt: string,
+  session: { id: string; history: ChatMessage[] },
+  userMessage: string,
+): AsyncGenerator<{ type: 'chunk' | 'done' | 'error'; content: string }> {
   // Build the full prompt with context
   const contextParts: string[] = [];
   if (systemPrompt) contextParts.push(systemPrompt);
 
-  // Include recent chat history for continuity
-  const recentHistory = session.history.slice(-10, -1); // exclude current message
+  const recentHistory = session.history.slice(-10, -1);
   if (recentHistory.length > 0) {
     contextParts.push('\n## Recent conversation:');
     for (const msg of recentHistory) {
@@ -200,7 +267,6 @@ export async function* sendMessage(
   const fullPrompt = contextParts.join('\n');
 
   try {
-    // Use login shell to ensure claude is in PATH (nvm etc.)
     const shell = process.env.SHELL || '/bin/bash';
     const claude = spawn(shell, ['-lc', `claude -p ${JSON.stringify(fullPrompt)}`], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -210,7 +276,6 @@ export async function* sendMessage(
     let fullResponse = '';
     let hasOutput = false;
 
-    // Stream stdout
     for await (const chunk of claude.stdout) {
       const text = chunk.toString();
       fullResponse += text;
@@ -218,54 +283,39 @@ export async function* sendMessage(
       yield { type: 'chunk', content: text };
     }
 
-    // Capture stderr for errors
     let stderr = '';
     for await (const chunk of claude.stderr) {
       stderr += chunk.toString();
     }
 
-    // Wait for process to exit
     await new Promise<void>((resolve, reject) => {
       claude.on('close', (code) => {
-        if (code === 0 || hasOutput) {
-          resolve();
-        } else {
-          reject(new Error(stderr || `Claude CLI exited with code ${code}`));
-        }
+        if (code === 0 || hasOutput) resolve();
+        else reject(new Error(stderr || `Claude CLI exited with code ${code}`));
       });
       claude.on('error', reject);
     });
 
-    // Save assistant message to history
     if (fullResponse.trim()) {
-      const assistantMsg: ChatMessage = {
+      session.history.push({
         id: uuid(),
         role: 'assistant',
         content: fullResponse.trim(),
         timestamp: new Date().toISOString(),
-      };
-      session.history.push(assistantMsg);
+      });
     }
 
     saveHistory(projectId, session.history);
     yield { type: 'done', content: fullResponse.trim() };
 
   } catch (err: any) {
-    // Save user message even if Claude fails
     saveHistory(projectId, session.history);
-
     const errorMsg = err.message || 'Unknown error';
 
     if (errorMsg.includes('ENOENT') || errorMsg.includes('not found')) {
-      yield {
-        type: 'error',
-        content: 'Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code\nThen authenticate with: claude login',
-      };
-    } else if (errorMsg.includes('auth') || errorMsg.includes('login') || errorMsg.includes('unauthorized')) {
-      yield {
-        type: 'error',
-        content: 'Claude CLI not authenticated. Run: claude login\nThis will open your browser to sign in with your Claude Max account.',
-      };
+      yield { type: 'error', content: 'Claude CLI not found. Install: npm install -g @anthropic-ai/claude-code' };
+    } else if (errorMsg.includes('auth') || errorMsg.includes('login')) {
+      yield { type: 'error', content: 'Claude CLI not authenticated. Run: claude login' };
     } else {
       yield { type: 'error', content: `Claude error: ${errorMsg}` };
     }

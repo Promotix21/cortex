@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings-store';
 import { BudgetSettings } from '@/components/budget/BudgetSettings';
+import { api } from '@/lib/api';
 import {
   CheckCircle, XCircle, RefreshCw,
   Terminal, Shield, Database, Trash2, Loader2, Zap, Globe, Copy, Check, Sparkles,
@@ -213,6 +214,15 @@ export function SettingsPanel() {
         </div>
       </SectionCard>
 
+      {/* OpenRouter — Multi-Model */}
+      <SectionCard
+        title="OpenRouter — Multi-Model"
+        icon={Globe}
+        description="Connect to Llama, Gemini, GPT, DeepSeek, Qwen, Mistral, and more via OpenRouter"
+      >
+        <OpenRouterSettings />
+      </SectionCard>
+
       {/* Masterpiece Mode */}
       <SectionCard title="Masterpiece Mode" icon={Sparkles} description="Inject award-worthy design philosophy into all AI suggestions">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -359,6 +369,175 @@ function SectionCard({
         </div>
       </div>
       {children}
+    </div>
+  );
+}
+
+function OpenRouterSettings() {
+  const { settings, saveSetting, fetchSettings } = useSettingsStore();
+  const [apiKey, setApiKey] = useState(settings.openrouter_api_key || '');
+  const [validating, setValidating] = useState(false);
+  const [validated, setValidated] = useState<boolean | null>(null);
+  const [models, setModels] = useState<any[]>([]);
+  const selectedModel = settings.chat_model || 'claude-cli';
+
+  useEffect(() => {
+    setApiKey(settings.openrouter_api_key || '');
+  }, [settings.openrouter_api_key]);
+
+  useEffect(() => {
+    api.getOpenRouterModels().then(data => setModels(data.models)).catch(() => {});
+  }, []);
+
+  const handleValidate = async () => {
+    if (!apiKey.trim()) return;
+    setValidating(true);
+    try {
+      const result = await api.validateOpenRouterKey(apiKey.trim());
+      setValidated(result.valid);
+      if (result.valid) {
+        await saveSetting('openrouter_api_key', apiKey.trim());
+      }
+    } catch {
+      setValidated(false);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleSelectModel = async (modelId: string) => {
+    await saveSetting('chat_model', modelId);
+    fetchSettings();
+  };
+
+  const isConnected = !!settings.openrouter_api_key;
+
+  // Group models by category
+  const categories = [...new Set(models.map((m: any) => m.category))];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* API Key */}
+      <div>
+        <div className="font-semibold" style={{ fontSize: 14, marginBottom: 8, color: 'var(--text-primary)' }}>
+          API Key
+        </div>
+        <div className="flex" style={{ gap: 8 }}>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => { setApiKey(e.target.value); setValidated(null); }}
+            placeholder="sk-or-v1-..."
+            className="flex-1 rounded-lg border bg-transparent"
+            style={{
+              padding: '10px 14px',
+              fontSize: 14,
+              color: 'var(--text-primary)',
+              borderColor: 'var(--border)',
+            }}
+          />
+          <button
+            onClick={handleValidate}
+            disabled={validating || !apiKey.trim()}
+            className="rounded-lg font-semibold transition-colors"
+            style={{
+              padding: '10px 20px',
+              fontSize: 14,
+              background: validated === true ? 'var(--success-dim)' : 'var(--accent-dim)',
+              color: validated === true ? 'var(--success)' : 'var(--accent)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {validating ? 'Checking...' : validated === true ? 'Connected' : 'Connect'}
+          </button>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>
+          Get your key at <span style={{ color: 'var(--accent)' }}>openrouter.ai/keys</span> — free tier available
+        </p>
+        {validated === false && (
+          <p style={{ fontSize: 13, color: 'var(--error)', marginTop: 6 }}>Invalid API key</p>
+        )}
+      </div>
+
+      {/* Model Selector */}
+      <div>
+        <div className="font-semibold" style={{ fontSize: 14, marginBottom: 8, color: 'var(--text-primary)' }}>
+          Chat Model
+        </div>
+
+        {/* Claude CLI option */}
+        <button
+          onClick={() => handleSelectModel('claude-cli')}
+          className="w-full text-left rounded-lg transition-colors"
+          style={{
+            padding: '12px 16px',
+            marginBottom: 6,
+            background: selectedModel === 'claude-cli' ? 'var(--accent-dim)' : 'var(--bg-primary)',
+            border: selectedModel === 'claude-cli' ? '2px solid var(--accent)' : '1px solid var(--border)',
+          }}
+        >
+          <div className="flex items-center" style={{ gap: 10 }}>
+            <span className="font-bold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>Claude CLI (Max)</span>
+            <span
+              className="rounded-full"
+              style={{ padding: '2px 10px', fontSize: 11, fontWeight: 700, background: 'var(--success-dim)', color: 'var(--success)' }}
+            >
+              Default
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+            Uses your Claude Max subscription via CLI — no API charges
+          </p>
+        </button>
+
+        {/* OpenRouter models grouped by category */}
+        {isConnected && categories.map(cat => (
+          <div key={cat} style={{ marginTop: 12 }}>
+            <div style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              marginBottom: 6,
+              color: cat === 'free' ? 'var(--success)' : 'var(--text-tertiary)',
+            }}>
+              {cat === 'free' ? 'Free Tier' : cat === 'open-source' ? 'Open Source' : 'Proprietary'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {models.filter((m: any) => m.category === cat).map((model: any) => (
+                <button
+                  key={model.id}
+                  onClick={() => handleSelectModel(model.id)}
+                  className="w-full text-left rounded-lg transition-colors"
+                  style={{
+                    padding: '10px 14px',
+                    background: selectedModel === model.id ? 'var(--accent-dim)' : 'var(--bg-primary)',
+                    border: selectedModel === model.id ? '2px solid var(--accent)' : '1px solid var(--border)',
+                  }}
+                >
+                  <div className="flex items-center" style={{ gap: 8 }}>
+                    <span className="font-semibold" style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                      {model.name}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{model.provider}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {!isConnected && (
+          <div
+            className="rounded-lg"
+            style={{ padding: '14px 18px', marginTop: 8, background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
+          >
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+              Connect your OpenRouter API key above to unlock 20+ models including Llama 4, Gemini 2.5, GPT-4.1, DeepSeek R1, and free-tier options.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
