@@ -5,6 +5,7 @@ import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
 import { StatusBar } from '@/components/StatusBar';
 import { SessionDashboard } from '@/components/sessions/SessionDashboard';
 import { SetupWizard } from '@/components/SetupWizard';
+import { BudgetGuard } from '@/components/budget/BudgetGuard';
 import { useSettingsStore } from '@/stores/settings-store';
 
 export default function App() {
@@ -20,6 +21,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden">
+      {/* Budget alerts banner */}
+      <BudgetGuard />
       {/* Main layout: ActivityBar | Sidebar | Workspace */}
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar />

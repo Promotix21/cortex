@@ -1,8 +1,10 @@
 import { EventEmitter } from 'events';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
+import { checkBudgets } from './budget-guard.js';
+import { analyzeSession } from './session-analyzer.js';
 
-type JobType = 'prune_snapshots' | 'compress_history' | 'update_confidence' | 'index_files';
+type JobType = 'prune_snapshots' | 'compress_history' | 'update_confidence' | 'index_files' | 'budget_check';
 type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 interface JobResult {
@@ -44,6 +46,8 @@ export class BackgroundWorker extends EventEmitter {
       await this.pruneSnapshots();
       await this.compressHistory();
       await this.updateConfidence();
+      await this.checkBudgetLimits();
+      await this.analyzeRecentSessions();
     } catch (err) {
       console.error('[background-worker] Error:', err);
     } finally {
@@ -175,6 +179,58 @@ export class BackgroundWorker extends EventEmitter {
     } catch (err: any) {
       this.logJob(jobId, 'update_confidence', 'failed', err.message);
       return { jobType: 'update_confidence', status: 'failed', result: err.message, durationMs: Date.now() - start };
+    }
+  }
+
+  /**
+   * Analyze recently completed sessions for auto-learning
+   */
+  async analyzeRecentSessions(): Promise<void> {
+    const db = getDb();
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    // Find recently completed sessions not yet analyzed
+    const sessions = db.prepare(`
+      SELECT cs.id, cs.project_id FROM claude_sessions cs
+      WHERE cs.status = 'completed' AND cs.last_active > ?
+      AND cs.id NOT IN (
+        SELECT DISTINCT session_id FROM execution_history WHERE session_id = cs.id LIMIT 1
+      )
+      LIMIT 5
+    `).all(oneHourAgo) as { id: string; project_id: string }[];
+
+    for (const session of sessions) {
+      try {
+        analyzeSession(session.id, session.project_id);
+      } catch (err) {
+        console.error(`[background-worker] Session analysis failed for ${session.id}:`, err);
+      }
+    }
+  }
+
+  /**
+   * Check budget limits and create alerts
+   */
+  async checkBudgetLimits(): Promise<JobResult> {
+    const start = Date.now();
+    const jobId = uuid();
+    this.logJob(jobId, 'budget_check', 'running');
+
+    try {
+      const status = checkBudgets();
+      const warnings = status.limits.filter(l => l.status !== 'ok').length;
+      const newAlerts = status.alerts.filter(a => !a.acknowledged).length;
+      const msg = `Budget check: ${warnings} limit(s) at risk, ${newAlerts} unacknowledged alert(s)`;
+      this.logJob(jobId, 'budget_check', 'completed', msg);
+
+      if (newAlerts > 0) {
+        this.emit('budget:alert', status.alerts.filter(a => !a.acknowledged));
+      }
+
+      return { jobType: 'budget_check', status: 'completed', result: msg, durationMs: Date.now() - start };
+    } catch (err: any) {
+      this.logJob(jobId, 'budget_check', 'failed', err.message);
+      return { jobType: 'budget_check', status: 'failed', result: err.message, durationMs: Date.now() - start };
     }
   }
 

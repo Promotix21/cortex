@@ -11,10 +11,13 @@ import { ErrorPanel } from '@/components/bridge/ErrorPanel';
 import { ReferencePanel } from './ReferencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SessionTerminal } from '@/components/sessions/SessionTerminal';
+import { RemotionStudio } from '@/components/remotion/RemotionStudio';
 import {
   LayoutDashboard, Terminal, GitBranch,
-  MessageSquare, Brain, FolderOpen,
+  MessageSquare, Brain, FolderOpen, Pencil,
 } from 'lucide-react';
+import { useState } from 'react';
+import { api } from '@/lib/api';
 
 export function WorkspaceTabs() {
   const activeActivity = useNavigationStore((s) => s.activeActivity);
@@ -73,18 +76,34 @@ export function WorkspaceTabs() {
           </div>
         )}
         {activeActivity === 'chat' && <ChatPanel />}
+        {activeActivity === 'studio' && <RemotionStudio />}
       </div>
     </div>
   );
 }
 
 function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id: 'terminal' | 'chat' | 'git' | 'brain') => void }) {
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [iconInput, setIconInput] = useState(project.icon || '');
+  const { fetchProjects } = useProjectStore();
+
+  const handleSaveIcon = async () => {
+    await api.updateProjectIcon(project.id, iconInput);
+    setShowIconPicker(false);
+    fetchProjects();
+  };
+
+  const EMOJI_PRESETS = ['🚀', '⚡', '🧠', '🎯', '💎', '🔥', '🌐', '📱', '🎨', '🛠️', '📦', '🏗️', '🎮', '🤖', '💻', '🔒', '📊', '🌟', '🎵', '🛒'];
+
+  const hasIcon = project.icon && project.icon.length > 0;
+
   return (
     <div>
       {/* Project Header */}
       <div className="flex items-center" style={{ gap: 20, marginBottom: 32 }}>
         <div
-          className="flex items-center justify-center rounded-2xl"
+          className="flex items-center justify-center rounded-2xl relative cursor-pointer group"
+          onClick={() => setShowIconPicker(!showIconPicker)}
           style={{
             width: 56,
             height: 56,
@@ -92,7 +111,21 @@ function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id:
             border: '1px solid rgba(137,180,250,0.15)',
           }}
         >
-          <LayoutDashboard size={26} style={{ color: 'var(--accent)' }} />
+          {hasIcon ? (
+            project.icon.startsWith('http') || project.icon.startsWith('data:') ? (
+              <img src={project.icon} alt="" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
+            ) : (
+              <span style={{ fontSize: 28, lineHeight: 1 }}>{project.icon}</span>
+            )
+          ) : (
+            <LayoutDashboard size={26} style={{ color: 'var(--accent)' }} />
+          )}
+          <div
+            className="absolute inset-0 rounded-2xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+          >
+            <Pencil size={16} style={{ color: 'white' }} />
+          </div>
         </div>
         <div>
           <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
@@ -103,6 +136,78 @@ function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id:
           </p>
         </div>
       </div>
+
+      {/* Icon Picker */}
+      {showIconPicker && (
+        <div
+          className="rounded-xl"
+          style={{ padding: '20px 24px', marginBottom: 24, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12, color: 'var(--text-tertiary)' }}>
+            Project Icon
+          </div>
+          {/* Emoji presets */}
+          <div className="flex flex-wrap" style={{ gap: 6, marginBottom: 16 }}>
+            {EMOJI_PRESETS.map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => setIconInput(emoji)}
+                className="rounded-lg transition-all"
+                style={{
+                  width: 40,
+                  height: 40,
+                  fontSize: 20,
+                  background: iconInput === emoji ? 'var(--accent-dim)' : 'var(--bg-hover)',
+                  border: iconInput === emoji ? '2px solid var(--accent)' : '2px solid transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          {/* Custom URL input */}
+          <div className="flex" style={{ gap: 8 }}>
+            <input
+              type="text"
+              value={iconInput}
+              onChange={(e) => setIconInput(e.target.value)}
+              placeholder="Emoji, URL, or data:image/..."
+              className="flex-1 rounded-lg border bg-transparent"
+              style={{
+                padding: '10px 14px',
+                fontSize: 14,
+                color: 'var(--text-primary)',
+                borderColor: 'var(--border)',
+              }}
+            />
+            <button
+              onClick={handleSaveIcon}
+              className="rounded-lg font-semibold transition-colors"
+              style={{
+                padding: '10px 20px',
+                fontSize: 14,
+                background: 'var(--accent)',
+                color: 'var(--bg-primary)',
+              }}
+            >
+              Save
+            </button>
+            <button
+              onClick={() => { setIconInput(''); handleSaveIcon(); }}
+              className="rounded-lg font-semibold transition-colors"
+              style={{
+                padding: '10px 16px',
+                fontSize: 14,
+                background: 'var(--bg-hover)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Info Cards Grid */}
       <div className="grid grid-cols-4" style={{ gap: 16, marginBottom: 32 }}>

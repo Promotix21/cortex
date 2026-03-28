@@ -152,6 +152,84 @@ Cortex becomes **infrastructure that Claude Code users depend on** — not just 
 - **Interactive Steps**: Videos that follow a structured, step-by-step sequence for technical walkthroughs
 - **One-Click Render**: Export `.mp4` walkthroughs using the project's Remotion templates
 
+### 4.8 Context Injector (Phase 0 — Implemented)
+
+The foundation of Cortex intelligence. Before every Claude Code session spawn, `context-injector.ts` assembles a `.cortex-context.md` file in the project directory containing:
+- **Project Brain** (summary, architecture, conventions, known issues, decisions, dependencies)
+- **Verified Patterns** from pattern memory
+- **Recent Errors** captured from dev tools / console bridge
+- **Debug Solutions** from debug memory
+- **Server/Deployment Info**
+- **Masterpiece Design Rules** (if enabled)
+
+All sections respect a configurable **token budget** (default: 11,500 tokens) with priority-based truncation. Custom budgets per project via `context_priorities` table.
+
+### 4.9 Budget Guard (Phase 1 — Implemented)
+
+Rate limit monitoring to prevent hitting Claude Max subscription caps:
+- **4 default limits**: Messages/5h (45), Hours/7d (167), Tokens/day (500K), Sessions/day (20)
+- **Warning at 80%**, session spawn blocked at 100%
+- **BudgetGuard banner** — shows active warnings/exceeded limits at the top of the app
+- **BudgetSettings** — toggle limits, adjust thresholds, per-limit progress bars
+- **Background job** checks budgets every 5 minutes, creates timestamped alerts
+- DB tables: `budget_limits`, `budget_alerts`
+
+### 4.10 Handoff Generator (Phase 2 — Implemented)
+
+Automatic handoff document generation when a session ends:
+- Queries session_history, session_metrics, project_snapshots, debug_memory
+- Outputs `NEXT_SESSION_PROMPT.md` with: file read order, context summary, session activity, git state, known issues, debug solutions, architecture, troubleshooting guide
+- **HandoffViewer** component: markdown preview + copy to clipboard + regenerate button
+- "Handoff" button on completed session cards in the dashboard
+
+### 4.11 Auto-Learning Pipeline (Phase 3 — Implemented)
+
+Automatically populates intelligence from session activity:
+- **Session Analyzer** parses session output for error signatures (10+ regex patterns), file changes, and repeated code blocks
+- Creates `unverified` entries in `debug_memory` and `pattern_memory`
+- **LearningQueue UI**: Shows auto-detected entries with approve/dismiss buttons
+- Approved entries promoted to `probable`; dismissed entries marked `deprecated`
+- Background worker auto-analyzes recently completed sessions
+
+### 4.12 Masterpiece Mode (Phase 4 — Implemented)
+
+Design philosophy injection toggle:
+- **masterpiece-context.ts** contains award-worthy design rules: Lenis scroll, GSAP animations, Catppuccin palette, desktop-quality UI, structured build phases, pre-commit gates
+- Toggle in Settings panel — when enabled, rules injected into:
+  - Chat system prompt (via `chat-service.ts`)
+  - `.cortex-context.md` (via context-injector, priority 8)
+- Stored in `settings` table as `masterpiece_mode = true/false`
+
+### 4.13 MCP Server (Phase 5 — Implemented)
+
+Bidirectional Model Context Protocol integration:
+- **Cortex as MCP Server** (port 4710): JSON-RPC over HTTP with 6 tools:
+  - `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`
+- **MCP Client**: Connects to external MCP servers (e.g., console-bridge)
+- Claude Code can auto-discover Cortex intelligence via MCP
+
+### 4.14 Chrome Extension (Phase 6 — Implemented)
+
+`cortex-chrome-bridge` — Manifest V3 Chrome extension:
+- **Content script**: Intercepts `console.error`, `console.warn`, unhandled errors, unhandled promise rejections, failed fetch/XHR
+- **Background service worker**: WebSocket to sidecar (fallback: HTTP), network request monitoring for 4xx/5xx
+- **Popup UI**: Connection status, error/network queue counts
+- Auto-routes errors by matching tab URL to project's dev_server_port
+
+### 4.15 Drag & Drop File Attachment (Phase 8 — Implemented)
+
+- **FileDropZone** component in chat input: drag files to attach
+- File pills with name, size, remove button
+- File contents included in message (up to 50KB per file, 1MB max)
+- Supports code files, text, and file path drops from system file explorer
+
+### 4.16 Project Icons
+
+- Per-project icon/emoji support (stored in `projects.icon` column)
+- Emoji preset picker (20 common emojis) + custom URL/data URI input
+- Displayed in sidebar ProjectItem and dashboard header
+- Click-to-edit in dashboard overview
+
 ---
 
 ## 5. Claude Code Session Manager

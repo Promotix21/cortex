@@ -132,7 +132,7 @@ projectsRouter.put('/:id', (req, res) => {
     return;
   }
 
-  const { name, status, dev_server_port } = req.body;
+  const { name, status, dev_server_port, icon } = req.body;
   const now = new Date().toISOString();
 
   db.prepare(`
@@ -140,10 +140,11 @@ projectsRouter.put('/:id', (req, res) => {
       name = COALESCE(?, name),
       status = COALESCE(?, status),
       dev_server_port = COALESCE(?, dev_server_port),
+      icon = COALESCE(?, icon),
       last_opened = ?,
       updated_at = ?
     WHERE id = ?
-  `).run(name ?? null, status ?? null, dev_server_port ?? null, now, now, req.params.id);
+  `).run(name ?? null, status ?? null, dev_server_port ?? null, icon ?? null, now, now, req.params.id);
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   res.json({ project });

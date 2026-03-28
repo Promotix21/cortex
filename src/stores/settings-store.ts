@@ -12,11 +12,13 @@ interface SettingsStore {
   claudeStatus: ClaudeStatus;
   loading: boolean;
   error: string | null;
+  masterpieceMode: boolean;
 
   fetchSettings: () => Promise<void>;
   saveSetting: (key: string, value: string) => Promise<void>;
   checkClaudeStatus: () => Promise<void>;
   validateApiKey: (apiKey: string) => Promise<{ valid: boolean; error?: string }>;
+  toggleMasterpieceMode: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -24,12 +26,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   claudeStatus: { installed: false, authenticated: false, version: null },
   loading: false,
   error: null,
+  masterpieceMode: false,
 
   fetchSettings: async () => {
     set({ loading: true, error: null });
     try {
       const data = await api.getSettings();
-      set({ settings: data.settings, loading: false });
+      set({
+        settings: data.settings,
+        masterpieceMode: data.settings.masterpiece_mode === 'true',
+        loading: false,
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch settings';
       set({ error: message, loading: false });
@@ -65,5 +72,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       const message = err instanceof Error ? err.message : 'Validation failed';
       return { valid: false, error: message };
     }
+  },
+
+  toggleMasterpieceMode: async () => {
+    const current = get().masterpieceMode;
+    const newVal = !current;
+    await api.saveSetting('masterpiece_mode', String(newVal));
+    set({ masterpieceMode: newVal, settings: { ...get().settings, masterpiece_mode: String(newVal) } });
   },
 }));

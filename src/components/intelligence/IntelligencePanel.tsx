@@ -3,9 +3,10 @@ import { useProjectStore } from '@/stores/project-store';
 import { BrainEditor } from './BrainEditor';
 import { PatternList } from './PatternList';
 import { DebugList } from './DebugList';
-import { Brain, Puzzle, Bug } from 'lucide-react';
+import { LearningQueue } from './LearningQueue';
+import { Brain, Puzzle, Bug, Sparkles } from 'lucide-react';
 
-type IntelTab = 'brain' | 'patterns' | 'debug';
+type IntelTab = 'brain' | 'patterns' | 'debug' | 'learning';
 
 export function IntelligencePanel() {
   const project = useProjectStore(s => s.activeProject());
@@ -23,6 +24,7 @@ export function IntelligencePanel() {
     { id: 'brain', label: 'Project Brain', icon: Brain },
     { id: 'patterns', label: 'Patterns', icon: Puzzle },
     { id: 'debug', label: 'Debug Memory', icon: Bug },
+    { id: 'learning', label: 'Learning Queue', icon: Sparkles },
   ];
 
   return (
@@ -55,6 +57,7 @@ export function IntelligencePanel() {
         {activeTab === 'brain' && <BrainEditor projectId={project.id} />}
         {activeTab === 'patterns' && <PatternList projectId={project.id} />}
         {activeTab === 'debug' && <DebugList projectId={project.id} />}
+        {activeTab === 'learning' && <LearningQueue projectId={project.id} />}
       </div>
     </div>
   );

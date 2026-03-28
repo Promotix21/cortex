@@ -17,8 +17,11 @@ import { settingsRouter } from './routes/settings.js';
 import { getBridgeClient } from './bridge/bridge-client.js';
 import { getBackgroundWorker } from './intelligence/background-worker.js';
 import { jobsRouter } from './routes/jobs.js';
+import { budgetRouter } from './routes/budget.js';
+import { remotionRouter } from './routes/remotion.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getTerminalManager } from './terminals/terminal-manager.js';
+import { startMCPServer, stopMCPServer } from './mcp/mcp-server.js';
 
 const PORT = 4700;
 const app = express();
@@ -72,6 +75,8 @@ app.use('/api/playbooks', playbooksRouter);
 app.use('/api/workspace', workspaceRouter);
 app.use('/api/context', contextRouter);
 app.use('/api/jobs', jobsRouter);
+app.use('/api/budget', budgetRouter);
+app.use('/api/remotion', remotionRouter);
 app.use('/api/settings', settingsRouter);
 
 // Start bridge client polling
@@ -81,6 +86,9 @@ bridgeClient.start(3000);
 // Start background intelligence worker (every 5 min)
 const bgWorker = getBackgroundWorker();
 bgWorker.start(300000);
+
+// Start MCP server (port 4710)
+startMCPServer();
 
 // Start server
 const server = app.listen(PORT, '127.0.0.1', () => {
@@ -96,6 +104,7 @@ function shutdown() {
   terminalManager.destroy();
   bridgeClient.stop();
   bgWorker.stop();
+  stopMCPServer();
   server.close();
   closeDb();
   process.exit(0);

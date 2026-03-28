@@ -18,7 +18,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Platform"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/built_with-Tauri_2_%2B_React_19-7C5CFC?style=flat-square" alt="Stack"></a>
-  <a href="#-tech-stack"><img src="https://img.shields.io/badge/AI-Claude_%2B_OpenAI-D97706?style=flat-square" alt="AI"></a>
+  <a href="#-tech-stack"><img src="https://img.shields.io/badge/AI-Claude_Code_(Max)-D97706?style=flat-square" alt="AI"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/database-SQLite_(local)-003B57?style=flat-square" alt="DB"></a>
 </p>
 
@@ -30,6 +30,12 @@
   <a href="#-contributing">Contributing</a> &middot;
   <a href="#-roadmap">Roadmap</a>
 </p>
+
+---
+
+## Built With Claude Code
+
+This entire project — 10,000+ lines across 85+ files, 35 database tables, 70+ API endpoints, an MCP server, a Chrome extension, and 9 phases of intelligence features — was built using **Claude Code on Claude Max**. Cortex is both a tool for Claude Code users and a testament to what Claude Code can ship.
 
 ---
 
@@ -138,14 +144,78 @@ Reusable step-by-step workflows for repetitive tasks:
 }
 ```
 
-### Context Budget Manager
+### Context Injector (Phase 0)
 
-AI context windows aren't infinite. Cortex assembles context intelligently:
+Before every Claude Code session spawn, Cortex assembles a `.cortex-context.md` file:
 
-- Priority-weighted source selection (brain > errors > patterns)
-- ~11,500 token default budget with per-project tuning
-- Transparency panel: see exactly what AI knows and what was excluded
-- Prevents token waste from irrelevant context flooding
+- Priority-weighted source selection (brain > errors > patterns > server info)
+- ~11,500 token default budget with per-project tuning via `context_priorities` table
+- Truncation by priority — highest-value context always fits
+- Includes Masterpiece Design Rules when enabled
+
+### Budget Guard (Phase 1)
+
+Rate limit monitoring for Claude Max subscriptions:
+
+- **4 default limits**: Messages/5h (45), Hours/7d (167), Tokens/day (500K), Sessions/day (20)
+- Warning banner at 80%, session spawn blocked at 100%
+- Per-limit toggle, custom thresholds, progress bars in Settings
+- Background job checks every 5 minutes, creates timestamped alerts
+
+### Handoff Generator (Phase 2)
+
+Auto-generates `NEXT_SESSION_PROMPT.md` when a session ends:
+
+- Queries session_history, session_metrics, project_snapshots, debug_memory
+- Outputs: file read order, session activity, git state, known issues, debug solutions, troubleshooting
+- HandoffViewer component: markdown preview + copy to clipboard + regenerate
+- "Handoff" button on completed session cards
+
+### Auto-Learning Pipeline (Phase 3)
+
+Automatically populates intelligence from session activity:
+
+- **Session Analyzer** — parses output for error signatures (10+ regex patterns), file changes, repeated code blocks
+- Creates `unverified` entries in debug_memory and pattern_memory
+- **Learning Queue UI** — approve/dismiss with human-in-the-loop gating
+- Background worker auto-analyzes recently completed sessions
+
+### Masterpiece Mode (Phase 4)
+
+Toggle in Settings that injects award-worthy design philosophy into every AI interaction:
+
+- Lenis smooth scroll, GSAP + ScrollTrigger animations, Catppuccin palette
+- Desktop-quality UI standards, structured build phases, pre-commit hard gates
+- Injected into chat system prompt and `.cortex-context.md`
+
+### MCP Server (Phase 5)
+
+Cortex exposes intelligence to Claude Code via Model Context Protocol:
+
+- **Server** (port 4710): 6 JSON-RPC tools — `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`
+- **Client**: Connects to external MCP servers (console-bridge, etc.)
+
+### Chrome Extension (Phase 6)
+
+`cortex-chrome-bridge` — Manifest V3:
+
+- Content script intercepts `console.error`, `console.warn`, unhandled errors, failed fetch/XHR
+- Background service worker bridges to sidecar via WebSocket (fallback: HTTP)
+- Popup UI with connection status and queue counts
+
+### Remotion Studio (Phase 7)
+
+Programmatic video rendering from project data:
+
+- One-click render using Project Brain as video props
+- Progress tracking, video preview, download
+- ActivityBar icon for quick access
+
+### Drag & Drop + File Attachment (Phase 8)
+
+- Drop files into chat input to attach their contents
+- File pills with name, size, remove button
+- Contents included in AI messages (up to 50KB per file)
 
 ### Everything Else
 
@@ -155,7 +225,8 @@ AI context windows aren't infinite. Cortex assembles context intelligently:
 - **Task Tracker** — click-to-cycle: Pending → Doing → Done → Blocked
 - **Reference Intelligence** — version-pinned tool commands, breaking change log, deprecated API tracking
 - **Workspace Resume** — close Cortex, reopen, everything is exactly where you left it
-- **8 workspace tabs** — Overview, Terminal, Git, Notes, Brain, Reference, Errors, AI Chat
+- **Project Icons** — per-project emoji or image icons in sidebar and dashboard
+- **9 workspace tabs** — Overview, Terminal, Git, Notes, Brain, AI Chat, Remotion Studio, Settings
 
 ---
 
@@ -199,27 +270,38 @@ pnpm tauri build
 
 ```
 cortex/
-├── src/                          # React frontend (25 components)
+├── src/                          # React frontend (30+ components)
 │   ├── components/
 │   │   ├── sidebar/              # Project list, search, add dialog
-│   │   ├── workspace/            # Tabs: Overview, Git, Notes, Reference
+│   │   ├── workspace/            # Tabs: Overview, Git, Notes, Reference, Studio
 │   │   ├── terminal/             # xterm.js terminal with tabs
-│   │   ├── sessions/             # Session dashboard, cards, usage
-│   │   ├── chat/                 # AI chat panel with streaming
-│   │   ├── intelligence/         # Brain editor, patterns, debug memory
+│   │   ├── sessions/             # Dashboard, cards, usage, handoff viewer
+│   │   ├── chat/                 # AI chat panel with streaming + file drop
+│   │   ├── intelligence/         # Brain editor, patterns, debug, learning queue
+│   │   ├── budget/               # Budget guard banner + settings
+│   │   ├── remotion/             # Remotion studio UI
+│   │   ├── settings/             # Settings panel + masterpiece toggle
 │   │   └── bridge/               # Error capture panel
-│   ├── stores/                   # Zustand state (project, session, terminal, chat)
+│   ├── stores/                   # Zustand (project, session, terminal, chat, budget, settings, nav)
 │   ├── lib/                      # API client, utilities
 │   └── types/                    # TypeScript interfaces
 ├── sidecar/                      # Express backend
 │   └── src/
-│       ├── db/                   # SQLite schema (31 tables) + connection
-│       ├── routes/               # 12 route files, 60+ API endpoints
+│       ├── db/                   # SQLite schema (35 tables) + connection
+│       ├── routes/               # 15 route files, 70+ API endpoints
 │       ├── sessions/             # Session manager, snapshots, execution history
 │       ├── terminals/            # Terminal manager (node-pty)
-│       ├── chat/                 # Claude SDK integration
-│       ├── intelligence/         # File indexer, project scanner, background worker
+│       ├── chat/                 # Claude CLI integration + masterpiece injection
+│       ├── intelligence/         # Context injector, budget guard, handoff generator,
+│       │                         # session analyzer, masterpiece context, file indexer,
+│       │                         # project scanner, remotion renderer, background worker
+│       ├── mcp/                  # MCP server (port 4710) + MCP client
 │       └── bridge/               # Console bridge client
+├── chrome-extension/             # Manifest V3 Chrome extension
+│   ├── manifest.json             # Permissions and config
+│   ├── background.js             # WebSocket/HTTP bridge to sidecar
+│   ├── content.js                # Console + network error interception
+│   └── popup.html/js             # Connection status UI
 ├── src-tauri/                    # Tauri (Rust) shell
 └── assets/                       # Demo GIF, screenshots
 ```
@@ -237,25 +319,26 @@ cortex/
 │   ┌───────────────────────┐   HTTP :4700   ┌──────────────────────┐  │
 │   │    React Frontend     │ ◄────────────► │   Express Sidecar    │  │
 │   │                       │                │                      │  │
-│   │  Sidebar              │                │  SQLite (31 tables)  │  │
-│   │  8 Workspace Tabs     │                │  Session Manager     │  │
+│   │  Sidebar + Icons      │                │  SQLite (35 tables)  │  │
+│   │  9 Workspace Tabs     │                │  Session Manager     │  │
 │   │  Session Dashboard    │                │  Terminal Manager    │  │
-│   │  xterm.js Terminals   │                │  Claude SDK/CLI      │  │
-│   │  AI Chat (streaming)  │                │  File Indexer        │  │
-│   │  Brain/Pattern Editor │                │  Background Worker   │  │
-│   │  Error Panel          │                │  Policy Engine       │  │
-│   └───────────────────────┘                │  Bridge Client       │  │
-│                                            └──────────┬───────────┘  │
+│   │  Budget Guard Banner  │                │  Context Injector    │  │
+│   │  xterm.js Terminals   │                │  Budget Guard        │  │
+│   │  AI Chat + File Drop  │                │  Handoff Generator   │  │
+│   │  Intelligence + Queue │                │  Session Analyzer    │  │
+│   │  Remotion Studio      │                │  Background Worker   │  │
+│   │  Masterpiece Toggle   │                │  Remotion Renderer   │  │
+│   └───────────────────────┘                └──────────┬───────────┘  │
 │                                                       │              │
-│   ┌───────────────────────────────────────────────────▼───────────┐  │
-│   │                Console Bridge (child process)                 │  │
-│   │   WebSocket :9876 ◄── Chrome Extension (browser errors)      │  │
-│   │   HTTP API  :9877 ◄── Server middleware (backend errors)     │  │
-│   └──────────────────────────────────────────────────────────────┘  │
+│   ┌─────────────────────┐            ┌────────────────▼───────────┐  │
+│   │  MCP Server :4710   │            │  Console Bridge            │  │
+│   │  6 JSON-RPC tools   │            │  WebSocket + HTTP fallback │  │
+│   │  Claude Code ◄──────│            │  Chrome Extension ────────►│  │
+│   └─────────────────────┘            └────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Database: 31 SQLite Tables
+### Database: 35 SQLite Tables
 
 | Group | Tables | Purpose |
 |---|---|---|
@@ -266,8 +349,9 @@ cortex/
 | **Snapshots** | project_snapshots, execution_history, execution_groups | State capture + recovery |
 | **Playbooks** | playbooks, playbook_runs | Reusable workflows |
 | **Bridge** | captured_errors, captured_network | Error intelligence |
+| **Budget** | budget_limits, budget_alerts | Rate limit guardrails |
 | **Policy** | execution_policies, context_priorities | Safety + context control |
-| **System** | background_jobs, file_locks, agent_tasks | Background processing |
+| **System** | background_jobs, file_locks, agent_tasks, settings | Background processing |
 
 No ORM. No migrations. No cloud. All data lives in `~/.cortex/cortex.db`.
 
@@ -282,7 +366,9 @@ No ORM. No migrations. No cloud. All data lives in `~/.cortex/cortex.db`.
 | Backend | Express 5 + better-sqlite3 + node-pty | Sidecar process, zero network exposure |
 | Terminals | xterm.js + node-pty | Real PTY, not a web terminal emulator pretending |
 | Git | simple-git | No shelling out, proper async git operations |
-| AI | Claude SDK (primary), extensible for OpenAI/Ollama | Provider-agnostic architecture |
+| AI | Claude Code CLI via Max subscription | No API keys — uses OAuth login |
+| MCP | JSON-RPC server on port 4710 | Claude Code auto-discovers Cortex intelligence |
+| Bridge | Chrome Extension (Manifest V3) | Console + network error capture |
 | Theme | Catppuccin Mocha | Dark, easy on the eyes, VSCode-familiar |
 
 ---
@@ -344,28 +430,39 @@ pnpm tauri build                        # Full app
 
 ## Roadmap
 
-### Now (Alpha)
+### Shipped
 - [x] 12-phase core implementation (Foundation through Polish)
-- [x] 60+ API endpoints, 31 database tables
-- [x] 8 workspace tabs fully functional
+- [x] 70+ API endpoints, 35 database tables, 30+ components
+- [x] 9 workspace tabs fully functional
 - [x] Project auto-scan with brain population
 - [x] Background intelligence worker
 - [x] AI execution policy engine
+- [x] Context Injector — auto-assembles `.cortex-context.md` before every session
+- [x] Budget Guard — rate limit monitoring for Claude Max
+- [x] Handoff Generator — auto-generates `NEXT_SESSION_PROMPT.md` on session end
+- [x] Auto-Learning Pipeline — session analyzer + learning queue UI
+- [x] Masterpiece Mode — design philosophy injection toggle
+- [x] MCP Server — 6 tools, Claude Code auto-discovers intelligence
+- [x] Chrome Extension — console + network error capture
+- [x] Remotion Studio — programmatic video rendering
+- [x] Drag & Drop file attachment in chat
+- [x] Project icons (emoji + custom image)
 
 ### Next
-- [ ] Tauri desktop app launch and system tray
+- [ ] Tauri AppImage / .deb / .rpm packaging
 - [ ] File watcher for live index updates
 - [ ] Chat summarization (condense long conversations)
-- [ ] AI-generated file summaries in file index
 - [ ] Keyboard shortcuts and command palette
+- [ ] Multi-model support via OpenRouter (Gemini, GPT for micro-tasks)
+- [ ] Per-project billing export (CSV/JSON)
 
 ### Later
 - [ ] Vector search (ChromaDB) for semantic pattern matching
 - [ ] Local model support via Ollama
-- [ ] Auto pattern extraction from AI conversations
+- [ ] AI Orchestrator (multi-agent pipelines)
 - [ ] Community playbook sharing
 - [ ] macOS + Windows support
-- [ ] Plugin API
+- [ ] Plugin API for custom intelligence sources
 
 ---
 
@@ -385,12 +482,14 @@ pnpm tauri build                        # Full app
 ## Stats
 
 ```
-Source files:    61 (.ts + .tsx)
-Total lines:    ~7,900
-API endpoints:  60+
-DB tables:      31
-React components: 25
-Zustand stores:   4
+Source files:    85+ (.ts + .tsx + .js)
+Total lines:    ~10,000+
+API endpoints:  70+
+DB tables:      35
+React components: 30+
+Zustand stores:   7
+MCP tools:        6
+Chrome Extension: Manifest V3
 Build time:     2.3s (Vite)
 ```
 
@@ -405,7 +504,7 @@ MIT. Use it, fork it, ship it.
 <p align="center">
   <strong>Cortex — the AI development workspace that remembers everything.</strong>
   <br/><br/>
-  Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a>
+  Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a> at <a href="https://hiraya.digital">Hiraya Digital</a>
   <br/>
-  <sub>If this is useful, star the repo. It helps others find it.</sub>
+  <sub>Built entirely with Claude Code on Claude Max. If this is useful, star the repo.</sub>
 </p>

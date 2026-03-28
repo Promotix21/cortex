@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { getSessionManager } from '../sessions/session-manager.js';
 import { captureSnapshot, getResumeDiff, getLatestSnapshot } from '../sessions/snapshot.js';
+import { injectContext } from '../intelligence/context-injector.js';
+import { generateHandoff, getHandoff } from '../intelligence/handoff-generator.js';
+import { canSpawnSession } from '../intelligence/budget-guard.js';
 import { v4 as uuid } from 'uuid';
 import fs from 'fs';
 
@@ -103,11 +106,28 @@ sessionsRouter.post('/', async (req, res) => {
     return;
   }
 
+  // Check budget before spawning
+  const budget = canSpawnSession();
+  if (!budget.allowed) {
+    res.status(429).json({ error: budget.reason });
+    return;
+  }
+
   // Capture snapshot before starting
   try {
     await captureSnapshot(project_id, project.path, null);
   } catch {
     // Non-fatal
+  }
+
+  // Inject Cortex intelligence context before spawn
+  try {
+    const ctx = injectContext(project_id, project.path);
+    if (ctx.written) {
+      console.log(`[sessions] Injected context for ${project.name}: ~${ctx.tokenCount} tokens`);
+    }
+  } catch {
+    // Non-fatal — session can still run without context
   }
 
   // Update project last_opened
@@ -166,6 +186,16 @@ sessionsRouter.post('/:id/stop', async (req, res) => {
   }
 
   const success = mgr.stopSession(req.params.id);
+
+  // Generate handoff document after stopping
+  if (success && project) {
+    try {
+      await generateHandoff(session.id, session.projectId, project.path);
+    } catch {
+      // Non-fatal
+    }
+  }
+
   res.json({ success });
 });
 
@@ -198,6 +228,46 @@ sessionsRouter.get('/:id/resume-diff', async (req, res) => {
 
   const diff = await getResumeDiff(session.projectId, project.path);
   res.json({ diff });
+});
+
+// GET /api/sessions/:id/handoff — get handoff document for session's project
+sessionsRouter.get('/:id/handoff', (req, res) => {
+  const mgr = getSessionManager();
+  const session = mgr.getSessionInfo(req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+
+  const db = getDb();
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(session.projectId) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const content = getHandoff(project.path);
+  res.json({ handoff: content });
+});
+
+// POST /api/sessions/:id/handoff — generate handoff now
+sessionsRouter.post('/:id/handoff', async (req, res) => {
+  const mgr = getSessionManager();
+  const session = mgr.getSessionInfo(req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+
+  const db = getDb();
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(session.projectId) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const result = await generateHandoff(session.id, session.projectId, project.path);
+  res.json(result);
 });
 
 // Snapshot routes

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { v4 as uuid } from 'uuid';
+import { analyzeSession, getLearningQueue, reviewLearningItem } from '../intelligence/session-analyzer.js';
 
 export const intelligenceRouter: ReturnType<typeof Router> = Router();
 
@@ -200,6 +201,36 @@ intelligenceRouter.post('/debug/match', (req, res) => {
   }
 
   res.json({ match: match || null });
+});
+
+// ==================== LEARNING QUEUE ====================
+
+// GET /api/intelligence/learning-queue/:projectId — unverified items for approval
+intelligenceRouter.get('/learning-queue/:projectId', (req, res) => {
+  const queue = getLearningQueue(req.params.projectId);
+  res.json(queue);
+});
+
+// POST /api/intelligence/learning-queue/review — approve or dismiss an item
+intelligenceRouter.post('/learning-queue/review', (req, res) => {
+  const { id, type, action } = req.body;
+  if (!id || !type || !action) {
+    res.status(400).json({ error: 'id, type (pattern|debug), and action (approve|dismiss) are required' });
+    return;
+  }
+  reviewLearningItem(id, type, action);
+  res.json({ success: true });
+});
+
+// POST /api/intelligence/analyze-session/:sessionId — analyze a session
+intelligenceRouter.post('/analyze-session/:sessionId', (req, res) => {
+  const { project_id } = req.body;
+  if (!project_id) {
+    res.status(400).json({ error: 'project_id is required' });
+    return;
+  }
+  const result = analyzeSession(req.params.sessionId, project_id);
+  res.json(result);
 });
 
 // ==================== CROSS-PROJECT SEARCH ====================

@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings-store';
+import { BudgetSettings } from '@/components/budget/BudgetSettings';
 import {
   CheckCircle, XCircle, RefreshCw,
-  Terminal, Shield, Database, Trash2, Loader2, Zap, Globe, Copy, Check,
+  Terminal, Shield, Database, Trash2, Loader2, Zap, Globe, Copy, Check, Sparkles,
 } from 'lucide-react';
 
 export function SettingsPanel() {
   const {
-    claudeStatus, loading,
-    fetchSettings, checkClaudeStatus,
+    claudeStatus, loading, masterpieceMode,
+    fetchSettings, checkClaudeStatus, toggleMasterpieceMode,
   } = useSettingsStore();
 
   const [copied, setCopied] = useState(false);
@@ -210,6 +211,60 @@ export function SettingsPanel() {
             </button>
           </div>
         </div>
+      </SectionCard>
+
+      {/* Masterpiece Mode */}
+      <SectionCard title="Masterpiece Mode" icon={Sparkles} description="Inject award-worthy design philosophy into all AI suggestions">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+                Enable Masterpiece Mode
+              </div>
+              <div style={{ fontSize: 13, marginTop: 4, color: 'var(--text-tertiary)' }}>
+                Adds premium design rules, animation patterns, and code quality standards to every AI interaction
+              </div>
+            </div>
+            <button
+              onClick={toggleMasterpieceMode}
+              className="rounded-full transition-colors"
+              style={{
+                width: 48,
+                height: 26,
+                padding: 3,
+                background: masterpieceMode ? 'var(--accent)' : 'var(--bg-hover)',
+                border: '1px solid var(--border)',
+                position: 'relative',
+                flexShrink: 0,
+              }}
+            >
+              <div
+                className="rounded-full transition-all"
+                style={{
+                  width: 18,
+                  height: 18,
+                  background: 'white',
+                  transform: masterpieceMode ? 'translateX(22px)' : 'translateX(0)',
+                }}
+              />
+            </button>
+          </div>
+          {masterpieceMode && (
+            <div
+              className="rounded-xl"
+              style={{ padding: '14px 18px', background: 'var(--accent-dim)', border: '1px solid rgba(137,180,250,0.2)' }}
+            >
+              <p style={{ fontSize: 13, color: 'var(--accent)' }}>
+                Active — Lenis scroll, GSAP animations, Catppuccin palette, desktop-quality UI standards, and structured build phases are being injected into all AI context.
+              </p>
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* Budget Guard */}
+      <SectionCard title="Budget Guard" icon={Shield} description="Rate limit monitoring — alerts before hitting Claude Max limits">
+        <BudgetSettings />
       </SectionCard>
 
       {/* Data & Storage */}

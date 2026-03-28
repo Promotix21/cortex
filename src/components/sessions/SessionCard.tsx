@@ -3,7 +3,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useProjectStore } from '@/stores/project-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { formatRelativeTime } from '@/lib/utils';
-import { Circle, Square, Clock, Hash, Cpu, ExternalLink } from 'lucide-react';
+import { Circle, Square, Clock, Hash, Cpu, ExternalLink, FileText } from 'lucide-react';
 
 interface SessionCardProps {
   session: Session;
@@ -143,6 +143,26 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
           >
             <ExternalLink size={13} />
             Open
+          </button>
+        )}
+
+        {/* View Handoff (completed sessions) */}
+        {!isRunning && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleOpenSession(); }}
+            className="flex items-center rounded-lg transition-all"
+            style={{
+              gap: 8,
+              padding: '8px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              background: 'var(--accent-dim)',
+              color: 'var(--accent)',
+              border: '1px solid rgba(137,180,250,0.25)',
+            }}
+          >
+            <FileText size={13} />
+            Handoff
           </button>
         )}
 

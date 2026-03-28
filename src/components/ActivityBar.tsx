@@ -6,6 +6,7 @@ import {
   Brain,
   MessageSquare,
   Settings,
+  Video,
 } from 'lucide-react';
 import { useNavigationStore, type ActivityId } from '@/stores/navigation-store';
 import { useState } from 'react';
@@ -23,6 +24,7 @@ const topActivities: ActivityItem[] = [
   { id: 'notes', icon: FileText, label: 'Notes' },
   { id: 'brain', icon: Brain, label: 'Intelligence' },
   { id: 'chat', icon: MessageSquare, label: 'AI Chat' },
+  { id: 'studio', icon: Video, label: 'Remotion Studio' },
 ];
 
 const bottomActivities: ActivityItem[] = [

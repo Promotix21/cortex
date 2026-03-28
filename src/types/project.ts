@@ -10,6 +10,7 @@ export interface Project {
   name: string;
   path: string;
   type: ProjectType;
+  icon?: string;
   git_enabled: boolean;
   status: ProjectStatus;
   last_opened: string;
@@ -29,4 +30,5 @@ export interface UpdateProjectInput {
   name?: string;
   status?: ProjectStatus;
   dev_server_port?: number | null;
+  icon?: string;
 }

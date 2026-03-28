@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
+import { getMasterpieceContext } from '../intelligence/masterpiece-context.js';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -22,10 +23,26 @@ export interface ProjectBrain {
  * Build system prompt from project brain
  */
 function buildSystemPrompt(projectName: string, brain: ProjectBrain | null): string {
+  // Check if masterpiece mode is enabled
+  let masterpieceEnabled = false;
+  try {
+    const db = getDb();
+    const masterpieceSetting = db.prepare(
+      "SELECT value FROM settings WHERE key = 'masterpiece_mode'"
+    ).get() as { value: string } | undefined;
+    masterpieceEnabled = masterpieceSetting?.value === 'true';
+  } catch {
+    // settings table may not exist yet
+  }
+
   const parts: string[] = [
     `You are an AI assistant embedded in Cortex, helping with the project "${projectName}".`,
     'Be concise, technical, and direct. Reference specific files and code when possible.',
   ];
+
+  if (masterpieceEnabled) {
+    parts.push('\n' + getMasterpieceContext());
+  }
 
   if (brain) {
     if (brain.summary) parts.push(`\n## Project Summary\n${brain.summary}`);

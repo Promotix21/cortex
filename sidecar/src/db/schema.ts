@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL,
   path TEXT NOT NULL UNIQUE,
   type TEXT NOT NULL DEFAULT 'unknown',
+  icon TEXT NOT NULL DEFAULT '',
   git_enabled INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','planning','maintenance')),
   last_opened TEXT NOT NULL DEFAULT (datetime('now')),
@@ -360,6 +361,34 @@ CREATE TABLE IF NOT EXISTS execution_groups (
   rollback_available INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Budget Tables
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS budget_limits (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  limit_type TEXT NOT NULL CHECK(limit_type IN ('messages_per_5h', 'hours_per_7d', 'tokens_per_day', 'sessions_per_day')),
+  limit_value REAL NOT NULL,
+  warn_at_pct REAL NOT NULL DEFAULT 0.8,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS budget_alerts (
+  id TEXT PRIMARY KEY,
+  limit_id TEXT NOT NULL REFERENCES budget_limits(id) ON DELETE CASCADE,
+  alert_type TEXT NOT NULL CHECK(alert_type IN ('warning', 'exceeded', 'reset')),
+  current_value REAL NOT NULL,
+  limit_value REAL NOT NULL,
+  message TEXT NOT NULL,
+  acknowledged INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_budget_alerts_limit ON budget_alerts(limit_id);
+CREATE INDEX IF NOT EXISTS idx_budget_alerts_ack ON budget_alerts(acknowledged);
 
 -- Indexes
 -- ============================================================

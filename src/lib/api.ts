@@ -26,6 +26,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  updateProjectIcon: (id: string, icon: string) =>
+    request<{ project: any }>(`/api/projects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ icon }),
+    }),
   deleteProject: (id: string) =>
     request<{ success: boolean }>(`/api/projects/${id}`, {
       method: 'DELETE',
@@ -56,6 +61,10 @@ export const api = {
     request<{ today: any; byProject: any[] }>('/api/sessions/usage'),
   getSnapshots: (projectId: string) =>
     request<{ snapshots: any[] }>(`/api/sessions/snapshots/${projectId}`),
+  getSessionHandoff: (sessionId: string) =>
+    request<{ handoff: string | null }>(`/api/sessions/${sessionId}/handoff`),
+  generateHandoff: (sessionId: string) =>
+    request<{ written: boolean; path: string }>(`/api/sessions/${sessionId}/handoff`, { method: 'POST' }),
 
   // Terminals
   getTerminals: (projectId?: string) =>
@@ -112,6 +121,13 @@ export const api = {
     request<{ match: any }>('/api/intelligence/debug/match', { method: 'POST', body: JSON.stringify({ error_signature: signature, error_message: message }) }),
   searchIntelligence: (q: string) =>
     request<{ results: any[] }>(`/api/intelligence/search?q=${encodeURIComponent(q)}`),
+  getLearningQueue: (projectId: string) =>
+    request<{ patterns: any[]; debug: any[] }>(`/api/intelligence/learning-queue/${projectId}`),
+  reviewLearningItem: (id: string, type: 'pattern' | 'debug', action: 'approve' | 'dismiss') =>
+    request<{ success: boolean }>('/api/intelligence/learning-queue/review', {
+      method: 'POST',
+      body: JSON.stringify({ id, type, action }),
+    }),
 
   // Notes
   getNote: (projectId: string) => request<{ note: any }>(`/api/notes/${projectId}`),
@@ -156,6 +172,26 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(fields),
     }),
+
+  // Budget
+  getBudgetStatus: () => request<{ limits: any[]; alerts: any[] }>('/api/budget/status'),
+  updateBudgetLimit: (id: string, fields: any) =>
+    request<{ success: boolean }>(`/api/budget/limits/${id}`, { method: 'PUT', body: JSON.stringify(fields) }),
+  canSpawnSession: () => request<{ allowed: boolean; reason?: string }>('/api/budget/can-spawn'),
+  acknowledgeBudgetAlert: (id: string) =>
+    request<{ success: boolean }>(`/api/budget/alerts/${id}/ack`, { method: 'POST' }),
+  acknowledgeBudgetAlertAll: () =>
+    request<{ success: boolean }>('/api/budget/alerts/ack-all', { method: 'POST' }),
+
+  // Remotion
+  startRender: (projectId: string) =>
+    request<{ job: any }>('/api/remotion/render', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
+  getRenderStatus: (jobId: string) =>
+    request<{ job: any }>(`/api/remotion/status/${jobId}`),
+  getLatestRender: (projectId: string) =>
+    request<{ job: any }>(`/api/remotion/latest/${projectId}`),
+  listRenders: () =>
+    request<{ jobs: any[] }>('/api/remotion/list'),
 
   // Health
   health: () => request<{ status: string; activeSessions: number }>('/api/health'),

@@ -9,6 +9,8 @@ interface ProjectItemProps {
 }
 
 export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
+  const hasIcon = project.icon && project.icon.length > 0;
+
   return (
     <button
       onClick={onClick}
@@ -24,9 +26,9 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
         borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
       }}
     >
-      {/* Folder Icon */}
+      {/* Project Icon/Logo */}
       <div
-        className="flex items-center justify-center rounded-lg shrink-0"
+        className="flex items-center justify-center rounded-lg shrink-0 overflow-hidden"
         style={{
           width: 42,
           height: 42,
@@ -34,10 +36,24 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
           background: isActive ? 'var(--accent-dim)' : 'var(--bg-hover)',
         }}
       >
-        <Folder
-          size={22}
-          style={{ color: isActive ? 'var(--accent)' : 'var(--text-tertiary)' }}
-        />
+        {hasIcon ? (
+          // Support both emoji and URL icons
+          project.icon!.startsWith('http') || project.icon!.startsWith('/') || project.icon!.startsWith('data:') ? (
+            <img
+              src={project.icon!}
+              alt={project.name}
+              style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }}
+            />
+          ) : (
+            // Emoji icon
+            <span style={{ fontSize: 22, lineHeight: 1 }}>{project.icon}</span>
+          )
+        ) : (
+          <Folder
+            size={22}
+            style={{ color: isActive ? 'var(--accent)' : 'var(--text-tertiary)' }}
+          />
+        )}
       </div>
 
       {/* Text */}
