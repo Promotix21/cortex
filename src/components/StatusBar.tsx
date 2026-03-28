@@ -1,12 +1,12 @@
 import { useProjectStore } from '@/stores/project-store';
 import { useSessionStore } from '@/stores/session-store';
-import { Circle, Wifi, WifiOff, Zap } from 'lucide-react';
+import { Wifi, WifiOff, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 
 export function StatusBar() {
-  const activeProject = useProjectStore(s => s.activeProject());
-  const activeSessions = useSessionStore(s => s.activeSessions);
+  const activeProject = useProjectStore((s) => s.activeProject());
+  const activeSessions = useSessionStore((s) => s.activeSessions);
   const [sidecarConnected, setSidecarConnected] = useState(false);
 
   useEffect(() => {
@@ -25,49 +25,48 @@ export function StatusBar() {
 
   return (
     <div
-      className="flex items-center px-5 py-1.5 text-xs font-medium border-t gap-5"
+      className="flex items-center px-4 text-xs font-medium select-none shrink-0"
       style={{
+        height: 28,
+        fontSize: 12,
         background: 'var(--bg-tertiary)',
-        borderColor: 'var(--border)',
+        borderTop: '1px solid var(--border)',
         color: 'var(--text-tertiary)',
       }}
     >
-      {/* Sidecar Status */}
-      <div className="flex items-center gap-2">
+      {/* Left: Sidecar status */}
+      <div className="flex items-center gap-1.5">
         {sidecarConnected ? (
-          <Wifi size={13} style={{ color: 'var(--success)' }} />
+          <Wifi size={12} style={{ color: 'var(--success)' }} />
         ) : (
-          <WifiOff size={13} style={{ color: 'var(--error)' }} />
+          <WifiOff size={12} style={{ color: 'var(--error)' }} />
         )}
-        <span>Sidecar: {sidecarConnected ? 'Connected' : 'Disconnected'}</span>
+        <span>{sidecarConnected ? 'Sidecar Connected' : 'Sidecar Offline'}</span>
       </div>
 
-      {/* Active Project */}
-      {activeProject && (
-        <>
-          <span style={{ color: 'var(--border)' }}>|</span>
-          <div className="flex items-center gap-2">
-            <Circle size={8} fill="var(--success)" style={{ color: 'var(--success)' }} />
-            <span>{activeProject.name}</span>
-          </div>
-          <span>{activeProject.type}</span>
-          {activeProject.git_enabled && <span>git</span>}
-        </>
-      )}
+      {/* Center: Active project */}
+      <div className="flex-1 text-center">
+        {activeProject && (
+          <span>
+            {activeProject.name}
+            <span className="mx-1.5" style={{ color: 'var(--border)' }}>&middot;</span>
+            <span className="capitalize">{activeProject.type}</span>
+          </span>
+        )}
+      </div>
 
-      {/* Active Sessions */}
-      {activeSessions.length > 0 && (
-        <>
-          <span style={{ color: 'var(--border)' }}>|</span>
-          <div className="flex items-center gap-2">
-            <Zap size={13} style={{ color: 'var(--running)' }} />
-            <span>{activeSessions.length} Claude session{activeSessions.length > 1 ? 's' : ''}</span>
+      {/* Right: Session count + version */}
+      <div className="flex items-center gap-3">
+        {activeSessions.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Zap size={12} style={{ color: 'var(--running)' }} />
+            <span>
+              {activeSessions.length} session{activeSessions.length > 1 ? 's' : ''}
+            </span>
           </div>
-        </>
-      )}
-
-      <div className="flex-1" />
-      <span>Cortex v0.1.0</span>
+        )}
+        <span>Cortex v0.1.0</span>
+      </div>
     </div>
   );
 }
