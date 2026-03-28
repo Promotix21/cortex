@@ -27,19 +27,51 @@
 </p>
 
 <p align="center">
-  <a href="#-the-problem">Why</a> &middot;
-  <a href="#-features">Features</a> &middot;
-  <a href="#-quick-start">Quick Start</a> &middot;
-  <a href="#-architecture">Architecture</a> &middot;
-  <a href="#-contributing">Contributing</a> &middot;
-  <a href="#-roadmap">Roadmap</a>
+  <a href="#tldr">TL;DR</a> &middot;
+  <a href="#screenshots">Screenshots</a> &middot;
+  <a href="#features">Features</a> &middot;
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#architecture">Architecture</a> &middot;
+  <a href="#why-this-matters-for-claude-code-users">Why It Matters</a> &middot;
+  <a href="#contributing">Contributing</a>
 </p>
+
+---
+
+## TL;DR
+
+Cortex is a Linux desktop app that adds:
+
+- **Named Claude Code sessions** — no more anonymous "Terminal 3"
+- **Persistent project intelligence** — AI remembers your architecture, patterns, and past bugs
+- **AI usage tracking per project** — prompts, tokens, sessions, exportable for billing
+- **Error intelligence** — browser + server errors auto-captured and matched to known solutions
+- **Context injection** — project brain assembled and injected before every AI session
+- **Budget guardrails** — rate limit monitoring for Claude Max subscriptions
+
+All stored locally using SQLite. No cloud. No telemetry.
 
 ---
 
 ## Built With Claude Code
 
-This entire project — 10,000+ lines across 85+ files, 35 database tables, 70+ API endpoints, an MCP server, a Chrome extension, and 9 phases of intelligence features — was built using **Claude Code on Claude Max**. Cortex is both a tool for Claude Code users and a testament to what Claude Code can ship.
+This project was developed primarily using **Claude Code** with a **Claude Max** subscription. 10,000+ lines across 85+ files, 35 database tables, 70+ API endpoints, an MCP server, a Chrome extension, and 9 phases of intelligence features. Cortex is both a tool for Claude Code users and a testament to what Claude Code can ship.
+
+---
+
+## Screenshots
+
+### Session Dashboard
+![Dashboard](assets/dashboard.png)
+
+### Project Intelligence Panel
+![Brain](assets/brain.png)
+
+### AI Session Monitor
+![Sessions](assets/sessions.png)
+
+### Budget Guard & Settings
+![Settings](assets/settings.png)
 
 ---
 
@@ -399,6 +431,28 @@ No ORM. No migrations. No cloud. All data lives in `~/.cortex/cortex.db`.
 
 ---
 
+## Why This Matters for Claude Code Users
+
+Claude Code is powerful but currently lacks:
+
+- **Multi-project orchestration** — no way to manage sessions across projects
+- **Persistent project intelligence** — context is lost when you close the terminal
+- **Usage tracking per project** — no billing data, no quota visibility
+- **Session ownership** — sessions are anonymous processes, not named entities
+- **Error-to-AI pipeline** — browser errors don't flow into AI context automatically
+
+Cortex provides the missing infrastructure layer. It doesn't replace Claude Code — it makes Claude Code production-ready for developers managing real workloads across multiple projects.
+
+---
+
+## Status
+
+**Alpha** — active development. Linux-first release targeted.
+
+Core features are functional. 46/46 API endpoint tests passing. TypeScript strict mode, 0 errors. Testing and hardening in progress.
+
+---
+
 ## Contributing
 
 We welcome contributions. Cortex is MIT-licensed.
@@ -510,5 +564,5 @@ MIT. Use it, fork it, ship it.
   <br/><br/>
   Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a> at <a href="https://hiraya.digital">Hiraya Digital</a>
   <br/>
-  <sub>Built entirely with Claude Code on Claude Max. If this is useful, star the repo.</sub>
+  <sub>Developed primarily with Claude Code + Claude Max. If this is useful, star the repo.</sub>
 </p>
