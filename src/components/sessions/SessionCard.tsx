@@ -1,8 +1,9 @@
 import type { Session } from '@/types/session';
 import { useSessionStore } from '@/stores/session-store';
 import { useProjectStore } from '@/stores/project-store';
+import { useNavigationStore } from '@/stores/navigation-store';
 import { formatRelativeTime } from '@/lib/utils';
-import { Circle, Square, Clock, Hash, Cpu } from 'lucide-react';
+import { Circle, Square, Clock, Hash, Cpu, ExternalLink } from 'lucide-react';
 
 interface SessionCardProps {
   session: Session;
@@ -28,6 +29,7 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
   const { stopSession } = useSessionStore();
   const setActiveProject = useProjectStore(s => s.setActiveProject);
   const setDashboardOpen = useSessionStore(s => s.setDashboardOpen);
+  const viewSession = useNavigationStore(s => s.viewSession);
 
   const isRunning = session.status === 'running' || session.status === 'idle';
   const statusColor =
@@ -49,9 +51,16 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
     setDashboardOpen(false);
   };
 
+  const handleOpenSession = () => {
+    setActiveProject(session.projectId);
+    setDashboardOpen(false);
+    viewSession(session.id);
+  };
+
   return (
     <div
-      className="rounded-xl transition-colors"
+      className="rounded-xl transition-colors cursor-pointer"
+      onClick={handleOpenSession}
       style={{
         padding: '18px 22px',
         background: isRunning ? 'var(--bg-hover)' : 'var(--bg-primary)',
@@ -117,10 +126,30 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
 
         <div className="flex-1" />
 
+        {/* Open Button */}
+        {isRunning && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleOpenSession(); }}
+            className="flex items-center rounded-lg transition-all"
+            style={{
+              gap: 8,
+              padding: '8px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              background: 'var(--accent-dim)',
+              color: 'var(--accent)',
+              border: '1px solid rgba(137,180,250,0.25)',
+            }}
+          >
+            <ExternalLink size={13} />
+            Open
+          </button>
+        )}
+
         {/* Stop Button */}
         {isRunning && (
           <button
-            onClick={() => stopSession(session.id)}
+            onClick={(e) => { e.stopPropagation(); stopSession(session.id); }}
             className="flex items-center rounded-lg transition-all"
             style={{
               gap: 8,

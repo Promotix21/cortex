@@ -10,6 +10,7 @@ import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
 import { ErrorPanel } from '@/components/bridge/ErrorPanel';
 import { ReferencePanel } from './ReferencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
+import { SessionTerminal } from '@/components/sessions/SessionTerminal';
 import {
   LayoutDashboard, Terminal, GitBranch,
   MessageSquare, Brain, FolderOpen,
@@ -17,6 +18,7 @@ import {
 
 export function WorkspaceTabs() {
   const activeActivity = useNavigationStore((s) => s.activeActivity);
+  const viewingSessionId = useNavigationStore((s) => s.viewingSessionId);
   const setActivity = useNavigationStore((s) => s.setActivity);
   const activeProject = useProjectStore((s) => s.activeProject());
 
@@ -60,7 +62,7 @@ export function WorkspaceTabs() {
         style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
       >
         {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
-        {activeActivity === 'terminal' && <TerminalPanel />}
+        {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
         {activeActivity === 'git' && <GitPanel />}
         {activeActivity === 'notes' && <NotesAndTasksPanel />}
         {activeActivity === 'brain' && (
