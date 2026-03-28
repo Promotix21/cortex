@@ -51,69 +51,88 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
 
   return (
     <div
-      className="rounded-xl px-5 py-4 transition-colors"
+      className="rounded-xl transition-colors"
       style={{
-        background: 'var(--bg-surface)',
+        padding: '18px 22px',
+        background: isRunning ? 'var(--bg-hover)' : 'var(--bg-primary)',
         border: `1px solid ${isRunning ? 'var(--border-active)' : 'var(--border)'}`,
       }}
     >
-      {/* Top Row */}
-      <div className="flex items-center gap-3 mb-3">
+      {/* Top Row: Status + Name + Actions */}
+      <div className="flex items-center" style={{ gap: 12, marginBottom: 14 }}>
         <Circle
-          size={10}
+          size={12}
           fill={statusColor}
-          style={{ color: statusColor }}
-          className="shrink-0"
+          style={{ color: statusColor, flexShrink: 0 }}
         />
-        <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
           {session.name}
         </span>
-        <span className="text-xs font-medium px-2.5 py-1 rounded-md" style={{
-          background: isRunning ? 'var(--success-dim)' : 'var(--bg-hover)',
-          color: isRunning ? 'var(--success)' : 'var(--text-tertiary)',
-        }}>
+        <span
+          className="rounded-lg"
+          style={{
+            padding: '5px 14px',
+            fontSize: 12,
+            fontWeight: 700,
+            background: isRunning ? 'var(--success-dim)' : 'var(--bg-surface)',
+            color: isRunning ? 'var(--success)' : 'var(--text-tertiary)',
+          }}
+        >
           {statusLabel}
         </span>
-        <div className="flex-1" />
         <button
           onClick={handleJump}
-          className="text-xs font-medium px-3 py-1 rounded-md transition-colors"
-          style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}
+          className="rounded-lg transition-colors"
+          style={{
+            padding: '5px 14px',
+            fontSize: 12,
+            fontWeight: 600,
+            background: 'var(--accent-dim)',
+            color: 'var(--accent)',
+          }}
         >
           {projectName}
         </button>
       </div>
 
       {/* Metrics Row */}
-      <div className="flex items-center gap-5 text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
-        <div className="flex items-center gap-1.5">
-          <Hash size={13} />
+      <div className="flex items-center" style={{ gap: 20 }}>
+        <div className="flex items-center" style={{ gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+          <Hash size={14} />
           <span>{session.promptCount} prompts</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Cpu size={13} />
+        <div className="flex items-center" style={{ gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+          <Cpu size={14} />
           <span>~{formatTokens(totalTokens)} tokens</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Clock size={13} />
+        <div className="flex items-center" style={{ gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+          <Clock size={14} />
           <span>{isRunning ? formatDuration(session.startedAt) : formatRelativeTime(session.lastActive)}</span>
         </div>
         {session.pid && (
-          <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             PID {session.pid}
           </span>
         )}
 
         <div className="flex-1" />
 
+        {/* Stop Button */}
         {isRunning && (
           <button
             onClick={() => stopSession(session.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-            style={{ background: 'var(--warning-dim)', color: 'var(--warning)' }}
-            title="Stop session"
+            className="flex items-center rounded-lg transition-all"
+            style={{
+              gap: 8,
+              padding: '8px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              background: 'var(--error-dim)',
+              color: 'var(--error)',
+              border: '1px solid rgba(243, 139, 168, 0.25)',
+            }}
           >
-            <Square size={12} />
+            <Square size={13} />
             Stop
           </button>
         )}

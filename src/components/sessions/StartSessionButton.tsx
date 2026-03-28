@@ -33,28 +33,36 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
     return (
       <button
         onClick={() => setShowInput(true)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+        className="flex items-center rounded-xl transition-all hover:scale-[1.02]"
         style={{
+          gap: 10,
+          padding: '12px 24px',
+          fontSize: 14,
+          fontWeight: 700,
           background: 'var(--accent)',
           color: 'var(--bg-primary)',
+          boxShadow: '0 2px 8px rgba(137,180,250,0.25)',
         }}
       >
-        <Play size={14} />
+        <Play size={16} />
         Start Claude Code
       </button>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center" style={{ gap: 10 }}>
       <input
         type="text"
         value={sessionName}
         onChange={(e) => setSessionName(e.target.value)}
         placeholder={`${projectName}-session`}
-        className="px-3 py-2 rounded-lg text-sm outline-none w-56"
+        className="rounded-xl outline-none"
         style={{
-          background: 'var(--bg-surface)',
+          width: 260,
+          padding: '12px 18px',
+          fontSize: 14,
+          background: 'var(--bg-primary)',
           border: '1px solid var(--border)',
           color: 'var(--text-primary)',
         }}
@@ -67,18 +75,30 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
       <button
         onClick={handleSpawn}
         disabled={spawning}
-        className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-        style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}
+        className="rounded-xl disabled:opacity-50"
+        style={{
+          padding: '12px 24px',
+          fontSize: 14,
+          fontWeight: 700,
+          background: 'var(--accent)',
+          color: 'var(--bg-primary)',
+        }}
       >
-        {spawning ? '...' : 'Start'}
+        {spawning ? 'Starting...' : 'Start'}
       </button>
       <button
         onClick={() => setShowInput(false)}
-        className="p-2 rounded-lg hover:bg-[var(--bg-hover)]"
+        className="flex items-center justify-center rounded-xl"
+        style={{
+          width: 42,
+          height: 42,
+          background: 'var(--bg-hover)',
+          color: 'var(--text-tertiary)',
+        }}
       >
-        <X size={16} style={{ color: 'var(--text-tertiary)' }} />
+        <X size={18} />
       </button>
-      {error && <span className="text-xs" style={{ color: 'var(--error)' }}>{error}</span>}
+      {error && <span style={{ fontSize: 13, color: 'var(--error)' }}>{error}</span>}
     </div>
   );
 }

@@ -23,19 +23,34 @@ export function ProjectSessions({ projectId, projectName }: ProjectSessionsProps
   const recent = projectSessions.filter(s => s.status === 'completed' || s.status === 'error').slice(0, 5);
 
   return (
-    <div>
+    <div
+      className="rounded-2xl"
+      style={{
+        padding: '24px 28px',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-            <Zap size={18} style={{ color: 'var(--accent)' }} />
+      <div className="flex items-center justify-between" style={{ marginBottom: active.length > 0 || recent.length > 0 ? 20 : 0 }}>
+        <div className="flex items-center" style={{ gap: 14 }}>
+          <div
+            className="flex items-center justify-center rounded-xl"
+            style={{
+              width: 44,
+              height: 44,
+              background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
+              border: '1px solid rgba(137,180,250,0.15)',
+            }}
+          >
+            <Zap size={22} style={{ color: 'var(--accent)' }} />
           </div>
           <div>
-            <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
               Claude Code Sessions
             </h3>
             {active.length > 0 && (
-              <span className="text-xs font-medium" style={{ color: 'var(--success)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>
                 {active.length} active
               </span>
             )}
@@ -46,7 +61,7 @@ export function ProjectSessions({ projectId, projectName }: ProjectSessionsProps
 
       {/* Active Sessions */}
       {active.length > 0 && (
-        <div className="flex flex-col gap-3 mb-5">
+        <div className="flex flex-col" style={{ gap: 12, marginBottom: recent.length > 0 ? 24 : 0 }}>
           {active.map(session => (
             <SessionCard key={session.id} session={session} projectName={projectName} />
           ))}
@@ -56,13 +71,13 @@ export function ProjectSessions({ projectId, projectName }: ProjectSessionsProps
       {/* Recent Sessions */}
       {recent.length > 0 && (
         <div>
-          <h4
-            className="text-xs uppercase tracking-wider font-semibold mb-3"
-            style={{ color: 'var(--text-tertiary)' }}
-          >
+          <h4 style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+            textTransform: 'uppercase', marginBottom: 12, color: 'var(--text-tertiary)',
+          }}>
             Recent
           </h4>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col" style={{ gap: 8 }}>
             {recent.map(session => (
               <SessionCard key={session.id} session={session} projectName={projectName} />
             ))}
@@ -72,16 +87,13 @@ export function ProjectSessions({ projectId, projectName }: ProjectSessionsProps
 
       {/* Empty State */}
       {projectSessions.length === 0 && (
-        <div
-          className="text-center py-12 rounded-xl"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-        >
-          <Zap size={32} className="mx-auto mb-3" style={{ color: 'var(--text-tertiary)' }} />
-          <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+        <div className="text-center" style={{ padding: '32px 0' }}>
+          <Zap size={36} className="mx-auto" style={{ marginBottom: 12, color: 'var(--text-tertiary)' }} />
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)' }}>
             No sessions for this project yet
           </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-            Start a Claude Code session to begin
+          <p style={{ fontSize: 13, marginTop: 4, color: 'var(--text-tertiary)' }}>
+            Click "Start Claude Code" to begin
           </p>
         </div>
       )}
