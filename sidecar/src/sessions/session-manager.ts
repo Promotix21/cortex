@@ -15,6 +15,7 @@ export interface SessionInfo {
   promptCount: number;
   tokenUsageInput: number;
   tokenUsageOutput: number;
+  terminalId: string | null;
 }
 
 interface ManagedSession {
@@ -30,6 +31,7 @@ interface ManagedSession {
   tokenEstimateOutput: number;
   startedAt: string;
   lastActive: string;
+  terminalId: string | null;
 }
 
 // Rough token estimation: ~4 chars per token
@@ -79,6 +81,7 @@ export class SessionManager extends EventEmitter {
       tokenEstimateOutput: 0,
       startedAt: now,
       lastActive: now,
+      terminalId: null,
     };
 
     // Collect output
@@ -237,6 +240,7 @@ export class SessionManager extends EventEmitter {
         promptCount: row.prompt_count || 0,
         tokenUsageInput: row.token_usage_input || 0,
         tokenUsageOutput: row.token_usage_output || 0,
+        terminalId: row.terminal_id || null,
       };
     }
 
@@ -251,7 +255,16 @@ export class SessionManager extends EventEmitter {
       promptCount: session.promptCount,
       tokenUsageInput: session.tokenEstimateInput,
       tokenUsageOutput: session.tokenEstimateOutput,
+      terminalId: session.terminalId,
     };
+  }
+
+  /**
+   * Set terminal ID for a session (called after terminal is spawned)
+   */
+  setTerminalId(sessionId: string, terminalId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) session.terminalId = terminalId;
   }
 
   /**
@@ -269,6 +282,7 @@ export class SessionManager extends EventEmitter {
       promptCount: s.promptCount,
       tokenUsageInput: s.tokenEstimateInput,
       tokenUsageOutput: s.tokenEstimateOutput,
+      terminalId: s.terminalId,
     }));
   }
 
@@ -308,6 +322,7 @@ export class SessionManager extends EventEmitter {
           promptCount: live.promptCount,
           tokenUsageInput: live.tokenEstimateInput,
           tokenUsageOutput: live.tokenEstimateOutput,
+          terminalId: live.terminalId,
         };
       }
 
@@ -322,6 +337,7 @@ export class SessionManager extends EventEmitter {
         promptCount: row.prompt_count || 0,
         tokenUsageInput: row.token_usage_input || 0,
         tokenUsageOutput: row.token_usage_output || 0,
+        terminalId: row.terminal_id || null,
       };
     });
   }

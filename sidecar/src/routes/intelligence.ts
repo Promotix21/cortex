@@ -259,3 +259,98 @@ intelligenceRouter.get('/search', (req, res) => {
 
   res.json({ results: [...patterns, ...debug] });
 });
+
+// ==================== MANUAL INTELLIGENCE CAPTURE ====================
+
+// POST /api/intelligence/capture — manually save intelligence from a session
+// Use this to capture insights, decisions, server info, etc. from a conversation
+intelligenceRouter.post('/capture', (req, res) => {
+  const db = getDb();
+  const { project_id, type, content } = req.body;
+
+  if (!project_id || !type || !content) {
+    res.status(400).json({ error: 'project_id, type, and content are required' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  switch (type) {
+    case 'decision': {
+      // Append to brain decisions
+      const brain = db.prepare('SELECT decisions FROM project_brain WHERE project_id = ?').get(project_id) as any;
+      if (brain) {
+        const existing = brain.decisions || '';
+        const updated = existing + `\n\n--- Captured ${new Date().toLocaleDateString()} ---\n${content}`;
+        db.prepare('UPDATE project_brain SET decisions = ?, updated_at = ? WHERE project_id = ?')
+          .run(updated, now, project_id);
+      }
+      res.json({ success: true, saved: 'decision' });
+      break;
+    }
+
+    case 'known_issue': {
+      // Append to brain known issues
+      const brain = db.prepare('SELECT known_issues FROM project_brain WHERE project_id = ?').get(project_id) as any;
+      if (brain) {
+        const existing = brain.known_issues || '';
+        const updated = existing + `\n- ${content}`;
+        db.prepare('UPDATE project_brain SET known_issues = ?, updated_at = ? WHERE project_id = ?')
+          .run(updated, now, project_id);
+      }
+      res.json({ success: true, saved: 'known_issue' });
+      break;
+    }
+
+    case 'pattern': {
+      // Create a new verified pattern
+      const { title, code, tags } = req.body;
+      db.prepare(`
+        INSERT INTO pattern_memory (id, title, description, code, tags, source_project_id, scope, confidence, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'project', 'verified', ?, ?)
+      `).run(uuid(), title || 'Captured pattern', content, code || '', JSON.stringify(tags || []), project_id, now, now);
+      res.json({ success: true, saved: 'pattern' });
+      break;
+    }
+
+    case 'debug': {
+      // Create a new verified debug solution
+      const { problem, root_cause, error_signature, tags: debugTags } = req.body;
+      db.prepare(`
+        INSERT INTO debug_memory (id, problem, root_cause, solution, error_signature, tags, source_project_id, scope, confidence, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'project', 'verified', ?, ?)
+      `).run(uuid(), problem || content, root_cause || '', content, error_signature || '', JSON.stringify(debugTags || []), project_id, now, now);
+      res.json({ success: true, saved: 'debug' });
+      break;
+    }
+
+    case 'server': {
+      // Append server/deployment info to architecture
+      const brain = db.prepare('SELECT architecture_notes FROM project_brain WHERE project_id = ?').get(project_id) as any;
+      if (brain) {
+        const existing = brain.architecture_notes || '';
+        const updated = existing + `\n\n--- Server Info (captured ${new Date().toLocaleDateString()}) ---\n${content}`;
+        db.prepare('UPDATE project_brain SET architecture_notes = ?, updated_at = ? WHERE project_id = ?')
+          .run(updated, now, project_id);
+      }
+      res.json({ success: true, saved: 'server' });
+      break;
+    }
+
+    case 'convention': {
+      // Append to conventions
+      const brain = db.prepare('SELECT conventions FROM project_brain WHERE project_id = ?').get(project_id) as any;
+      if (brain) {
+        const existing = brain.conventions || '';
+        const updated = existing + `\n${content}`;
+        db.prepare('UPDATE project_brain SET conventions = ?, updated_at = ? WHERE project_id = ?')
+          .run(updated, now, project_id);
+      }
+      res.json({ success: true, saved: 'convention' });
+      break;
+    }
+
+    default:
+      res.status(400).json({ error: `Unknown intelligence type: ${type}. Use: decision, known_issue, pattern, debug, server, convention` });
+  }
+});

@@ -35,6 +35,23 @@ interface MCPResponse {
 const TOOLS_LIST: any[] = [
   // Document tools (global — no per-project install needed)
   ...DOCUMENT_TOOLS,
+  // Intelligence capture tool
+  {
+    name: 'save_intelligence',
+    description: 'Save a piece of intelligence to the Cortex project brain. Use this to capture decisions, known issues, server info, patterns, or debug solutions discovered during a session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID' },
+        type: { type: 'string', enum: ['decision', 'known_issue', 'pattern', 'debug', 'server', 'convention'], description: 'Type of intelligence to save' },
+        content: { type: 'string', description: 'The intelligence content to save' },
+        title: { type: 'string', description: 'Title (for patterns)' },
+        problem: { type: 'string', description: 'Problem description (for debug)' },
+        root_cause: { type: 'string', description: 'Root cause (for debug)' },
+      },
+      required: ['project_id', 'type', 'content'],
+    },
+  },
   // Intelligence tools
   {
     name: 'get_project_brain',
@@ -111,6 +128,26 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
   // Document tools (create_docx, create_pdf, create_spreadsheet, read_docx, read_pdf)
   if (['create_docx', 'create_pdf', 'create_spreadsheet', 'read_docx', 'read_pdf'].includes(name)) {
     return handleDocumentTool(name, args);
+  }
+
+  // Intelligence capture
+  if (name === 'save_intelligence') {
+    const db = getDb();
+    const { project_id, type, content } = args as { project_id: string; type: string; content: string };
+    const now = new Date().toISOString();
+
+    if (type === 'decision' || type === 'known_issue' || type === 'server' || type === 'convention') {
+      const fieldMap: Record<string, string> = { decision: 'decisions', known_issue: 'known_issues', server: 'architecture_notes', convention: 'conventions' };
+      const field = fieldMap[type];
+      const brain = db.prepare(`SELECT ${field} FROM project_brain WHERE project_id = ?`).get(project_id) as any;
+      if (brain) {
+        const existing = brain[field] || '';
+        const updated = existing + `\n\n--- Captured ${new Date().toLocaleDateString()} ---\n${content}`;
+        db.prepare(`UPDATE project_brain SET ${field} = ?, updated_at = ? WHERE project_id = ?`).run(updated, now, project_id);
+      }
+      return { success: true, saved: type };
+    }
+    return { error: `Use API endpoint for type: ${type}` };
   }
 
   const db = getDb();

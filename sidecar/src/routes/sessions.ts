@@ -3,7 +3,7 @@ import { getDb } from '../db/index.js';
 import { getSessionManager } from '../sessions/session-manager.js';
 import { getTerminalManager } from '../terminals/terminal-manager.js';
 import { captureSnapshot, getResumeDiff, getLatestSnapshot } from '../sessions/snapshot.js';
-import { injectContext } from '../intelligence/context-injector.js';
+import { injectContext, assembleContext } from '../intelligence/context-injector.js';
 import { generateHandoff, getHandoff } from '../intelligence/handoff-generator.js';
 import { canSpawnSession } from '../intelligence/budget-guard.js';
 import { v4 as uuid } from 'uuid';
@@ -122,8 +122,10 @@ sessionsRouter.post('/', async (req, res) => {
   }
 
   // Inject Cortex intelligence context before spawn
+  let contextInjected = false;
   try {
     const ctx = injectContext(project_id, project.path);
+    contextInjected = ctx.written;
     if (ctx.written) {
       console.log(`[sessions] Injected context for ${project.name}: ~${ctx.tokenCount} tokens`);
     }
@@ -144,11 +146,26 @@ sessionsRouter.post('/', async (req, res) => {
   const mgr = getSessionManager();
   const session = mgr.spawnSession(project_id, name, project.path, true);
 
-  // Link the terminal to the session
+  // Link the terminal to the session (DB + in-memory)
   try {
     db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL');
   } catch { /* column may already exist */ }
   db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
+  mgr.setTerminalId(session.id, terminal.id);
+
+  // AUTO-INJECT context as Claude's FIRST prompt after it boots
+  // This ensures Claude has project intelligence from the start without needing to read files
+  if (contextInjected) {
+    const { content: contextContent } = assembleContext(project_id);
+    if (contextContent) {
+      // Wait for Claude to boot (~4 seconds), then send the context as first prompt
+      setTimeout(() => {
+        const firstPrompt = `Read and internalize this project context from Cortex (our AI workspace). Use it to inform all your responses in this session. Do NOT summarize it back to me — just acknowledge briefly and wait for my actual task.\n\n${contextContent}`;
+        tmgr.write(terminal.id, firstPrompt + '\r');
+        console.log(`[sessions] Auto-injected context into session ${session.id} (~${contextContent.length} chars)`);
+      }, 5000);
+    }
+  }
 
   res.status(201).json({
     session: { ...session, terminalId: terminal.id },
