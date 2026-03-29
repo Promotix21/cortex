@@ -179,6 +179,16 @@ const SHOPIFY_PATTERNS = {
   appBlocks: /\{%\s*app_block/g,
 };
 
+/** WordPress REST API / app password patterns */
+const WP_API_PATTERNS = {
+  restRoutes: /register_rest_route\s*\(\s*['"]([^'"]+)/g,
+  appPasswords: /application_passwords|wp_authenticate_application_password|Authorization.*Basic/gi,
+  wpRemote: /wp_remote_(?:get|post|request)\s*\(\s*['"]([^'"]+)/g,
+  wpJsonUrl: /\/wp-json\/([^\s'"]+)/g,
+  cloudflareApi: /api\.cloudflare\.com/g,
+  wpCron: /wp_schedule_event|wp_cron/g,
+};
+
 // ============================================================
 // MAIN SCANNER
 // ============================================================
@@ -424,6 +434,10 @@ interface WPIntel {
   hooks: string[];
   shortcodes: string[];
   restRoutes: string[];
+  hasAppPasswords: boolean;
+  wpJsonEndpoints: string[];
+  externalApis: string[];
+  hasCron: boolean;
 }
 
 interface ShopifyIntel {
@@ -665,6 +679,10 @@ function deepScanCode(projectPath: string): CodeIntel {
   const wpHooks: Set<string> = new Set();
   const wpShortcodes: Set<string> = new Set();
   const wpRestRoutes: Set<string> = new Set();
+  let wpHasAppPasswords = false;
+  const wpJsonEndpoints: Set<string> = new Set();
+  const wpExternalApis: Set<string> = new Set();
+  let wpHasCron = false;
 
   // Shopify intel
   const shopSections: Set<string> = new Set();
@@ -775,6 +793,22 @@ function deepScanCode(projectPath: string): CodeIntel {
             while ((m = WP_PATTERNS.postTypes.exec(content))) wpPostTypes.add(m[1]);
             WP_PATTERNS.restRoutes.lastIndex = 0;
             while ((m = WP_PATTERNS.restRoutes.exec(content))) wpRestRoutes.add(m[1]);
+
+            // WP REST API / App Password detection
+            if (WP_API_PATTERNS.appPasswords.test(content)) wpHasAppPasswords = true;
+            WP_API_PATTERNS.appPasswords.lastIndex = 0;
+
+            WP_API_PATTERNS.wpJsonUrl.lastIndex = 0;
+            while ((m = WP_API_PATTERNS.wpJsonUrl.exec(content))) wpJsonEndpoints.add(m[1]);
+
+            WP_API_PATTERNS.wpRemote.lastIndex = 0;
+            while ((m = WP_API_PATTERNS.wpRemote.exec(content))) wpExternalApis.add(m[1].slice(0, 80));
+
+            if (WP_API_PATTERNS.wpCron.test(content)) wpHasCron = true;
+            WP_API_PATTERNS.wpCron.lastIndex = 0;
+
+            if (WP_API_PATTERNS.cloudflareApi.test(content)) wpExternalApis.add('Cloudflare API');
+            WP_API_PATTERNS.cloudflareApi.lastIndex = 0;
           }
 
           // Shopify-specific scanning
@@ -803,7 +837,7 @@ function deepScanCode(projectPath: string): CodeIntel {
   intel.features = [...featuresSet];
   intel.envVars = [...envSet].slice(0, 30);
 
-  if (wpThemes.size > 0 || wpPlugins.size > 0 || wpPostTypes.size > 0) {
+  if (wpThemes.size > 0 || wpPlugins.size > 0 || wpPostTypes.size > 0 || wpHasAppPasswords || wpJsonEndpoints.size > 0) {
     intel.wpIntel = {
       themes: [...wpThemes],
       plugins: [...wpPlugins],
@@ -811,6 +845,10 @@ function deepScanCode(projectPath: string): CodeIntel {
       hooks: [...wpHooks].slice(0, 30),
       shortcodes: [...wpShortcodes],
       restRoutes: [...wpRestRoutes],
+      hasAppPasswords: wpHasAppPasswords,
+      wpJsonEndpoints: [...wpJsonEndpoints].slice(0, 20),
+      externalApis: [...wpExternalApis].slice(0, 10),
+      hasCron: wpHasCron,
     };
   }
 
@@ -915,6 +953,10 @@ function buildBrainFromCode(
     if (wp.customPostTypes.length) archParts.push(`Custom Post Types: ${wp.customPostTypes.join(', ')}`);
     if (wp.shortcodes.length) archParts.push(`Shortcodes: ${wp.shortcodes.join(', ')}`);
     if (wp.restRoutes.length) archParts.push(`REST Routes: ${wp.restRoutes.join(', ')}`);
+    if (wp.wpJsonEndpoints.length) archParts.push(`WP JSON Endpoints: ${wp.wpJsonEndpoints.join(', ')}`);
+    if (wp.hasAppPasswords) archParts.push(`Application Passwords: ENABLED (WP REST API auth)`);
+    if (wp.externalApis.length) archParts.push(`External APIs: ${wp.externalApis.join(', ')}`);
+    if (wp.hasCron) archParts.push(`WP-Cron: active`);
     if (wp.hooks.length) archParts.push(`Hooks (${wp.hooks.length}): ${wp.hooks.slice(0, 10).join(', ')}${wp.hooks.length > 10 ? '...' : ''}`);
   }
 
