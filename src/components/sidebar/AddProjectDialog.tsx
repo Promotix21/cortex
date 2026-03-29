@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
-import { open } from '@tauri-apps/plugin-dialog';
+import { api } from '@/lib/api';
 import { X, FolderOpen } from 'lucide-react';
+
+// Detect if running inside Tauri
+const isTauri = !!(window as any).__TAURI_INTERNALS__;
 
 interface AddProjectDialogProps {
   onClose: () => void;
@@ -10,38 +13,50 @@ interface AddProjectDialogProps {
 export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
   const { createProject, setActiveProject } = useProjectStore();
   const [name, setName] = useState('');
-  const [path, setPath] = useState('');
+  const [projectPath, setProjectPath] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleBrowse = async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Project Folder',
-      });
-      if (selected && typeof selected === 'string') {
-        setPath(selected);
-        // Auto-fill name from folder name if empty
-        if (!name.trim()) {
-          const folderName = selected.split('/').filter(Boolean).pop() || '';
-          setName(folderName);
+      if (isTauri) {
+        // Tauri native file dialog
+        const { open } = await import('@tauri-apps/plugin-dialog');
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          title: 'Select Project Folder',
+        });
+        if (selected && typeof selected === 'string') {
+          setProjectPath(selected);
+          if (!name.trim()) {
+            const folderName = selected.split('/').filter(Boolean).pop() || '';
+            setName(folderName);
+          }
+        }
+      } else {
+        // Browser mode — ask sidecar to open native OS file dialog
+        const result = await api.browseFolder();
+        if (result.path) {
+          setProjectPath(result.path);
+          if (!name.trim() && result.name) {
+            setName(result.name);
+          }
         }
       }
     } catch {
-      // User cancelled
+      // User cancelled or sidecar unavailable
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !path.trim()) return;
+    if (!name.trim() || !projectPath.trim()) return;
 
     setSubmitting(true);
     setError('');
     try {
-      const project = await createProject({ name: name.trim(), path: path.trim() });
+      const project = await createProject({ name: name.trim(), path: projectPath.trim() });
       setActiveProject(project.id);
       onClose();
     } catch (err: any) {
@@ -79,9 +94,9 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
             <div className="flex" style={{ gap: 12 }}>
               <input
                 type="text"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="Select a folder..."
+                value={projectPath}
+                onChange={(e) => setProjectPath(e.target.value)}
+                placeholder={isTauri ? 'Select a folder...' : '/home/user/projects/my-project'}
                 className="flex-1 rounded-xl outline-none"
                 style={{
                   padding: '12px 16px',
@@ -90,7 +105,7 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                   border: '1px solid var(--border)',
                   color: 'var(--text-primary)',
                 }}
-                readOnly
+                readOnly={false}
               />
               <button
                 type="button"
@@ -154,7 +169,7 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
             </button>
             <button
               type="submit"
-              disabled={submitting || !name.trim() || !path.trim()}
+              disabled={submitting || !name.trim() || !projectPath.trim()}
               className="rounded-xl font-medium disabled:opacity-50"
               style={{
                 padding: '10px 20px',

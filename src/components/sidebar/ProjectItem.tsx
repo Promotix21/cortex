@@ -91,6 +91,22 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
               <GitBranch size={13} style={{ color: 'var(--text-tertiary)' }} />
             </>
           )}
+          {project.completion_estimate != null && (
+            <>
+              <span style={{ color: 'var(--border-active)', fontSize: 10 }}>·</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: project.completion_estimate >= 80 ? 'var(--green)' :
+                         project.completion_estimate >= 50 ? 'var(--accent)' : 'var(--peach)',
+                }}
+                title={project.completion_indicators ? JSON.parse(project.completion_indicators).join('\n') : ''}
+              >
+                ~{project.completion_estimate}%
+              </span>
+            </>
+          )}
           <span style={{ color: 'var(--border-active)', fontSize: 10 }}>·</span>
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {formatRelativeTime(project.last_opened)}

@@ -15,6 +15,12 @@ export interface Project {
   status: ProjectStatus;
   last_opened: string;
   dev_server_port: number | null;
+  completion_estimate: number | null;
+  completion_indicators: string | null;
+  cli_tools: string | null;
+  ssh_configured: boolean;
+  ssh_hosts: string | null;
+  deploy_method: string | null;
   created_at: string;
   updated_at: string;
 }

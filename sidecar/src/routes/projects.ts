@@ -3,6 +3,7 @@ import { getDb } from '../db/index.js';
 import { v4 as uuid } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { execFile } from 'child_process';
 import { scanProject } from '../intelligence/project-scanner.js';
 import { indexProject, getProjectStructureSummary } from '../intelligence/file-indexer.js';
 
@@ -60,6 +61,44 @@ projectsRouter.get('/', (req, res) => {
   res.json({ projects });
 });
 
+// POST /api/projects/browse — open native folder picker (for browser mode)
+// MUST be before /:id to avoid Express 5 matching "browse" as an :id
+projectsRouter.post('/browse', (_req, res) => {
+  // Try zenity (GTK/GNOME), then kdialog (KDE), then xdg fallback
+  const commands: [string, string[]][] = [
+    ['zenity', ['--file-selection', '--directory', '--title=Select Project Folder']],
+    ['kdialog', ['--getexistingdirectory', process.env.HOME || '/']],
+  ];
+
+  function tryNext(index: number) {
+    if (index >= commands.length) {
+      res.status(501).json({ error: 'No file picker available. Install zenity or kdialog.' });
+      return;
+    }
+    const [cmd, args] = commands[index];
+    execFile(cmd, args, { timeout: 60000 }, (err, stdout) => {
+      if (err) {
+        // Command not found or user cancelled
+        if ((err as any).code === 'ENOENT') {
+          tryNext(index + 1);
+        } else {
+          // User cancelled (exit code 1) or timeout
+          res.json({ path: null, cancelled: true });
+        }
+        return;
+      }
+      const selected = stdout.trim();
+      if (selected && fs.existsSync(selected)) {
+        res.json({ path: selected, name: path.basename(selected) });
+      } else {
+        res.json({ path: null, cancelled: true });
+      }
+    });
+  }
+
+  tryNext(0);
+});
+
 // GET /api/projects/:id
 projectsRouter.get('/:id', (req, res) => {
   const db = getDb();
@@ -72,7 +111,7 @@ projectsRouter.get('/:id', (req, res) => {
 });
 
 // POST /api/projects
-projectsRouter.post('/', (req, res) => {
+projectsRouter.post('/', async (req, res) => {
   const { name, path: projectPath, status = 'active', dev_server_port = null } = req.body;
 
   if (!name || !projectPath) {
@@ -108,12 +147,36 @@ projectsRouter.post('/', (req, res) => {
       INSERT INTO workspace (id, project_id) VALUES (?, ?)
     `).run(uuid(), id);
 
+    // Check if this is an EXISTING project (has source files) vs empty/new
+    let fileCount = 0;
+    try {
+      const items = fs.readdirSync(projectPath);
+      fileCount = items.filter(i => !i.startsWith('.')).length;
+    } catch { /* */ }
+
+    let scanResult = null;
+
+    if (fileCount > 0) {
+      // EXISTING PROJECT — deep scan NOW (before responding)
+      console.log(`[projects] Existing project detected (${fileCount} items). Running deep scan...`);
+      try {
+        scanResult = await scanProject(id, projectPath);
+        console.log(`[projects] Scan complete: ${scanResult.summary}`);
+
+        // Update project type if scanner found a better one
+        if (scanResult.detectedStacks.length > 0) {
+          const betterType = scanResult.detectedStacks[0].toLowerCase().replace(/\s+/g, '-');
+          db.prepare('UPDATE projects SET type = ? WHERE id = ?').run(betterType, id);
+        }
+      } catch (err: any) {
+        console.error(`[projects] Scan failed for ${name}:`, err.message);
+      }
+    } else {
+      console.log(`[projects] New/empty project — skipping scan`);
+    }
+
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
-
-    // Auto-scan project: index files + populate brain (non-blocking)
-    scanProject(id, projectPath).catch(() => {});
-
-    res.status(201).json({ project });
+    res.status(201).json({ project, scan: scanResult });
   } catch (err: any) {
     if (err.message?.includes('UNIQUE constraint failed')) {
       res.status(409).json({ error: 'A project with this path already exists' });
@@ -174,6 +237,14 @@ projectsRouter.post('/:id/scan', async (req, res) => {
 
   try {
     const result = await scanProject(project.id, project.path);
+
+    // Update project type if scanner found a better one
+    if (result.detectedStacks.length > 0) {
+      const betterType = result.detectedStacks[0].toLowerCase().replace(/\s+/g, '-');
+      db.prepare('UPDATE projects SET type = ?, updated_at = ? WHERE id = ?')
+        .run(betterType, new Date().toISOString(), project.id);
+    }
+
     res.json({ scan: result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

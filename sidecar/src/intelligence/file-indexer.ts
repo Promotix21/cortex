@@ -116,27 +116,62 @@ function shouldInclude(filename: string): boolean {
 }
 
 /**
- * Parse .gitignore patterns (simplified)
+ * Parse .gitignore patterns from a file (simplified)
  */
-function loadGitignore(projectPath: string): ((p: string) => boolean) {
-  const gitignorePath = path.join(projectPath, '.gitignore');
-  if (!fs.existsSync(gitignorePath)) return () => false;
-
+function parseGitignorePatterns(gitignorePath: string): string[] {
+  if (!fs.existsSync(gitignorePath)) return [];
   try {
-    const patterns = fs.readFileSync(gitignorePath, 'utf-8')
+    return fs.readFileSync(gitignorePath, 'utf-8')
       .split('\n')
       .map(l => l.trim())
       .filter(l => l && !l.startsWith('#'))
       .map(l => l.replace(/\/$/, ''));
-
-    return (relativePath: string) => {
-      for (const pattern of patterns) {
-        if (relativePath.includes(pattern)) return true;
-      }
-      return false;
-    };
   } catch {
-    return () => false;
+    return [];
+  }
+}
+
+/**
+ * Build a gitignore checker that respects nested .gitignore files.
+ * Collects patterns from root and each subdirectory's .gitignore.
+ */
+class GitignoreChecker {
+  private rootPatterns: string[];
+  private nestedCache = new Map<string, string[]>();
+  private projectPath: string;
+
+  constructor(projectPath: string) {
+    this.projectPath = projectPath;
+    this.rootPatterns = parseGitignorePatterns(path.join(projectPath, '.gitignore'));
+  }
+
+  /** Load and cache nested .gitignore patterns for a directory */
+  loadNested(dir: string): void {
+    const gitignorePath = path.join(dir, '.gitignore');
+    if (fs.existsSync(gitignorePath)) {
+      const relDir = path.relative(this.projectPath, dir);
+      if (!this.nestedCache.has(relDir)) {
+        this.nestedCache.set(relDir, parseGitignorePatterns(gitignorePath));
+      }
+    }
+  }
+
+  /** Check if a relative path is ignored by any applicable .gitignore */
+  isIgnored(relativePath: string): boolean {
+    // Check root patterns
+    for (const pattern of this.rootPatterns) {
+      if (relativePath.includes(pattern)) return true;
+    }
+    // Check nested patterns — apply patterns from parent directories
+    for (const [dir, patterns] of this.nestedCache) {
+      if (relativePath.startsWith(dir + '/') || dir === '') {
+        const relToDir = dir ? relativePath.slice(dir.length + 1) : relativePath;
+        for (const pattern of patterns) {
+          if (relToDir.includes(pattern)) return true;
+        }
+      }
+    }
+    return false;
   }
 }
 
@@ -145,10 +180,13 @@ function loadGitignore(projectPath: string): ((p: string) => boolean) {
  */
 export function walkProject(projectPath: string, maxFiles = 2000): FileEntry[] {
   const entries: FileEntry[] = [];
-  const isGitignored = loadGitignore(projectPath);
+  const ignoreChecker = new GitignoreChecker(projectPath);
 
   function walk(dir: string, depth: number) {
     if (depth > 15 || entries.length >= maxFiles) return;
+
+    // Check for nested .gitignore at this directory level
+    ignoreChecker.loadNested(dir);
 
     let items: fs.Dirent[];
     try {
@@ -163,13 +201,13 @@ export function walkProject(projectPath: string, maxFiles = 2000): FileEntry[] {
       if (item.isDirectory()) {
         if (SKIP_DIRS.has(item.name)) continue;
         const rel = path.relative(projectPath, path.join(dir, item.name));
-        if (isGitignored(rel)) continue;
+        if (ignoreChecker.isIgnored(rel)) continue;
         walk(path.join(dir, item.name), depth + 1);
       } else if (item.isFile()) {
         if (!shouldInclude(item.name)) continue;
         const fullPath = path.join(dir, item.name);
         const rel = path.relative(projectPath, fullPath);
-        if (isGitignored(rel)) continue;
+        if (ignoreChecker.isIgnored(rel)) continue;
 
         try {
           const stat = fs.statSync(fullPath);

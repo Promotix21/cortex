@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS projects (
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','planning','maintenance')),
   last_opened TEXT NOT NULL DEFAULT (datetime('now')),
   dev_server_port INTEGER,
+  completion_estimate INTEGER DEFAULT NULL,
+  completion_indicators TEXT DEFAULT NULL,
+  cli_tools TEXT DEFAULT NULL,
+  ssh_configured INTEGER DEFAULT 0,
+  ssh_hosts TEXT DEFAULT NULL,
+  deploy_method TEXT DEFAULT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -104,17 +104,16 @@ export function ActivityBar() {
         className="flex items-center justify-center"
         style={{ height: 62, borderBottom: '1px solid var(--border)' }}
       >
-        <div
-          className="flex items-center justify-center rounded-xl"
+        <img
+          src="/logo.png"
+          alt="Cortex"
           style={{
-            width: 40,
-            height: 40,
-            background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
-            border: '1px solid rgba(137,180,250,0.15)',
+            width: 36,
+            height: 36,
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 0 6px rgba(0, 180, 100, 0.3))',
           }}
-        >
-          <Brain size={22} style={{ color: 'var(--accent)' }} />
-        </div>
+        />
       </div>
 
       {/* Top activities */}

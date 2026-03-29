@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useProjectStore } from '@/stores/project-store';
-import { open } from '@tauri-apps/plugin-dialog';
-import { Brain, CheckCircle, Circle, Copy, Check, FolderOpen, Loader2, ArrowRight } from 'lucide-react';
+import { api } from '@/lib/api';
+import { CheckCircle, Circle, Copy, Check, FolderOpen, Loader2, ArrowRight } from 'lucide-react';
+
+const isTauri = !!(window as any).__TAURI_INTERNALS__;
 
 export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const { claudeStatus, checkClaudeStatus } = useSettingsStore();
@@ -27,10 +29,20 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
   const handleBrowse = async () => {
     try {
-      const selected = await open({ directory: true, multiple: false, title: 'Select Project Folder' });
-      if (selected && typeof selected === 'string') {
-        setProjectPath(selected);
-        setProjectName(selected.split('/').filter(Boolean).pop() || '');
+      if (isTauri) {
+        const { open } = await import('@tauri-apps/plugin-dialog');
+        const selected = await open({ directory: true, multiple: false, title: 'Select Project Folder' });
+        if (selected && typeof selected === 'string') {
+          setProjectPath(selected);
+          setProjectName(selected.split('/').filter(Boolean).pop() || '');
+        }
+      } else {
+        // Browser mode — ask sidecar to open native OS file dialog
+        const result = await api.browseFolder();
+        if (result.path) {
+          setProjectPath(result.path);
+          if (result.name) setProjectName(result.name);
+        }
       }
     } catch { /* cancelled */ }
   };
@@ -71,14 +83,12 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
           className="px-10 pt-10 pb-8 text-center"
           style={{ background: 'linear-gradient(180deg, rgba(137,180,250,0.08) 0%, transparent 100%)' }}
         >
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6"
-            style={{
-              background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
-              border: '1px solid rgba(137,180,250,0.2)',
-            }}
-          >
-            <Brain size={40} style={{ color: 'var(--accent)' }} />
+          <div className="flex items-center justify-center mx-auto mb-6">
+            <img
+              src="/logo.png"
+              alt="Cortex"
+              style={{ width: 80, height: 80, objectFit: 'contain' }}
+            />
           </div>
           <h1 className="text-3xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
             Welcome to Cortex

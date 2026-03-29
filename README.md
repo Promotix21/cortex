@@ -55,7 +55,7 @@ All stored locally using SQLite. No cloud. No telemetry.
 
 ## Built With Claude Code
 
-This project was developed primarily using **Claude Code** with a **Claude Max** subscription. 10,000+ lines across 85+ files, 35 database tables, 70+ API endpoints, an MCP server, a Chrome extension, and 9 phases of intelligence features. Cortex is both a tool for Claude Code users and a testament to what Claude Code can ship.
+This project was developed primarily using **Claude Code** with a **Claude Max** subscription. 12,000+ lines across 90+ files, 35 database tables, 70+ API endpoints, an MCP server with document generation tools, a Chrome extension, and 9 phases of intelligence features. Cortex is both a tool for Claude Code users and a testament to what Claude Code can ship.
 
 ---
 
@@ -127,11 +127,18 @@ When you add a project, Cortex **automatically scans it** — reads your package
 
 | Brain Field | Auto-Populated From |
 |---|---|
-| Summary | package.json name, description, version |
-| Architecture | Framework detection, language, file structure breakdown |
-| Conventions | tsconfig strict mode, linter configs, package manager |
-| Dependencies | Key deps with versions (not `@types/*` noise) |
-| File Index | 80+ files classified: controllers, routes, models, components, tests |
+| Summary | package.json, CLAUDE.md, README — with completion estimate |
+| Architecture | Framework detection, sub-projects, ports, routes, databases, **servers, SSH, deploy info** |
+| Conventions | tsconfig, eslint, prettier — scanned in root **and sub-projects** |
+| Dependencies | Key deps from root + all sub-project package.json/composer.json/requirements.txt |
+| Decisions | CLAUDE.md content, deploy docs, NEXT_SESSION_PROMPT.md, env variables |
+| File Index | 2000+ files classified: controllers, routes, models, components, tests |
+
+**Deep docs scanning**: Reads CLAUDE.md, README, deploy docs, Claude memory files, and NEXT_SESSION_PROMPT.md to extract server IPs, SSH details, deployment URLs, setup commands, and API key names.
+
+**Toolchain detection**: Auto-detects CLI tools (Shopify CLI, WP-CLI, Docker), SSH connections, and deploy methods (SSH, Vercel, GitHub Actions).
+
+**Completion estimation**: Scores 0-100% based on TODO/FIXME count, empty handlers, test coverage, README/LICENSE presence, CI config, and feature count.
 
 Brain fields are auto-filled on project add, but **never overwritten** — your manual notes always take priority.
 
@@ -224,12 +231,15 @@ Toggle in Settings that injects award-worthy design philosophy into every AI int
 - Desktop-quality UI standards, structured build phases, pre-commit hard gates
 - Injected into chat system prompt and `.cortex-context.md`
 
-### MCP Server (Phase 5)
+### MCP Server + Document Builder (Phase 5)
 
-Cortex exposes intelligence to Claude Code via Model Context Protocol:
+Cortex exposes intelligence and document generation to Claude Code via Model Context Protocol:
 
-- **Server** (port 4710): 6 JSON-RPC tools — `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`
+- **Intelligence tools** (port 4710): `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`
+- **Document tools** (global, no per-project install): `create_docx`, `create_pdf`, `create_spreadsheet`, `read_docx`, `read_pdf`
 - **Client**: Connects to external MCP servers (console-bridge, etc.)
+
+The Document Builder MCP means Claude can generate Word docs, PDFs, and spreadsheets from **any project** without installing `docx`, `pdfkit`, or `exceljs` locally.
 
 ### Chrome Extension (Phase 6)
 

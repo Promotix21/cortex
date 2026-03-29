@@ -35,6 +35,10 @@ export const api = {
     request<{ success: boolean }>(`/api/projects/${id}`, {
       method: 'DELETE',
     }),
+  scanProject: (id: string) =>
+    request<{ scan: any }>(`/api/projects/${id}/scan`, { method: 'POST' }),
+  browseFolder: () =>
+    request<{ path: string | null; name?: string; cancelled?: boolean }>('/api/projects/browse', { method: 'POST' }),
 
   // Sessions
   getSessions: (projectId?: string) =>
@@ -52,6 +56,11 @@ export const api = {
     request<{ success: boolean }>(`/api/sessions/${sessionId}/input`, {
       method: 'POST',
       body: JSON.stringify({ input }),
+    }),
+  resizeSession: (id: string, cols: number, rows: number) =>
+    request<{ success: boolean }>(`/api/sessions/${id}/resize`, {
+      method: 'POST',
+      body: JSON.stringify({ cols, rows }),
     }),
   stopSession: (id: string) =>
     request<{ success: boolean }>(`/api/sessions/${id}/stop`, { method: 'POST' }),

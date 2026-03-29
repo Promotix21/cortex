@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { getSessionManager } from '../sessions/session-manager.js';
+import { getTerminalManager } from '../terminals/terminal-manager.js';
 import { captureSnapshot, getResumeDiff, getLatestSnapshot } from '../sessions/snapshot.js';
 import { injectContext } from '../intelligence/context-injector.js';
 import { generateHandoff, getHandoff } from '../intelligence/handoff-generator.js';
@@ -134,21 +135,37 @@ sessionsRouter.post('/', async (req, res) => {
   db.prepare('UPDATE projects SET last_opened = ? WHERE id = ?')
     .run(new Date().toISOString(), project_id);
 
+  // Spawn a terminal with `claude` command using the terminal manager
+  // (uses ring-buffer polling which works reliably with XTerminal frontend)
+  const tmgr = getTerminalManager();
+  const terminal = tmgr.spawn(project_id, name, project.path, 'ai_session', 120, 40, 'claude');
+
+  // Also create session record for tracking metrics (skip spawning claude — terminal handles it)
   const mgr = getSessionManager();
-  const session = mgr.spawnSession(project_id, name, project.path);
-  res.status(201).json({ session });
+  const session = mgr.spawnSession(project_id, name, project.path, true);
+
+  // Link the terminal to the session
+  try {
+    db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL');
+  } catch { /* column may already exist */ }
+  db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
+
+  res.status(201).json({
+    session: { ...session, terminalId: terminal.id },
+    terminalId: terminal.id,
+  });
 });
 
 // POST /api/sessions/:id/input — send input to session
 sessionsRouter.post('/:id/input', (req, res) => {
   const { input } = req.body;
-  if (!input) {
+  if (input === undefined || input === null) {
     res.status(400).json({ error: 'input is required' });
     return;
   }
 
   const mgr = getSessionManager();
-  const success = mgr.sendInput(req.params.id, input);
+  const success = mgr.sendInput(req.params.id, String(input));
   if (!success) {
     res.status(404).json({ error: 'Session not found or not running' });
     return;

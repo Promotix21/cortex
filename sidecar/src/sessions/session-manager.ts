@@ -49,7 +49,7 @@ export class SessionManager extends EventEmitter {
   /**
    * Spawn a new Claude Code session for a project
    */
-  spawnSession(projectId: string, sessionName: string, projectPath: string): SessionInfo {
+  spawnSession(projectId: string, sessionName: string, projectPath: string, skipClaude = false): SessionInfo {
     const id = uuid();
     const now = new Date().toISOString();
     const shell = process.env.SHELL || '/bin/bash';
@@ -118,14 +118,17 @@ export class SessionManager extends EventEmitter {
     `).run(metricsId, id);
 
     // Send the claude command to start Claude Code
-    ptyProcess.write('claude\r');
+    // (skip if terminal manager handles the PTY separately)
+    if (!skipClaude) {
+      ptyProcess.write('claude\r');
+    }
 
     this.emit('session:spawned', { sessionId: id, projectId, name: sessionName });
     return this.getSessionInfo(id)!;
   }
 
   /**
-   * Send input to a session (user prompt)
+   * Send input to a session (raw terminal data from xterm.js)
    */
   sendInput(sessionId: string, input: string): boolean {
     const session = this.sessions.get(sessionId);
@@ -133,18 +136,22 @@ export class SessionManager extends EventEmitter {
 
     session.pty.write(input);
     session.lastActive = new Date().toISOString();
-    session.promptCount++;
-    session.tokenEstimateInput += estimateTokens(input);
 
-    // Log to session_history
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO session_history (id, session_id, prompt_text, timestamp)
-      VALUES (?, ?, ?, ?)
-    `).run(uuid(), sessionId, input, session.lastActive);
+    // Only count as a "prompt" when Enter is pressed (contains \r or \n)
+    if (input.includes('\r') || input.includes('\n')) {
+      session.promptCount++;
+      session.tokenEstimateInput += estimateTokens(input);
 
-    // Update metrics
-    this.updateMetrics(session);
+      // Log to session_history
+      const db = getDb();
+      db.prepare(`
+        INSERT INTO session_history (id, session_id, prompt_text, timestamp)
+        VALUES (?, ?, ?, ?)
+      `).run(uuid(), sessionId, input, session.lastActive);
+
+      // Update metrics
+      this.updateMetrics(session);
+    }
 
     this.emit('session:input', { sessionId, input });
     return true;

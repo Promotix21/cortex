@@ -1,101 +1,77 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useBudgetStore } from '@/stores/budget-store';
-import { Shield, AlertTriangle, XCircle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 
 export function BudgetGuard() {
-  const { limits, alerts, fetchStatus, acknowledgeAlert } = useBudgetStore();
+  const { limits, alerts, fetchStatus, acknowledgeAll } = useBudgetStore();
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 60000); // Check every minute
+    const interval = setInterval(fetchStatus, 120000); // Check every 2 min (not 1)
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
   const activeLimits = limits.filter(l => l.status !== 'ok');
-  if (activeLimits.length === 0 && alerts.length === 0) return null;
+
+  // Nothing to show
+  if ((activeLimits.length === 0 && alerts.length === 0) || dismissed) return null;
+
+  // Compact: show only the worst limit in one line, plus dismiss-all
+  const worst = activeLimits.sort((a, b) => b.pct - a.pct)[0];
+  if (!worst && alerts.length === 0) return null;
 
   return (
-    <div style={{ padding: '0 32px', marginBottom: 16 }}>
-      {/* Active Limit Warnings */}
-      {activeLimits.map(limit => (
-        <div
-          key={limit.id}
-          className="flex items-center rounded-xl"
-          style={{
-            gap: 12,
-            padding: '12px 20px',
-            marginBottom: 8,
-            background: limit.status === 'exceeded' ? 'var(--error-dim)' : 'var(--warning-dim)',
-            border: `1px solid ${limit.status === 'exceeded' ? 'rgba(243,139,168,0.3)' : 'rgba(249,226,175,0.3)'}`,
-          }}
-        >
-          {limit.status === 'exceeded' ? (
-            <XCircle size={16} style={{ color: 'var(--error)', flexShrink: 0 }} />
-          ) : (
-            <AlertTriangle size={16} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-          )}
-          <div className="flex-1">
-            <span
-              className="font-semibold"
-              style={{
-                fontSize: 13,
-                color: limit.status === 'exceeded' ? 'var(--error)' : 'var(--warning)',
-              }}
-            >
-              {limit.name}
-            </span>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 8 }}>
-              {Math.round(limit.currentValue)} / {limit.limitValue} ({Math.round(limit.pct * 100)}%)
-            </span>
-          </div>
-          {/* Progress bar */}
-          <div
-            className="rounded-full overflow-hidden"
-            style={{ width: 120, height: 6, background: 'rgba(255,255,255,0.1)' }}
-          >
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${Math.min(limit.pct * 100, 100)}%`,
-                background: limit.status === 'exceeded' ? 'var(--error)' : 'var(--warning)',
-              }}
-            />
-          </div>
-        </div>
-      ))}
+    <div
+      className="flex items-center shrink-0"
+      style={{
+        gap: 12,
+        padding: '6px 20px',
+        background: worst?.status === 'exceeded' ? 'var(--error-dim)' : 'var(--warning-dim)',
+        borderBottom: `1px solid ${worst?.status === 'exceeded' ? 'rgba(243,139,168,0.2)' : 'rgba(249,226,175,0.2)'}`,
+        fontSize: 13,
+      }}
+    >
+      <AlertTriangle size={14} style={{ color: worst?.status === 'exceeded' ? 'var(--error)' : 'var(--warning)', flexShrink: 0 }} />
 
-      {/* Unacknowledged Alerts */}
-      {alerts.slice(0, 3).map(alert => (
+      {worst && (
+        <span style={{ color: worst.status === 'exceeded' ? 'var(--error)' : 'var(--warning)', fontWeight: 600 }}>
+          {worst.name}: {Math.round(worst.currentValue)}/{worst.limitValue} ({Math.round(worst.pct * 100)}%)
+        </span>
+      )}
+
+      {!worst && alerts.length > 0 && (
+        <span style={{ color: 'var(--warning)', fontWeight: 600 }}>
+          {alerts[0].message}
+        </span>
+      )}
+
+      {/* Compact progress bar */}
+      {worst && (
         <div
-          key={alert.id}
-          className="flex items-center rounded-xl"
-          style={{
-            gap: 12,
-            padding: '10px 16px',
-            marginBottom: 8,
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-          }}
+          className="rounded-full overflow-hidden"
+          style={{ width: 100, height: 4, background: 'rgba(255,255,255,0.1)' }}
         >
-          <Shield size={14} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-          <span className="flex-1" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {alert.message}
-          </span>
-          <button
-            onClick={() => acknowledgeAlert(alert.id)}
-            className="rounded-lg transition-colors"
+          <div
+            className="h-full rounded-full"
             style={{
-              padding: '4px 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              background: 'var(--bg-hover)',
-              color: 'var(--text-tertiary)',
+              width: `${Math.min(worst.pct * 100, 100)}%`,
+              background: worst.status === 'exceeded' ? 'var(--error)' : 'var(--warning)',
             }}
-          >
-            Dismiss
-          </button>
+          />
         </div>
-      ))}
+      )}
+
+      <div className="flex-1" />
+
+      {/* Dismiss all */}
+      <button
+        onClick={() => { acknowledgeAll(); setDismissed(true); }}
+        className="rounded transition-colors"
+        style={{ padding: '2px 8px', color: 'var(--text-tertiary)', fontSize: 12 }}
+      >
+        <X size={14} />
+      </button>
     </div>
   );
 }

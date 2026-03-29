@@ -22,9 +22,12 @@ interface ProjectStore {
   deleteProject: (id: string) => Promise<void>;
 }
 
+// Persist active project across restarts
+const ACTIVE_PROJECT_KEY = 'cortex:activeProjectId';
+
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [],
-  activeProjectId: null,
+  activeProjectId: localStorage.getItem(ACTIVE_PROJECT_KEY) || null,
   loading: false,
   error: null,
   searchQuery: '',
@@ -45,13 +48,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 
-  setActiveProject: (id) => set({ activeProjectId: id }),
+  setActiveProject: (id) => {
+    if (id) localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+    else localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    set({ activeProjectId: id });
+  },
 
   fetchProjects: async () => {
     set({ loading: true, error: null });
     try {
       const data = await api.getProjects();
-      set({ projects: data.projects, loading: false });
+      const { activeProjectId } = get();
+      // Auto-select first project if saved active doesn't exist in list
+      const activeExists = data.projects.some((p: Project) => p.id === activeProjectId);
+      const newActiveId = activeExists ? activeProjectId
+        : data.projects.length > 0 ? data.projects[0].id : null;
+
+      if (newActiveId && newActiveId !== activeProjectId) {
+        localStorage.setItem(ACTIVE_PROJECT_KEY, newActiveId);
+      }
+
+      set({ projects: data.projects, loading: false, activeProjectId: newActiveId });
     } catch (err: any) {
       set({ error: err.message, loading: false });
     }

@@ -163,15 +163,15 @@ function createAlertIfNew(
   limitId: string, alertType: string, currentValue: number, limitValue: number, message: string
 ): void {
   const db = getDb();
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-  const recent = db.prepare(`
+  // Don't create if ANY unacknowledged alert exists for this limit+type
+  const existing = db.prepare(`
     SELECT id FROM budget_alerts
-    WHERE limit_id = ? AND alert_type = ? AND created_at > ? AND acknowledged = 0
+    WHERE limit_id = ? AND alert_type = ? AND acknowledged = 0
     LIMIT 1
-  `).get(limitId, alertType, oneHourAgo);
+  `).get(limitId, alertType);
 
-  if (!recent) {
+  if (!existing) {
     db.prepare(`
       INSERT INTO budget_alerts (id, limit_id, alert_type, current_value, limit_value, message)
       VALUES (?, ?, ?, ?, ?, ?)

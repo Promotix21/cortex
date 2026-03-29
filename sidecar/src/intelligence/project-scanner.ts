@@ -5,232 +5,1315 @@ import { getDb } from '../db/index.js';
 import { indexProject, getProjectStructureSummary } from './file-indexer.js';
 import simpleGit from 'simple-git';
 
+interface CompletionEstimate {
+  score: number;          // 0-100
+  todoCount: number;
+  fixmeCount: number;
+  emptyHandlers: number;
+  testRatio: number;      // test files / source files
+  hasReadme: boolean;
+  hasLicense: boolean;
+  hasCi: boolean;
+  hasTests: boolean;
+  indicators: string[];   // human-readable reasons
+}
+
+interface ToolchainInfo {
+  cliTools: string[];     // e.g. ['shopify-cli', 'wp-cli', 'docker']
+  sshConfigured: boolean;
+  sshHosts: string[];     // e.g. ['217.21.76.22', 'umang.digitaldadi.in']
+  deployMethod: string | null; // 'ssh', 'vercel', 'netlify', 'docker', 'github-actions'
+}
+
 interface ScanResult {
   filesIndexed: number;
   brainPopulated: boolean;
-  claudeMdImported: boolean;
-  deployDocsFound: string[];
-  serverInfoDetected: boolean;
+  subProjects: string[];
+  detectedStacks: string[];
+  ports: number[];
+  urls: string[];
   summary: string;
+  completion: CompletionEstimate | null;
+  toolchain: ToolchainInfo | null;
 }
 
-// Files that contain deployment/server intelligence
-const DEPLOY_DOC_PATTERNS = [
-  'DEPLOY.md', 'deploy.md', 'DEPLOYMENT.md', 'deployment.md',
-  'SERVER.md', 'server.md', 'INFRASTRUCTURE.md',
-  'ops/runbook.md', 'ops/deploy.md', 'docs/deploy.md', 'docs/deployment.md',
-  '.deploy', 'fly.toml', 'render.yaml', 'railway.json', 'vercel.json',
-  'dokku/CHECKS', 'Procfile', 'app.yaml', 'appspec.yml',
-  'docker-compose.yml', 'docker-compose.yaml', 'docker-compose.prod.yml',
-  'Dockerfile', 'Dockerfile.prod',
-  '.github/workflows/deploy.yml', '.github/workflows/deploy.yaml',
-  '.github/workflows/cd.yml', '.github/workflows/cd.yaml',
+// ============================================================
+// CONFIG FILE READERS — detect what a project IS
+// ============================================================
+
+interface ProjectSignature {
+  stack: string;
+  language: string;
+  framework: string | null;
+  subPath: string; // '' = root, or relative path for sub-projects
+}
+
+/** Config files that identify a project type */
+const PROJECT_MARKERS: [string, string, string][] = [
+  // [file, stack, framework]
+  ['package.json', 'node', ''],
+  ['composer.json', 'php', ''],
+  ['requirements.txt', 'python', ''],
+  ['pyproject.toml', 'python', ''],
+  ['Pipfile', 'python', ''],
+  ['Cargo.toml', 'rust', ''],
+  ['go.mod', 'go', ''],
+  ['Gemfile', 'ruby', ''],
+  ['pom.xml', 'java', ''],
+  ['build.gradle', 'java', ''],
+  ['pubspec.yaml', 'dart', 'flutter'],
+  ['wp-config.php', 'php', 'wordpress'],
+  ['wp-cli.yml', 'php', 'wordpress'],
+  ['wp-cli.phar', 'php', 'wordpress'],
+  ['style.css', 'php', 'wordpress-theme'], // WP theme if has "Theme Name:" header
+  ['functions.php', 'php', 'wordpress-theme'],
+  ['shopify.theme.toml', 'liquid', 'shopify'],
+  ['.shopifyignore', 'liquid', 'shopify'],
+  ['config/settings_schema.json', 'liquid', 'shopify'],
+  ['layout/theme.liquid', 'liquid', 'shopify'],
 ];
 
+/** Node framework detectors — read package.json deps */
+const NODE_FRAMEWORK_DETECTORS: [string, string][] = [
+  ['next', 'nextjs'],
+  ['nuxt', 'nuxt'],
+  ['@nestjs/core', 'nestjs'],
+  ['express', 'express'],
+  ['fastify', 'fastify'],
+  ['koa', 'koa'],
+  ['hapi', 'hapi'],
+  ['react', 'react'],
+  ['vue', 'vue'],
+  ['svelte', 'svelte'],
+  ['@angular/core', 'angular'],
+  ['gatsby', 'gatsby'],
+  ['astro', 'astro'],
+  ['remix', 'remix'],
+  ['electron', 'electron'],
+  ['@tauri-apps/api', 'tauri'],
+  ['react-native', 'react-native'],
+  ['expo', 'expo'],
+];
+
+// ============================================================
+// DEEP CODE SCANNER — read actual source files
+// ============================================================
+
+/** Patterns to extract from source code */
+const CODE_PATTERNS = {
+  // Port detection
+  ports: [
+    /(?:port|PORT)\s*[=:]\s*(\d{2,5})/g,
+    /listen\(\s*(\d{2,5})/g,
+    /localhost:(\d{2,5})/g,
+    /127\.0\.0\.1:(\d{2,5})/g,
+    /0\.0\.0\.0:(\d{2,5})/g,
+    /--port\s+(\d{2,5})/g,
+  ],
+  // URL detection
+  urls: [
+    /https?:\/\/(?!localhost|127\.0\.0\.1|example\.com|placeholder)[a-zA-Z0-9][\w\-\.]+\.[a-z]{2,}[^\s'"\)>]*/g,
+  ],
+  // API routes
+  routes: [
+    /(?:app|router|server)\.(get|post|put|delete|patch|all|use)\s*\(\s*['"`]([^'"`]+)/g,
+    /Route\s*\(\s*['"`]([^'"`]+)/g,
+    /@(?:Get|Post|Put|Delete|Patch)\s*\(\s*['"`]([^'"`]+)/g,
+    /path\s*[:=]\s*['"`]\/([^'"`]+)/g,
+  ],
+  // Database connections
+  databases: [
+    /(?:mysql|postgres|postgresql|mongodb|redis|sqlite|mariadb|mssql)/gi,
+    /DATABASE_URL/g,
+    /mongoose\.connect/g,
+    /createConnection/g,
+    /new\s+Sequelize/g,
+    /prisma/gi,
+    /typeorm/gi,
+    /better-sqlite3/gi,
+    /knex/gi,
+  ],
+  // Environment variables (feature hints)
+  envVars: [
+    /process\.env\.([A-Z_][A-Z0-9_]+)/g,
+    /os\.environ\[['"]([A-Z_]+)['"]\]/g,
+    /\$_ENV\[['"]([A-Z_]+)['"]\]/g,
+  ],
+  // Auth patterns
+  auth: [
+    /jwt|jsonwebtoken|passport|oauth|auth0|clerk|nextauth|lucia/gi,
+    /bcrypt|argon2|scrypt/gi,
+    /session|cookie.*auth|token.*verify/gi,
+  ],
+  // Payment
+  payments: [
+    /stripe|razorpay|paypal|paddle|lemonsqueezy/gi,
+  ],
+  // Email
+  email: [
+    /nodemailer|sendgrid|mailgun|resend|postmark|ses/gi,
+  ],
+  // Storage
+  storage: [
+    /s3|cloudinary|uploadthing|supabase.*storage|firebase.*storage/gi,
+  ],
+};
+
+/** WordPress-specific patterns */
+const WP_PATTERNS = {
+  plugins: /^\s*\*\s*Plugin Name:\s*(.+)/m,
+  theme: /^\s*Theme Name:\s*(.+)/m,
+  version: /^\s*Version:\s*(.+)/m,
+  hooks: /(?:add_action|add_filter|do_action|apply_filters)\s*\(\s*['"]([^'"]+)/g,
+  shortcodes: /add_shortcode\s*\(\s*['"]([^'"]+)/g,
+  postTypes: /register_post_type\s*\(\s*['"]([^'"]+)/g,
+  taxonomies: /register_taxonomy\s*\(\s*['"]([^'"]+)/g,
+  restRoutes: /register_rest_route\s*\(\s*['"]([^'"]+)/g,
+};
+
+/** Shopify-specific patterns */
+const SHOPIFY_PATTERNS = {
+  sections: /\{%\s*section\s+['"]([^'"]+)/g,
+  snippets: /\{%\s*render\s+['"]([^'"]+)/g,
+  schemaSettings: /"type"\s*:\s*"([^"]+)"/g,
+  appBlocks: /\{%\s*app_block/g,
+};
+
+// ============================================================
+// MAIN SCANNER
+// ============================================================
+
 /**
- * Full project scan: index files + read CLAUDE.md + detect deploy docs + populate brain
+ * Full project scan — reads actual code, not just config files.
+ * Generates fresh intelligence from source analysis.
  */
 export async function scanProject(projectId: string, projectPath: string): Promise<ScanResult> {
-  // 1. Index files
+  const result: ScanResult = {
+    filesIndexed: 0,
+    brainPopulated: false,
+    subProjects: [],
+    detectedStacks: [],
+    ports: [],
+    urls: [],
+    summary: '',
+    completion: null,
+    toolchain: null,
+  };
+
+  // 1. Index all files
   const { indexed, byType } = indexProject(projectId, projectPath);
+  result.filesIndexed = indexed;
 
-  // 2. Read existing CLAUDE.md
-  const claudeMd = readClaudeMd(projectPath);
+  // 2. Detect project signatures (root + sub-projects)
+  const signatures = detectProjectSignatures(projectPath);
+  result.detectedStacks = signatures.map(s => s.framework || s.stack);
+  result.subProjects = signatures.filter(s => s.subPath).map(s => s.subPath);
 
-  // 3. Detect deployment docs
-  const deployDocs = detectDeployDocs(projectPath);
+  // Smart type resolution: if root is generic "node" but sub-projects have specific frameworks,
+  // promote the most specific sub-project type as primary
+  const SPECIFIC_TYPES = ['wordpress', 'wordpress-theme', 'shopify', 'nextjs', 'nestjs', 'laravel', 'flutter'];
+  if (signatures.length > 1 && signatures[0] && !SPECIFIC_TYPES.includes(signatures[0].framework || '')) {
+    const specificSub = signatures.find(s => s.subPath && SPECIFIC_TYPES.includes(s.framework || ''));
+    if (specificSub) {
+      // Move the specific sub-project to front so it becomes the detected type
+      result.detectedStacks = [specificSub.framework || specificSub.stack, ...result.detectedStacks.filter(s => s !== (specificSub.framework || specificSub.stack))];
+    }
+  }
 
-  // 4. Read deployment/server info
-  const serverInfo = extractServerInfo(projectPath, deployDocs);
+  // 3. Deep scan source files
+  const codeIntel = deepScanCode(projectPath);
+  result.ports = codeIntel.ports;
+  result.urls = codeIntel.urls;
 
-  // 5. Read project metadata from config files
-  const brain = await buildBrainFromScan(projectPath, byType, claudeMd, deployDocs, serverInfo);
+  // 4. Build brain from code scan
+  const brain = buildBrainFromCode(projectPath, signatures, codeIntel, byType);
 
-  // 6. Populate brain (only fill empty fields — don't overwrite user data)
+  // 5. Estimate project completion
+  const completion = estimateCompletion(projectPath, byType, codeIntel);
+  result.completion = completion;
+
+  // Append completion to brain summary
+  brain.summary += `\n\nCompletion estimate: ~${completion.score}%`;
+  if (completion.indicators.length > 0) {
+    brain.summary += ` (${completion.indicators.slice(0, 4).join(', ')})`;
+  }
+
+  // 6. Detect toolchain (CLI tools, SSH, deploy method)
+  const toolchain = detectToolchain(projectPath, signatures, codeIntel);
+  result.toolchain = toolchain;
+
+  // 7. Write to DB — REPLACE existing brain (fresh scan = fresh intelligence)
   const db = getDb();
-  const existing = db.prepare('SELECT * FROM project_brain WHERE project_id = ?').get(projectId) as any;
+  const existing = db.prepare('SELECT id FROM project_brain WHERE project_id = ?').get(projectId) as any;
 
   if (existing) {
-    const updates: string[] = [];
-    const params: any[] = [];
-
-    if (!existing.summary && brain.summary) {
-      updates.push('summary = ?'); params.push(brain.summary);
-    }
-    if (!existing.architecture_notes && brain.architecture) {
-      updates.push('architecture_notes = ?'); params.push(brain.architecture);
-    }
-    if (!existing.conventions && brain.conventions) {
-      updates.push('conventions = ?'); params.push(brain.conventions);
-    }
-    if (!existing.dependencies_notes && brain.dependencies) {
-      updates.push('dependencies_notes = ?'); params.push(brain.dependencies);
-    }
-    if (!existing.known_issues && brain.knownIssues) {
-      updates.push('known_issues = ?'); params.push(brain.knownIssues);
-    }
-    if (!existing.decisions && brain.decisions) {
-      updates.push('decisions = ?'); params.push(brain.decisions);
-    }
-
-    if (updates.length > 0) {
-      updates.push('updated_at = ?');
-      params.push(new Date().toISOString());
-      params.push(projectId);
-      db.prepare(`UPDATE project_brain SET ${updates.join(', ')} WHERE project_id = ?`).run(...params);
-    }
+    db.prepare(`
+      UPDATE project_brain SET
+        summary = ?, architecture_notes = ?, conventions = ?,
+        dependencies_notes = ?, known_issues = ?, decisions = ?,
+        updated_at = ?
+      WHERE project_id = ?
+    `).run(
+      brain.summary, brain.architecture, brain.conventions,
+      brain.dependencies, brain.knownIssues, brain.decisions,
+      new Date().toISOString(), projectId
+    );
   }
 
-  // 7. Store server/deployment info if found
-  if (serverInfo.deployUrl || serverInfo.provider || serverInfo.deployCommand) {
-    storeServerInfo(projectId, serverInfo);
+  // 7. Store server info
+  if (codeIntel.ports.length > 0 || codeIntel.urls.length > 0) {
+    storeServerInfo(projectId, codeIntel, signatures);
   }
 
-  const structureSummary = getProjectStructureSummary(projectId);
+  // 8. Store completion estimate + toolchain info
+  try {
+    db.prepare(`
+      UPDATE projects SET completion_estimate = ?, completion_indicators = ?,
+        cli_tools = ?, ssh_configured = ?, ssh_hosts = ?, deploy_method = ?
+      WHERE id = ?
+    `).run(
+      completion.score, JSON.stringify(completion.indicators),
+      JSON.stringify(toolchain.cliTools), toolchain.sshConfigured ? 1 : 0,
+      JSON.stringify(toolchain.sshHosts), toolchain.deployMethod,
+      projectId
+    );
+  } catch {
+    // Columns may not exist yet — add them
+    try {
+      db.exec('ALTER TABLE projects ADD COLUMN completion_estimate INTEGER DEFAULT NULL');
+      db.exec('ALTER TABLE projects ADD COLUMN completion_indicators TEXT DEFAULT NULL');
+      db.exec('ALTER TABLE projects ADD COLUMN cli_tools TEXT DEFAULT NULL');
+      db.exec('ALTER TABLE projects ADD COLUMN ssh_configured INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE projects ADD COLUMN ssh_hosts TEXT DEFAULT NULL');
+      db.exec('ALTER TABLE projects ADD COLUMN deploy_method TEXT DEFAULT NULL');
+      db.prepare(`
+        UPDATE projects SET completion_estimate = ?, completion_indicators = ?,
+          cli_tools = ?, ssh_configured = ?, ssh_hosts = ?, deploy_method = ?
+        WHERE id = ?
+      `).run(
+        completion.score, JSON.stringify(completion.indicators),
+        JSON.stringify(toolchain.cliTools), toolchain.sshConfigured ? 1 : 0,
+        JSON.stringify(toolchain.sshHosts), toolchain.deployMethod,
+        projectId
+      );
+    } catch { /* */ }
+  }
 
-  return {
-    filesIndexed: indexed,
-    brainPopulated: true,
-    claudeMdImported: !!claudeMd,
-    deployDocsFound: deployDocs,
-    serverInfoDetected: !!(serverInfo.deployUrl || serverInfo.provider),
-    summary: `Indexed ${indexed} files. ${claudeMd ? 'CLAUDE.md imported. ' : ''}${deployDocs.length > 0 ? `${deployDocs.length} deploy doc(s) found. ` : ''}${structureSummary.split('\n')[0]}`,
-  };
+  // 9. Git info
+  if (fs.existsSync(path.join(projectPath, '.git'))) {
+    try {
+      const git = simpleGit(projectPath);
+      const status = await git.status();
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as any;
+      if (project) {
+        db.prepare('UPDATE projects SET git_enabled = 1 WHERE id = ?').run(projectId);
+      }
+    } catch { /* */ }
+  }
+
+  result.brainPopulated = true;
+  result.summary = `Scanned ${indexed} files. Stacks: ${result.detectedStacks.join(', ') || 'unknown'}. Ports: ${result.ports.join(', ') || 'none'}. Sub-projects: ${result.subProjects.length}. Completion: ~${completion.score}%`;
+
+  return result;
 }
 
-/**
- * Read CLAUDE.md from project root
- */
-function readClaudeMd(projectPath: string): string | null {
-  const candidates = ['CLAUDE.md', 'claude.md', '.claude/settings.json'];
-  for (const name of candidates) {
-    const fullPath = path.join(projectPath, name);
-    if (fs.existsSync(fullPath)) {
-      try {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        if (content.trim().length > 0) return content;
-      } catch { /* permission issues */ }
+// ============================================================
+// SIGNATURE DETECTION
+// ============================================================
+
+const SKIP_SIGNATURE_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', '__pycache__', 'vendor', 'target', '.cache', '.next', 'coverage',
+]);
+
+function detectProjectSignatures(projectPath: string, maxDepth = 3): ProjectSignature[] {
+  const signatures: ProjectSignature[] = [];
+
+  // Check root first
+  const rootSig = detectSignatureAt(projectPath, '');
+  if (rootSig) signatures.push(rootSig);
+
+  // Recursively check subdirectories for sub-projects
+  function scanSubDirs(dir: string, relPrefix: string, depth: number) {
+    if (depth >= maxDepth) return;
+    try {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (!item.isDirectory()) continue;
+        if (SKIP_SIGNATURE_DIRS.has(item.name)) continue;
+
+        const fullPath = path.join(dir, item.name);
+        const relPath = relPrefix ? `${relPrefix}/${item.name}` : item.name;
+        const sig = detectSignatureAt(fullPath, relPath);
+        if (sig) signatures.push(sig);
+
+        scanSubDirs(fullPath, relPath, depth + 1);
+      }
+    } catch { /* permission errors etc */ }
+  }
+
+  scanSubDirs(projectPath, '', 0);
+  return signatures;
+}
+
+function detectSignatureAt(dirPath: string, relPath: string): ProjectSignature | null {
+  for (const [file, stack, framework] of PROJECT_MARKERS) {
+    if (fs.existsSync(path.join(dirPath, file))) {
+      let detectedFramework = framework;
+
+      // Special: WordPress theme detection
+      if (framework === 'wordpress-theme' && file === 'style.css') {
+        try {
+          const css = fs.readFileSync(path.join(dirPath, 'style.css'), 'utf-8').slice(0, 500);
+          if (!css.includes('Theme Name:')) continue;
+        } catch { continue; }
+      }
+
+      // Special: Node framework detection from package.json
+      if (stack === 'node' && file === 'package.json') {
+        try {
+          const pkg = JSON.parse(fs.readFileSync(path.join(dirPath, 'package.json'), 'utf-8'));
+          const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+          for (const [dep, fw] of NODE_FRAMEWORK_DETECTORS) {
+            if (allDeps[dep]) { detectedFramework = fw; break; }
+          }
+        } catch { /* */ }
+      }
+
+      return {
+        stack,
+        language: stack === 'node' ? 'typescript/javascript' : stack === 'liquid' ? 'liquid' : stack,
+        framework: detectedFramework || null,
+        subPath: relPath,
+      };
     }
   }
   return null;
 }
 
-/**
- * Detect deployment documentation files
- */
-function detectDeployDocs(projectPath: string): string[] {
-  const found: string[] = [];
-  for (const pattern of DEPLOY_DOC_PATTERNS) {
-    const fullPath = path.join(projectPath, pattern);
-    if (fs.existsSync(fullPath)) {
-      found.push(pattern);
-    }
-  }
-  return found;
+// ============================================================
+// DEEP CODE SCAN
+// ============================================================
+
+interface DocsIntel {
+  servers: string[];          // IP addresses, hostnames
+  sshDetails: string[];       // SSH connection strings
+  deployUrls: string[];       // deployment/staging/prod URLs
+  installSteps: string[];     // installation/setup commands
+  apiKeys: string[];          // API key names (not values)
+  claudeMdContent: string;    // raw CLAUDE.md content
+  readmeContent: string;      // raw README.md summary
+  deployDocs: string;         // deployment doc content
 }
 
-interface ServerInfo {
-  provider: string | null;
-  deployUrl: string | null;
-  deployCommand: string | null;
-  deployBranch: string | null;
-  sshHost: string | null;
-  sshUser: string | null;
-  coDeployedApps: string[];
-  rawDeployContent: string;
+interface CodeIntel {
+  ports: number[];
+  urls: string[];
+  routes: string[];
+  databases: string[];
+  features: string[];
+  envVars: string[];
+  wpIntel: WPIntel | null;
+  shopifyIntel: ShopifyIntel | null;
+  docsIntel: DocsIntel | null;
 }
 
+interface WPIntel {
+  themes: string[];
+  plugins: string[];
+  customPostTypes: string[];
+  hooks: string[];
+  shortcodes: string[];
+  restRoutes: string[];
+}
+
+interface ShopifyIntel {
+  sections: string[];
+  snippets: string[];
+  settingTypes: string[];
+}
+
+/** Patterns to extract from documentation files */
+const DOCS_PATTERNS = {
+  // IP addresses (v4)
+  ipv4: /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g,
+  // SSH connection strings
+  ssh: /ssh\s+(?:-[a-zA-Z]\s+\S+\s+)*\S+@\S+/g,
+  // Hostnames/domains
+  domains: /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|org|net|io|dev|app|in|co|ai|cloud|xyz|me|live|tech)\b/gi,
+  // Deployment/staging/prod URLs
+  deployUrls: /https?:\/\/(?:staging|prod|production|deploy|api|admin|dashboard|app|dev|www)\.[^\s'"\)>]+/gi,
+  // Shell commands (installation steps)
+  shellCommands: /(?:^|\n)\s*(?:\$|>)\s*(.+?)(?:\n|$)/g,
+  // Code blocks with commands
+  codeBlockCommands: /```(?:bash|sh|shell|zsh)?\n([\s\S]*?)```/g,
+  // API key variable names (not values)
+  apiKeyNames: /\b([A-Z_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|CREDENTIALS)[A-Z_]*)\b/g,
+  // SCP/rsync patterns
+  scp: /(?:scp|rsync)\s+.*\S+@\S+:\S+/g,
+  // Server references in prose
+  serverRefs: /(?:server|host|instance|VPS|droplet|EC2)\s*[:=]?\s*(\S+)/gi,
+};
+
 /**
- * Extract server/deployment info from detected docs
+ * Scan markdown and documentation files for server info, deploy details, etc.
  */
-function extractServerInfo(projectPath: string, deployDocs: string[]): ServerInfo {
-  const info: ServerInfo = {
-    provider: null, deployUrl: null, deployCommand: null,
-    deployBranch: null, sshHost: null, sshUser: null,
-    coDeployedApps: [], rawDeployContent: '',
+function scanDocsFiles(projectPath: string): DocsIntel {
+  const docs: DocsIntel = {
+    servers: [],
+    sshDetails: [],
+    deployUrls: [],
+    installSteps: [],
+    apiKeys: [],
+    claudeMdContent: '',
+    readmeContent: '',
+    deployDocs: '',
   };
 
-  // Detect provider from config files
-  if (fs.existsSync(path.join(projectPath, 'fly.toml'))) {
-    info.provider = 'Fly.io';
-    try {
-      const content = fs.readFileSync(path.join(projectPath, 'fly.toml'), 'utf-8');
-      const appMatch = content.match(/app\s*=\s*"([^"]+)"/);
-      if (appMatch) info.deployUrl = `https://${appMatch[1]}.fly.dev`;
-      info.deployCommand = 'fly deploy';
-    } catch { /* */ }
-  } else if (fs.existsSync(path.join(projectPath, 'vercel.json'))) {
-    info.provider = 'Vercel';
-    info.deployCommand = 'vercel --prod';
-  } else if (fs.existsSync(path.join(projectPath, 'render.yaml'))) {
-    info.provider = 'Render';
-  } else if (fs.existsSync(path.join(projectPath, 'railway.json'))) {
-    info.provider = 'Railway';
-  } else if (fs.existsSync(path.join(projectPath, 'app.yaml'))) {
-    info.provider = 'Google Cloud';
-  } else if (fs.existsSync(path.join(projectPath, 'Procfile'))) {
-    info.provider = 'Heroku';
-    info.deployCommand = 'git push heroku main';
+  const serversSet = new Set<string>();
+  const sshSet = new Set<string>();
+  const deployUrlsSet = new Set<string>();
+  const installStepsSet = new Set<string>();
+  const apiKeysSet = new Set<string>();
+
+  // Priority doc files to scan (in order)
+  const docFiles = [
+    'CLAUDE.md',
+    'README.md',
+    'readme.md',
+    'NEXT_SESSION_PROMPT.md',
+    'NEXT-SESSION-PROMPT.md',
+    'DEPLOYMENT.md',
+    'DEPLOY.md',
+    'SETUP.md',
+    'INSTALL.md',
+    'CONTRIBUTING.md',
+    'docs/deployment.md',
+    'docs/setup.md',
+    'docs/README.md',
+    '.claude/settings.json',
+    'docker-compose.yml',
+    'docker-compose.yaml',
+    'Makefile',
+    'Procfile',
+  ];
+
+  // Also scan any .md files in the root and docs/ directory
+  try {
+    const rootItems = fs.readdirSync(projectPath);
+    for (const item of rootItems) {
+      if (item.endsWith('.md') && !docFiles.includes(item)) {
+        docFiles.push(item);
+      }
+    }
+  } catch { /* */ }
+
+  try {
+    const docsDir = path.join(projectPath, 'docs');
+    if (fs.existsSync(docsDir)) {
+      const docsItems = fs.readdirSync(docsDir);
+      for (const item of docsItems) {
+        if (item.endsWith('.md')) {
+          const rel = `docs/${item}`;
+          if (!docFiles.includes(rel)) docFiles.push(rel);
+        }
+      }
+    }
+  } catch { /* */ }
+
+  function extractFromContent(content: string, fileName: string) {
+    // IP addresses
+    const ips = content.match(DOCS_PATTERNS.ipv4);
+    if (ips) {
+      for (const ip of ips) {
+        // Skip common non-server IPs
+        if (!ip.startsWith('0.') && !ip.startsWith('127.') && !ip.startsWith('255.') && ip !== '0.0.0.0') {
+          serversSet.add(ip);
+        }
+      }
+    }
+
+    // SSH connections
+    DOCS_PATTERNS.ssh.lastIndex = 0;
+    let m;
+    while ((m = DOCS_PATTERNS.ssh.exec(content))) sshSet.add(m[0].trim());
+
+    // SCP/rsync
+    DOCS_PATTERNS.scp.lastIndex = 0;
+    while ((m = DOCS_PATTERNS.scp.exec(content))) sshSet.add(m[0].trim());
+
+    // Domains (filter out common non-server domains)
+    const domains = content.match(DOCS_PATTERNS.domains);
+    if (domains) {
+      const skipDomains = ['github.com', 'npmjs.com', 'example.com', 'google.com', 'fonts.googleapis.com', 'cdn.jsdelivr.net', 'unpkg.com'];
+      for (const d of domains) {
+        if (!skipDomains.some(s => d.includes(s)) && d.includes('.')) {
+          serversSet.add(d);
+        }
+      }
+    }
+
+    // Deploy URLs
+    const dUrls = content.match(DOCS_PATTERNS.deployUrls);
+    if (dUrls) dUrls.forEach(u => deployUrlsSet.add(u));
+
+    // Shell commands from code blocks
+    DOCS_PATTERNS.codeBlockCommands.lastIndex = 0;
+    while ((m = DOCS_PATTERNS.codeBlockCommands.exec(content))) {
+      const commands = m[1].split('\n').filter(l => l.trim()).map(l => l.trim());
+      commands.forEach(c => installStepsSet.add(c));
+    }
+
+    // Inline shell commands
+    DOCS_PATTERNS.shellCommands.lastIndex = 0;
+    while ((m = DOCS_PATTERNS.shellCommands.exec(content))) {
+      if (m[1].trim()) installStepsSet.add(m[1].trim());
+    }
+
+    // API key names
+    const keys = content.match(DOCS_PATTERNS.apiKeyNames);
+    if (keys) keys.forEach(k => apiKeysSet.add(k));
+
+    // Server references in prose
+    DOCS_PATTERNS.serverRefs.lastIndex = 0;
+    while ((m = DOCS_PATTERNS.serverRefs.exec(content))) {
+      const ref = m[1].trim().replace(/[,;.\)]+$/, '');
+      if (ref.length > 3 && !ref.startsWith('(') && !ref.startsWith('#')) {
+        serversSet.add(ref);
+      }
+    }
   }
 
-  // Docker = likely self-hosted
-  if (!info.provider && (fs.existsSync(path.join(projectPath, 'Dockerfile')) || fs.existsSync(path.join(projectPath, 'docker-compose.yml')))) {
-    info.provider = 'Docker (self-hosted)';
-  }
+  for (const docFile of docFiles) {
+    const fullPath = path.join(projectPath, docFile);
+    if (!fs.existsSync(fullPath)) continue;
 
-  // Read markdown deploy docs for rich info
-  for (const doc of deployDocs) {
-    if (!doc.endsWith('.md')) continue;
     try {
-      const content = fs.readFileSync(path.join(projectPath, doc), 'utf-8');
-      info.rawDeployContent += `\n--- ${doc} ---\n${content.slice(0, 3000)}\n`;
+      const stat = fs.statSync(fullPath);
+      if (stat.size > 500 * 1024) continue; // Skip files > 500KB
+      const content = fs.readFileSync(fullPath, 'utf-8');
 
-      // Extract URLs
-      const urlMatches = content.match(/https?:\/\/[^\s\)]+/g);
-      if (urlMatches && !info.deployUrl) {
-        // Find likely deploy URL (not GitHub/npm links)
-        const deployUrl = urlMatches.find(u =>
-          !u.includes('github.com') && !u.includes('npmjs.com') &&
-          !u.includes('shields.io') && !u.includes('googleapis.com')
-        );
-        if (deployUrl) info.deployUrl = deployUrl;
-      }
+      extractFromContent(content, docFile);
 
-      // Extract SSH info
-      const sshMatch = content.match(/ssh\s+(\w+)@([\w\.\-]+)/i);
-      if (sshMatch) {
-        info.sshUser = sshMatch[1];
-        info.sshHost = sshMatch[2];
-      }
-
-      // Extract deploy commands
-      const deployCmdMatch = content.match(/(?:deploy|push|release).*?[`"]([^`"]+)[`"]/i);
-      if (deployCmdMatch && !info.deployCommand) {
-        info.deployCommand = deployCmdMatch[1];
+      // Store key file contents
+      const baseName = path.basename(docFile).toLowerCase();
+      if (baseName === 'claude.md') {
+        docs.claudeMdContent = content.slice(0, 5000); // first 5K chars
+      } else if (baseName === 'readme.md') {
+        docs.readmeContent = content.slice(0, 3000);
+      } else if (['deployment.md', 'deploy.md', 'setup.md', 'install.md', 'next_session_prompt.md', 'next-session-prompt.md'].includes(baseName)) {
+        docs.deployDocs += `\n--- ${docFile} ---\n` + content.slice(0, 3000);
       }
     } catch { /* */ }
   }
 
-  // Detect deploy branch from CI/CD files
-  for (const doc of deployDocs) {
-    if (!doc.includes('.github/workflows')) continue;
+  // Also scan Claude's memory files if they exist
+  const claudeMemoryDirs = ['.claude', '.claude/memory'];
+  for (const memDir of claudeMemoryDirs) {
+    const memPath = path.join(projectPath, memDir);
+    if (!fs.existsSync(memPath)) continue;
     try {
-      const content = fs.readFileSync(path.join(projectPath, doc), 'utf-8');
-      const branchMatch = content.match(/branches:\s*\n\s*-\s*(\w+)/);
-      if (branchMatch) info.deployBranch = branchMatch[1];
+      const items = fs.readdirSync(memPath);
+      for (const item of items) {
+        if (!item.endsWith('.md') && !item.endsWith('.json')) continue;
+        const fullPath = path.join(memPath, item);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > 100 * 1024) continue;
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          extractFromContent(content, `${memDir}/${item}`);
+        } catch { /* */ }
+      }
     } catch { /* */ }
+  }
+
+  docs.servers = [...serversSet].slice(0, 20);
+  docs.sshDetails = [...sshSet].slice(0, 10);
+  docs.deployUrls = [...deployUrlsSet].slice(0, 10);
+  docs.installSteps = [...installStepsSet].slice(0, 20);
+  docs.apiKeys = [...apiKeysSet].slice(0, 20);
+
+  return docs;
+}
+
+function deepScanCode(projectPath: string): CodeIntel {
+  const intel: CodeIntel = {
+    ports: [],
+    urls: [],
+    routes: [],
+    databases: [],
+    features: [],
+    envVars: [],
+    wpIntel: null,
+    shopifyIntel: null,
+    docsIntel: null,
+  };
+
+  // --- SCAN MARKDOWN/DOCS FILES FIRST (CLAUDE.md, README, deploy docs) ---
+  intel.docsIntel = scanDocsFiles(projectPath);
+
+  const portsSet = new Set<number>();
+  const urlsSet = new Set<string>();
+  const routesSet = new Set<string>();
+  const dbSet = new Set<string>();
+  const featuresSet = new Set<string>();
+  const envSet = new Set<string>();
+
+  // WordPress intel
+  const wpThemes: Set<string> = new Set();
+  const wpPlugins: Set<string> = new Set();
+  const wpPostTypes: Set<string> = new Set();
+  const wpHooks: Set<string> = new Set();
+  const wpShortcodes: Set<string> = new Set();
+  const wpRestRoutes: Set<string> = new Set();
+
+  // Shopify intel
+  const shopSections: Set<string> = new Set();
+  const shopSnippets: Set<string> = new Set();
+  const shopSettings: Set<string> = new Set();
+
+  const scanExtensions = new Set([
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.py', '.php', '.rb', '.go', '.rs',
+    '.java', '.env', '.toml', '.yaml', '.yml', '.json', '.liquid', '.html',
+    '.css', '.sh',
+  ]);
+
+  let filesScanned = 0;
+  const maxFilesToScan = 500;
+  const maxFileSize = 100 * 1024; // 100KB per file
+
+  function scanDir(dir: string, depth: number) {
+    if (depth > 10 || filesScanned >= maxFilesToScan) return;
+
+    let items: fs.Dirent[];
+    try { items = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { return; }
+
+    for (const item of items) {
+      if (filesScanned >= maxFilesToScan) break;
+
+      if (item.isDirectory()) {
+        if (['node_modules', '.git', 'dist', 'build', '__pycache__', 'vendor', 'target', '.cache', '.next', 'coverage'].includes(item.name)) continue;
+        scanDir(path.join(dir, item.name), depth + 1);
+      } else if (item.isFile()) {
+        const ext = path.extname(item.name).toLowerCase();
+        if (!scanExtensions.has(ext) && item.name !== '.env') continue;
+
+        const fullPath = path.join(dir, item.name);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > maxFileSize) continue;
+
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          filesScanned++;
+
+          // .env files — extract vars and ports
+          if (item.name === '.env' || item.name.startsWith('.env.')) {
+            const lines = content.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('#') || !line.includes('=')) continue;
+              const [key, val] = line.split('=', 2);
+              if (key) envSet.add(key.trim());
+              if (val && /^\d{2,5}$/.test(val.trim())) portsSet.add(parseInt(val.trim()));
+              if (val && /https?:\/\//.test(val)) {
+                const urlMatch = val.match(/https?:\/\/[^\s'"]+/);
+                if (urlMatch) urlsSet.add(urlMatch[0]);
+              }
+            }
+            continue;
+          }
+
+          // Scan for patterns
+          for (const re of CODE_PATTERNS.ports) {
+            re.lastIndex = 0;
+            let m; while ((m = re.exec(content))) { const p = parseInt(m[1]); if (p > 999 && p < 65536) portsSet.add(p); }
+          }
+          for (const re of CODE_PATTERNS.urls) {
+            re.lastIndex = 0;
+            let m; while ((m = re.exec(content))) urlsSet.add(m[0].slice(0, 200));
+          }
+          for (const re of CODE_PATTERNS.routes) {
+            re.lastIndex = 0;
+            let m; while ((m = re.exec(content))) routesSet.add(m[2] || m[1]);
+          }
+          for (const re of CODE_PATTERNS.databases) {
+            re.lastIndex = 0;
+            if (re.test(content)) dbSet.add(re.source.replace(/[\\|]/g, '').toLowerCase());
+          }
+          for (const re of CODE_PATTERNS.auth) {
+            re.lastIndex = 0;
+            if (re.test(content)) featuresSet.add('Authentication');
+          }
+          for (const re of CODE_PATTERNS.payments) {
+            re.lastIndex = 0;
+            if (re.test(content)) featuresSet.add('Payments');
+          }
+          for (const re of CODE_PATTERNS.email) {
+            re.lastIndex = 0;
+            if (re.test(content)) featuresSet.add('Email');
+          }
+          for (const re of CODE_PATTERNS.storage) {
+            re.lastIndex = 0;
+            if (re.test(content)) featuresSet.add('File Storage');
+          }
+          for (const re of CODE_PATTERNS.envVars) {
+            re.lastIndex = 0;
+            let m; while ((m = re.exec(content))) envSet.add(m[1]);
+          }
+
+          // WordPress-specific scanning
+          if (ext === '.php') {
+            const themeMatch = content.match(WP_PATTERNS.theme);
+            if (themeMatch) wpThemes.add(themeMatch[1].trim());
+            const pluginMatch = content.match(WP_PATTERNS.plugins);
+            if (pluginMatch) wpPlugins.add(pluginMatch[1].trim());
+
+            WP_PATTERNS.hooks.lastIndex = 0;
+            let m; while ((m = WP_PATTERNS.hooks.exec(content))) wpHooks.add(m[1]);
+            WP_PATTERNS.shortcodes.lastIndex = 0;
+            while ((m = WP_PATTERNS.shortcodes.exec(content))) wpShortcodes.add(m[1]);
+            WP_PATTERNS.postTypes.lastIndex = 0;
+            while ((m = WP_PATTERNS.postTypes.exec(content))) wpPostTypes.add(m[1]);
+            WP_PATTERNS.restRoutes.lastIndex = 0;
+            while ((m = WP_PATTERNS.restRoutes.exec(content))) wpRestRoutes.add(m[1]);
+          }
+
+          // Shopify-specific scanning
+          if (ext === '.liquid') {
+            SHOPIFY_PATTERNS.sections.lastIndex = 0;
+            let m; while ((m = SHOPIFY_PATTERNS.sections.exec(content))) shopSections.add(m[1]);
+            SHOPIFY_PATTERNS.snippets.lastIndex = 0;
+            while ((m = SHOPIFY_PATTERNS.snippets.exec(content))) shopSnippets.add(m[1]);
+          }
+          if (item.name.endsWith('.json') && dir.includes('sections')) {
+            SHOPIFY_PATTERNS.schemaSettings.lastIndex = 0;
+            let m; while ((m = SHOPIFY_PATTERNS.schemaSettings.exec(content))) shopSettings.add(m[1]);
+          }
+
+        } catch { /* skip unreadable files */ }
+      }
+    }
+  }
+
+  scanDir(projectPath, 0);
+
+  intel.ports = [...portsSet].sort();
+  intel.urls = [...urlsSet].slice(0, 20);
+  intel.routes = [...routesSet].slice(0, 50);
+  intel.databases = [...dbSet];
+  intel.features = [...featuresSet];
+  intel.envVars = [...envSet].slice(0, 30);
+
+  if (wpThemes.size > 0 || wpPlugins.size > 0 || wpPostTypes.size > 0) {
+    intel.wpIntel = {
+      themes: [...wpThemes],
+      plugins: [...wpPlugins],
+      customPostTypes: [...wpPostTypes],
+      hooks: [...wpHooks].slice(0, 30),
+      shortcodes: [...wpShortcodes],
+      restRoutes: [...wpRestRoutes],
+    };
+  }
+
+  if (shopSections.size > 0 || shopSnippets.size > 0) {
+    intel.shopifyIntel = {
+      sections: [...shopSections],
+      snippets: [...shopSnippets],
+      settingTypes: [...shopSettings],
+    };
+  }
+
+  return intel;
+}
+
+// ============================================================
+// BRAIN BUILDER
+// ============================================================
+
+function buildBrainFromCode(
+  projectPath: string,
+  signatures: ProjectSignature[],
+  codeIntel: CodeIntel,
+  byType: Record<string, number>,
+): {
+  summary: string; architecture: string; conventions: string;
+  dependencies: string; knownIssues: string; decisions: string;
+} {
+  const brain = { summary: '', architecture: '', conventions: '', dependencies: '', knownIssues: '', decisions: '' };
+  const projectName = path.basename(projectPath);
+
+  // --- SUMMARY ---
+  const summaryParts: string[] = [`Project: ${projectName}`];
+
+  // Read package.json for description
+  const pkgPath = path.join(projectPath, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      if (pkg.description) summaryParts.push(pkg.description);
+      if (pkg.version) summaryParts.push(`v${pkg.version}`);
+    } catch { /* */ }
+  }
+
+  const mainStack = signatures[0];
+  if (mainStack) {
+    summaryParts.push(`Stack: ${mainStack.framework || mainStack.stack} (${mainStack.language})`);
+  }
+
+  if (signatures.length > 1) {
+    summaryParts.push(`Sub-projects: ${signatures.filter(s => s.subPath).map(s => `${s.subPath} (${s.framework || s.stack})`).join(', ')}`);
+  }
+
+  if (codeIntel.features.length > 0) {
+    summaryParts.push(`Features: ${codeIntel.features.join(', ')}`);
+  }
+
+  brain.summary = summaryParts.join('\n');
+
+  // --- ARCHITECTURE ---
+  const archParts: string[] = [];
+
+  // Stacks
+  for (const sig of signatures) {
+    const label = sig.subPath ? `[${sig.subPath}]` : '[root]';
+    archParts.push(`${label} ${sig.framework || sig.stack} (${sig.language})`);
+  }
+
+  // File structure
+  const totalFiles = Object.values(byType).reduce((s, c) => s + c, 0);
+  archParts.push(`\nFiles: ${totalFiles} total`);
+  const typeEntries = Object.entries(byType).sort((a, b) => b[1] - a[1]);
+  for (const [type, count] of typeEntries.slice(0, 12)) {
+    archParts.push(`  ${type}: ${count}`);
+  }
+
+  // Ports & URLs
+  if (codeIntel.ports.length > 0) {
+    archParts.push(`\nPorts: ${codeIntel.ports.join(', ')}`);
+  }
+  if (codeIntel.urls.length > 0) {
+    archParts.push(`URLs: ${codeIntel.urls.slice(0, 5).join(', ')}`);
+  }
+
+  // Routes
+  if (codeIntel.routes.length > 0) {
+    archParts.push(`\nAPI Routes (${codeIntel.routes.length}):`);
+    for (const r of codeIntel.routes.slice(0, 20)) archParts.push(`  ${r}`);
+    if (codeIntel.routes.length > 20) archParts.push(`  ... +${codeIntel.routes.length - 20} more`);
+  }
+
+  // Databases
+  if (codeIntel.databases.length > 0) {
+    archParts.push(`\nDatabases: ${[...new Set(codeIntel.databases)].join(', ')}`);
+  }
+
+  // WordPress
+  if (codeIntel.wpIntel) {
+    const wp = codeIntel.wpIntel;
+    archParts.push('\n--- WordPress ---');
+    if (wp.themes.length) archParts.push(`Themes: ${wp.themes.join(', ')}`);
+    if (wp.plugins.length) archParts.push(`Plugins: ${wp.plugins.join(', ')}`);
+    if (wp.customPostTypes.length) archParts.push(`Custom Post Types: ${wp.customPostTypes.join(', ')}`);
+    if (wp.shortcodes.length) archParts.push(`Shortcodes: ${wp.shortcodes.join(', ')}`);
+    if (wp.restRoutes.length) archParts.push(`REST Routes: ${wp.restRoutes.join(', ')}`);
+    if (wp.hooks.length) archParts.push(`Hooks (${wp.hooks.length}): ${wp.hooks.slice(0, 10).join(', ')}${wp.hooks.length > 10 ? '...' : ''}`);
+  }
+
+  // Shopify
+  if (codeIntel.shopifyIntel) {
+    const sh = codeIntel.shopifyIntel;
+    archParts.push('\n--- Shopify ---');
+    if (sh.sections.length) archParts.push(`Sections: ${sh.sections.join(', ')}`);
+    if (sh.snippets.length) archParts.push(`Snippets: ${sh.snippets.join(', ')}`);
+    if (sh.settingTypes.length) archParts.push(`Setting Types: ${[...new Set(sh.settingTypes)].join(', ')}`);
+  }
+
+  // Git
+  if (fs.existsSync(path.join(projectPath, '.git'))) {
+    try {
+      const git = simpleGit(projectPath);
+      // sync check for branch
+      archParts.push('\nGit: enabled');
+    } catch { /* */ }
+  }
+
+  // Documentation intelligence (servers, SSH, deploy, etc.)
+  if (codeIntel.docsIntel) {
+    const di = codeIntel.docsIntel;
+    if (di.servers.length > 0 || di.sshDetails.length > 0 || di.deployUrls.length > 0) {
+      archParts.push('\n--- Servers & Deployment ---');
+      if (di.servers.length) archParts.push(`Servers/Hosts: ${di.servers.join(', ')}`);
+      if (di.sshDetails.length) archParts.push(`SSH Access:\n${di.sshDetails.map(s => `  ${s}`).join('\n')}`);
+      if (di.deployUrls.length) archParts.push(`Deploy URLs: ${di.deployUrls.join(', ')}`);
+    }
+    if (di.apiKeys.length > 0) {
+      archParts.push(`\nAPI Keys Required: ${di.apiKeys.join(', ')}`);
+    }
+    if (di.installSteps.length > 0) {
+      archParts.push(`\nSetup Commands (${di.installSteps.length}):`);
+      for (const cmd of di.installSteps.slice(0, 10)) archParts.push(`  $ ${cmd}`);
+    }
+  }
+
+  brain.architecture = archParts.join('\n');
+
+  // --- DECISIONS / DOCS CONTEXT ---
+  // Store CLAUDE.md and deploy docs content in decisions field
+  if (codeIntel.docsIntel) {
+    const di = codeIntel.docsIntel;
+    const decParts: string[] = [];
+
+    if (codeIntel.envVars.length > 0) {
+      decParts.push(`Environment variables detected:\n${codeIntel.envVars.map(v => `  ${v}`).join('\n')}`);
+    }
+    if (di.claudeMdContent) {
+      decParts.push(`\n--- CLAUDE.md ---\n${di.claudeMdContent}`);
+    }
+    if (di.deployDocs) {
+      decParts.push(`\n--- Deploy/Setup Docs ---\n${di.deployDocs.slice(0, 2000)}`);
+    }
+    if (di.readmeContent) {
+      decParts.push(`\n--- README (summary) ---\n${di.readmeContent.slice(0, 1500)}`);
+    }
+    brain.decisions = decParts.join('\n');
+  }
+
+  // --- CONVENTIONS --- (check root + each sub-project)
+  const convParts: string[] = [];
+
+  function detectConventionsAt(dir: string, label: string) {
+    const parts: string[] = [];
+    if (fs.existsSync(path.join(dir, 'tsconfig.json'))) {
+      try {
+        const tsconfig = JSON.parse(fs.readFileSync(path.join(dir, 'tsconfig.json'), 'utf-8'));
+        if (tsconfig.compilerOptions?.strict) parts.push('TypeScript: strict mode');
+        if (tsconfig.compilerOptions?.target) parts.push(`Target: ${tsconfig.compilerOptions.target}`);
+      } catch { /* */ }
+    }
+    if (fs.existsSync(path.join(dir, '.eslintrc.js')) || fs.existsSync(path.join(dir, 'eslint.config.mjs')) || fs.existsSync(path.join(dir, '.eslintrc.json'))) parts.push('Linting: ESLint');
+    if (fs.existsSync(path.join(dir, '.prettierrc')) || fs.existsSync(path.join(dir, '.prettierrc.json'))) parts.push('Formatting: Prettier');
+    if (fs.existsSync(path.join(dir, 'pnpm-lock.yaml'))) parts.push('Package manager: pnpm');
+    else if (fs.existsSync(path.join(dir, 'yarn.lock'))) parts.push('Package manager: yarn');
+    else if (fs.existsSync(path.join(dir, 'package-lock.json'))) parts.push('Package manager: npm');
+    else if (fs.existsSync(path.join(dir, 'composer.lock'))) parts.push('Package manager: composer');
+    else if (fs.existsSync(path.join(dir, 'Pipfile.lock'))) parts.push('Package manager: pipenv');
+
+    if (fs.existsSync(path.join(dir, '.husky'))) parts.push('Git hooks: Husky');
+    if (fs.existsSync(path.join(dir, 'docker-compose.yml')) || fs.existsSync(path.join(dir, 'docker-compose.yaml'))) parts.push('Containers: Docker Compose');
+    if (fs.existsSync(path.join(dir, '.github/workflows'))) parts.push('CI/CD: GitHub Actions');
+
+    if (parts.length > 0) {
+      if (label) convParts.push(`[${label}]`);
+      convParts.push(...parts);
+    }
+  }
+
+  // Check root first
+  detectConventionsAt(projectPath, '');
+  // Check each sub-project
+  for (const sig of signatures) {
+    if (!sig.subPath) continue;
+    detectConventionsAt(path.join(projectPath, sig.subPath), sig.subPath);
+  }
+
+  brain.conventions = convParts.join('\n');
+
+  // --- DEPENDENCIES --- (check root + each sub-project)
+  const depParts: string[] = [];
+
+  function detectDepsAt(dir: string, label: string) {
+    const prefix = label ? `${label} — ` : '';
+
+    // Node (package.json)
+    const nodePkg = path.join(dir, 'package.json');
+    if (fs.existsSync(nodePkg)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(nodePkg, 'utf-8'));
+        const deps = Object.entries(pkg.dependencies || {}).filter(([k]) => !k.startsWith('@types/'));
+        if (deps.length > 0) {
+          depParts.push(`${prefix}Node dependencies (${deps.length}):`);
+          for (const [name, ver] of deps.slice(0, 20)) depParts.push(`  ${name}: ${ver}`);
+          if (deps.length > 20) depParts.push(`  ... +${deps.length - 20} more`);
+        }
+      } catch { /* */ }
+    }
+
+    // Composer (PHP)
+    const composerFile = path.join(dir, 'composer.json');
+    if (fs.existsSync(composerFile)) {
+      try {
+        const composer = JSON.parse(fs.readFileSync(composerFile, 'utf-8'));
+        const deps = Object.entries(composer.require || {});
+        if (deps.length > 0) {
+          depParts.push(`\n${prefix}PHP dependencies (${deps.length}):`);
+          for (const [name, ver] of deps.slice(0, 15)) depParts.push(`  ${name}: ${ver}`);
+        }
+      } catch { /* */ }
+    }
+
+    // Requirements.txt (Python)
+    const reqFile = path.join(dir, 'requirements.txt');
+    if (fs.existsSync(reqFile)) {
+      try {
+        const lines = fs.readFileSync(reqFile, 'utf-8').split('\n').filter(l => l.trim() && !l.startsWith('#'));
+        if (lines.length > 0) {
+          depParts.push(`\n${prefix}Python dependencies (${lines.length}):`);
+          for (const line of lines.slice(0, 15)) depParts.push(`  ${line.trim()}`);
+        }
+      } catch { /* */ }
+    }
+  }
+
+  // Check root first
+  detectDepsAt(projectPath, '');
+  // Check each sub-project
+  for (const sig of signatures) {
+    if (!sig.subPath) continue;
+    detectDepsAt(path.join(projectPath, sig.subPath), sig.subPath);
+  }
+
+  brain.dependencies = depParts.join('\n');
+
+  // Environment vars — only if docsIntel didn't already set decisions
+  if (!brain.decisions && codeIntel.envVars.length > 0) {
+    brain.decisions = `Environment variables detected:\n${codeIntel.envVars.map(v => `  ${v}`).join('\n')}`;
+  }
+
+  return brain;
+}
+
+// ============================================================
+// TOOLCHAIN DETECTION
+// ============================================================
+
+import { execSync } from 'child_process';
+
+/**
+ * Detect CLI tools, SSH connections, and deploy methods for a project.
+ */
+function detectToolchain(projectPath: string, signatures: ProjectSignature[], codeIntel: CodeIntel): ToolchainInfo {
+  const info: ToolchainInfo = {
+    cliTools: [],
+    sshConfigured: false,
+    sshHosts: [],
+    deployMethod: null,
+  };
+
+  const stacks = signatures.map(s => s.framework || s.stack);
+  const hasStack = (name: string) => stacks.some(s => s?.toLowerCase().includes(name));
+
+  // --- CLI TOOL DETECTION ---
+
+  // Shopify CLI
+  if (hasStack('shopify') || fs.existsSync(path.join(projectPath, 'shopify.theme.toml')) ||
+      fs.existsSync(path.join(projectPath, '.shopifyignore'))) {
+    try {
+      execSync('shopify version', { timeout: 3000, stdio: 'pipe' });
+      info.cliTools.push('shopify-cli');
+    } catch {
+      // Shopify project but CLI not installed
+      if (hasStack('shopify')) info.cliTools.push('shopify-cli (project detected)');
+    }
+  }
+
+  // WP-CLI
+  if (hasStack('wordpress') || hasStack('wordpress-theme') ||
+      fs.existsSync(path.join(projectPath, 'wp-cli.yml')) ||
+      fs.existsSync(path.join(projectPath, 'wp-cli.phar'))) {
+    try {
+      execSync('wp --version', { timeout: 3000, stdio: 'pipe' });
+      info.cliTools.push('wp-cli');
+    } catch {
+      if (hasStack('wordpress') || hasStack('wordpress-theme')) info.cliTools.push('wp-cli (project detected)');
+    }
+  }
+
+  // Docker
+  if (fs.existsSync(path.join(projectPath, 'Dockerfile')) ||
+      fs.existsSync(path.join(projectPath, 'docker-compose.yml')) ||
+      fs.existsSync(path.join(projectPath, 'docker-compose.yaml'))) {
+    info.cliTools.push('docker');
+  }
+
+  // Vercel
+  if (fs.existsSync(path.join(projectPath, 'vercel.json')) || fs.existsSync(path.join(projectPath, '.vercel'))) {
+    info.cliTools.push('vercel');
+    info.deployMethod = 'vercel';
+  }
+
+  // Netlify
+  if (fs.existsSync(path.join(projectPath, 'netlify.toml'))) {
+    info.cliTools.push('netlify');
+    info.deployMethod = 'netlify';
+  }
+
+  // --- SSH / DEPLOYMENT DETECTION ---
+
+  // Check docs intelligence for SSH details
+  if (codeIntel.docsIntel) {
+    const di = codeIntel.docsIntel;
+    if (di.sshDetails.length > 0) {
+      info.sshConfigured = true;
+      // Extract hosts from SSH details
+      for (const ssh of di.sshDetails) {
+        const hostMatch = ssh.match(/@([\w\.\-]+)/);
+        if (hostMatch) info.sshHosts.push(hostMatch[1]);
+      }
+    }
+    // Also check servers for IPs that look like SSH hosts
+    for (const server of di.servers) {
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(server) && !info.sshHosts.includes(server)) {
+        info.sshConfigured = true;
+        info.sshHosts.push(server);
+      }
+    }
+  }
+
+  // Deploy method detection
+  if (!info.deployMethod) {
+    if (info.sshConfigured) info.deployMethod = 'ssh';
+    else if (fs.existsSync(path.join(projectPath, '.github/workflows'))) info.deployMethod = 'github-actions';
+    else if (fs.existsSync(path.join(projectPath, '.gitlab-ci.yml'))) info.deployMethod = 'gitlab-ci';
+    else if (info.cliTools.includes('docker')) info.deployMethod = 'docker';
   }
 
   return info;
 }
 
+// ============================================================
+// COMPLETION ESTIMATION
+// ============================================================
+
+/** Patterns that indicate incomplete work */
+const INCOMPLETE_PATTERNS = {
+  todo: /\b(?:TODO|FIXME|HACK|XXX|PLACEHOLDER|TEMP)\b/g,
+  emptyHandler: /(?:=>\s*\{\s*\}|{\s*(?:\/\/.*\n\s*)*\s*}|(?:pass\s*$))/gm,
+};
+
 /**
- * Store server info in DB
+ * Estimate how "complete" a project is based on code heuristics.
+ * Returns a score 0-100 and human-readable indicators.
  */
-function storeServerInfo(projectId: string, info: ServerInfo): void {
+function estimateCompletion(projectPath: string, byType: Record<string, number>, codeIntel: CodeIntel): CompletionEstimate {
+  const result: CompletionEstimate = {
+    score: 50, // start neutral
+    todoCount: 0,
+    fixmeCount: 0,
+    emptyHandlers: 0,
+    testRatio: 0,
+    hasReadme: false,
+    hasLicense: false,
+    hasCi: false,
+    hasTests: false,
+    indicators: [],
+  };
+
+  // --- Scan source files for TODOs and empty handlers ---
+  const sourceExts = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.php', '.rb', '.go', '.rs', '.java']);
+  let sourceFileCount = 0;
+  let filesChecked = 0;
+  const maxCheck = 300;
+
+  function checkDir(dir: string, depth: number) {
+    if (depth > 10 || filesChecked >= maxCheck) return;
+    let items: fs.Dirent[];
+    try { items = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { return; }
+
+    for (const item of items) {
+      if (filesChecked >= maxCheck) break;
+      if (item.isDirectory()) {
+        if (SKIP_SIGNATURE_DIRS.has(item.name)) continue;
+        checkDir(path.join(dir, item.name), depth + 1);
+      } else if (item.isFile()) {
+        const ext = path.extname(item.name).toLowerCase();
+        if (!sourceExts.has(ext)) continue;
+        sourceFileCount++;
+        const fullPath = path.join(dir, item.name);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > 100 * 1024) continue;
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          filesChecked++;
+
+          // Count TODOs
+          const todoMatches = content.match(INCOMPLETE_PATTERNS.todo);
+          if (todoMatches) result.todoCount += todoMatches.length;
+
+          // Count empty handlers/functions
+          INCOMPLETE_PATTERNS.emptyHandler.lastIndex = 0;
+          const emptyMatches = content.match(INCOMPLETE_PATTERNS.emptyHandler);
+          if (emptyMatches) result.emptyHandlers += emptyMatches.length;
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  checkDir(projectPath, 0);
+
+  // --- Shipping indicators ---
+  result.hasReadme = fs.existsSync(path.join(projectPath, 'README.md')) || fs.existsSync(path.join(projectPath, 'readme.md'));
+  result.hasLicense = fs.existsSync(path.join(projectPath, 'LICENSE')) || fs.existsSync(path.join(projectPath, 'LICENSE.md'));
+  result.hasCi = fs.existsSync(path.join(projectPath, '.github/workflows')) || fs.existsSync(path.join(projectPath, '.gitlab-ci.yml'));
+  result.hasTests = (byType['test'] || 0) > 0;
+
+  // Test ratio
+  const testFiles = byType['test'] || 0;
+  const totalSource = Object.entries(byType)
+    .filter(([t]) => !['asset', 'config', 'style', 'test'].includes(t))
+    .reduce((s, [, c]) => s + c, 0);
+  result.testRatio = totalSource > 0 ? Math.round((testFiles / totalSource) * 100) / 100 : 0;
+
+  // --- Calculate score ---
+  let score = 50; // baseline
+
+  // TODOs and FIXMEs reduce score
+  if (result.todoCount === 0) { score += 15; result.indicators.push('No TODO/FIXME comments'); }
+  else if (result.todoCount <= 5) { score += 5; result.indicators.push(`${result.todoCount} TODO/FIXME comments`); }
+  else if (result.todoCount <= 20) { score -= 5; result.indicators.push(`${result.todoCount} TODO/FIXME comments`); }
+  else { score -= 15; result.indicators.push(`${result.todoCount} TODO/FIXME comments (many)`); }
+
+  // Empty handlers reduce score
+  if (result.emptyHandlers === 0) { score += 10; result.indicators.push('No empty handlers'); }
+  else if (result.emptyHandlers <= 3) { score -= 5; result.indicators.push(`${result.emptyHandlers} empty handlers/stubs`); }
+  else { score -= 15; result.indicators.push(`${result.emptyHandlers} empty handlers/stubs`); }
+
+  // Shipping indicators boost score
+  if (result.hasReadme) { score += 5; result.indicators.push('README present'); }
+  else { result.indicators.push('No README'); }
+
+  if (result.hasLicense) { score += 3; result.indicators.push('LICENSE present'); }
+
+  if (result.hasCi) { score += 5; result.indicators.push('CI/CD configured'); }
+
+  if (result.hasTests) {
+    score += 7;
+    result.indicators.push(`Tests present (${testFiles} files, ratio ${result.testRatio})`);
+  } else {
+    score -= 5;
+    result.indicators.push('No test files found');
+  }
+
+  // Features indicate a more complete project
+  if (codeIntel.features.length >= 3) { score += 5; result.indicators.push(`${codeIntel.features.length} features detected`); }
+  else if (codeIntel.features.length >= 1) { score += 2; }
+
+  // Routes indicate implementation work
+  if (codeIntel.routes.length >= 10) { score += 5; result.indicators.push(`${codeIntel.routes.length} API routes`); }
+  else if (codeIntel.routes.length >= 3) { score += 2; }
+
+  // Clamp to 0-100
+  result.score = Math.max(0, Math.min(100, score));
+
+  return result;
+}
+
+// ============================================================
+// SERVER INFO STORAGE
+// ============================================================
+
+function storeServerInfo(projectId: string, codeIntel: CodeIntel, signatures: ProjectSignature[]): void {
   const db = getDb();
 
-  // Ensure server tables exist
   db.exec(`
     CREATE TABLE IF NOT EXISTS servers (
       id TEXT PRIMARY KEY,
@@ -256,242 +1339,38 @@ function storeServerInfo(projectId: string, info: ServerInfo): void {
     );
   `);
 
-  // Check if server already exists for this project
+  // Don't duplicate
   const existing = db.prepare(`
     SELECT s.id FROM servers s
     JOIN project_servers ps ON ps.server_id = s.id
     WHERE ps.project_id = ?
-  `).get(projectId) as any;
+  `).get(projectId);
+  if (existing) return;
 
-  if (existing) return; // Don't duplicate
-
+  // Create server entry from detected ports/URLs
   const serverId = uuid();
-  const serverName = info.provider
-    ? `${info.provider} server`
-    : info.sshHost || 'Server';
+  const mainStack = signatures[0]?.framework || signatures[0]?.stack || 'unknown';
+  const primaryPort = codeIntel.ports[0] || null;
+  const primaryUrl = codeIntel.urls[0] || null;
+
+  const notes = [
+    `Stack: ${mainStack}`,
+    codeIntel.ports.length > 0 ? `Ports: ${codeIntel.ports.join(', ')}` : '',
+    codeIntel.databases.length > 0 ? `DB: ${codeIntel.databases.join(', ')}` : '',
+    codeIntel.features.length > 0 ? `Features: ${codeIntel.features.join(', ')}` : '',
+  ].filter(Boolean).join('\n');
 
   db.prepare(`
-    INSERT INTO servers (id, name, provider, host, ssh_user, deploy_url, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    serverId, serverName, info.provider, info.sshHost,
-    info.sshUser, info.deployUrl,
-    info.rawDeployContent.slice(0, 5000) || null
-  );
+    INSERT INTO servers (id, name, host, deploy_url, notes) VALUES (?, ?, ?, ?, ?)
+  `).run(serverId, `${mainStack} dev server`, primaryPort ? `localhost:${primaryPort}` : null, primaryUrl, notes);
 
   db.prepare(`
-    INSERT INTO project_servers (project_id, server_id, deploy_branch, deploy_command, deploy_docs_content)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    projectId, serverId, info.deployBranch,
-    info.deployCommand, info.rawDeployContent.slice(0, 10000) || null
-  );
-}
+    INSERT INTO project_servers (project_id, server_id) VALUES (?, ?)
+  `).run(projectId, serverId);
 
-/**
- * Build brain from full project scan including CLAUDE.md and deploy docs
- */
-async function buildBrainFromScan(
-  projectPath: string,
-  byType: Record<string, number>,
-  claudeMd: string | null,
-  deployDocs: string[],
-  serverInfo: ServerInfo,
-): Promise<{
-  summary: string; architecture: string; conventions: string;
-  dependencies: string; knownIssues: string; decisions: string;
-}> {
-  const parts = {
-    summary: '', architecture: '', conventions: '',
-    dependencies: '', knownIssues: '', decisions: '',
-  };
-
-  // --- Import from CLAUDE.md first (highest priority) ---
-  if (claudeMd) {
-    const sections = parseClaudeMdSections(claudeMd);
-    if (sections.summary) parts.summary = sections.summary;
-    if (sections.architecture) parts.architecture = sections.architecture;
-    if (sections.conventions) parts.conventions = sections.conventions;
-    if (sections.knownIssues) parts.knownIssues = sections.knownIssues;
-    if (sections.decisions) parts.decisions = sections.decisions;
+  // Update project dev_server_port if detected
+  if (primaryPort) {
+    db.prepare('UPDATE projects SET dev_server_port = ? WHERE id = ? AND dev_server_port IS NULL')
+      .run(primaryPort, projectId);
   }
-
-  // --- Summary from package.json (if CLAUDE.md didn't provide one) ---
-  if (!parts.summary) {
-    const pkgPath = path.join(projectPath, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        const desc = pkg.description ? ` — ${pkg.description}` : '';
-        parts.summary = `${pkg.name || path.basename(projectPath)}${desc}`;
-        if (pkg.version) parts.summary += ` (v${pkg.version})`;
-      } catch { /* */ }
-    }
-
-    const cargoPath = path.join(projectPath, 'Cargo.toml');
-    if (!parts.summary && fs.existsSync(cargoPath)) {
-      try {
-        const content = fs.readFileSync(cargoPath, 'utf-8');
-        const nameMatch = content.match(/name\s*=\s*"([^"]+)"/);
-        const descMatch = content.match(/description\s*=\s*"([^"]+)"/);
-        if (nameMatch) parts.summary = nameMatch[1];
-        if (descMatch) parts.summary += ` — ${descMatch[1]}`;
-      } catch { /* */ }
-    }
-
-    if (!parts.summary) parts.summary = `Project: ${path.basename(projectPath)}`;
-  }
-
-  // --- Architecture (append to CLAUDE.md data) ---
-  const archLines: string[] = parts.architecture ? [parts.architecture] : [];
-
-  // Detect framework
-  const frameworks: [string, string][] = [
-    ['next.config.js', 'Next.js'], ['next.config.ts', 'Next.js'], ['next.config.mjs', 'Next.js'],
-    ['nest-cli.json', 'NestJS'], ['angular.json', 'Angular'],
-    ['src-tauri', 'Tauri'], ['nuxt.config.ts', 'Nuxt'],
-  ];
-  for (const [file, name] of frameworks) {
-    if (fs.existsSync(path.join(projectPath, file))) {
-      if (!archLines.some(l => l.includes(name))) archLines.push(`Framework: ${name}`);
-      break;
-    }
-  }
-
-  // Languages
-  if (fs.existsSync(path.join(projectPath, 'tsconfig.json')) && !archLines.some(l => l.includes('TypeScript')))
-    archLines.push('Language: TypeScript');
-  if (fs.existsSync(path.join(projectPath, 'Cargo.toml'))) archLines.push('Language: Rust');
-  if (fs.existsSync(path.join(projectPath, 'go.mod'))) archLines.push('Language: Go');
-  if (fs.existsSync(path.join(projectPath, 'requirements.txt')) || fs.existsSync(path.join(projectPath, 'pyproject.toml')))
-    archLines.push('Language: Python');
-
-  // File structure
-  const typeEntries = Object.entries(byType).sort((a, b) => b[1] - a[1]);
-  if (typeEntries.length > 0) {
-    archLines.push(`\nFile structure: ${typeEntries.reduce((s, [, c]) => s + c, 0)} files`);
-    for (const [type, count] of typeEntries.slice(0, 10)) archLines.push(`  ${type}: ${count}`);
-  }
-
-  // Deployment info
-  if (serverInfo.provider) archLines.push(`\nDeployment: ${serverInfo.provider}`);
-  if (serverInfo.deployUrl) archLines.push(`URL: ${serverInfo.deployUrl}`);
-  if (serverInfo.deployCommand) archLines.push(`Deploy: ${serverInfo.deployCommand}`);
-  if (deployDocs.length > 0) archLines.push(`Deploy docs: ${deployDocs.join(', ')}`);
-
-  // Docker
-  if (fs.existsSync(path.join(projectPath, 'docker-compose.yml')) || fs.existsSync(path.join(projectPath, 'docker-compose.yaml')))
-    archLines.push('Infra: Docker Compose');
-  if (fs.existsSync(path.join(projectPath, '.github'))) archLines.push('CI: GitHub Actions');
-
-  // Git
-  if (fs.existsSync(path.join(projectPath, '.git'))) {
-    try {
-      const git = simpleGit(projectPath);
-      const status = await git.status();
-      const log = await git.log({ maxCount: 1 });
-      archLines.push(`\nGit: branch ${status.current}, last commit: ${log.latest?.message?.slice(0, 60) || 'none'}`);
-    } catch { /* */ }
-  }
-
-  parts.architecture = archLines.join('\n');
-
-  // --- Conventions (append) ---
-  const convLines: string[] = parts.conventions ? [parts.conventions] : [];
-  const lintConfigs = ['.eslintrc', '.eslintrc.js', '.eslintrc.json', 'eslint.config.js', 'eslint.config.mjs'];
-  for (const cfg of lintConfigs) {
-    if (fs.existsSync(path.join(projectPath, cfg))) { convLines.push('Linting: ESLint'); break; }
-  }
-  if (fs.existsSync(path.join(projectPath, '.prettierrc'))) convLines.push('Formatting: Prettier');
-  if (fs.existsSync(path.join(projectPath, 'tsconfig.json'))) {
-    try {
-      const tsconfig = JSON.parse(fs.readFileSync(path.join(projectPath, 'tsconfig.json'), 'utf-8'));
-      if (tsconfig.compilerOptions?.strict) convLines.push('TypeScript: strict mode');
-    } catch { /* */ }
-  }
-  if (fs.existsSync(path.join(projectPath, 'pnpm-lock.yaml'))) convLines.push('Package manager: pnpm');
-  else if (fs.existsSync(path.join(projectPath, 'yarn.lock'))) convLines.push('Package manager: yarn');
-  else if (fs.existsSync(path.join(projectPath, 'package-lock.json'))) convLines.push('Package manager: npm');
-  parts.conventions = convLines.join('\n');
-
-  // --- Dependencies ---
-  const depLines: string[] = [];
-  const pkgPath = path.join(projectPath, 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      const deps = Object.keys(pkg.dependencies || {});
-      if (deps.length > 0) {
-        depLines.push(`Dependencies (${deps.length}):`);
-        const keyDeps = deps.filter(d => !d.startsWith('@types/') && !['tslib'].includes(d)).slice(0, 15);
-        for (const d of keyDeps) depLines.push(`  ${d}: ${pkg.dependencies[d]}`);
-        if (deps.length > 15) depLines.push(`  ... and ${deps.length - 15} more`);
-      }
-    } catch { /* */ }
-  }
-  parts.dependencies = depLines.join('\n');
-
-  return parts;
-}
-
-/**
- * Parse CLAUDE.md into brain sections by looking for common headings
- */
-function parseClaudeMdSections(content: string): {
-  summary: string; architecture: string; conventions: string;
-  knownIssues: string; decisions: string;
-} {
-  const result = { summary: '', architecture: '', conventions: '', knownIssues: '', decisions: '' };
-
-  // If no headings, treat entire content as summary
-  if (!content.includes('#')) {
-    result.summary = content.slice(0, 2000);
-    return result;
-  }
-
-  // Split by headings
-  const sections: { heading: string; content: string }[] = [];
-  const lines = content.split('\n');
-  let currentHeading = '';
-  let currentContent: string[] = [];
-
-  for (const line of lines) {
-    if (line.match(/^#{1,3}\s+/)) {
-      if (currentHeading || currentContent.length > 0) {
-        sections.push({ heading: currentHeading, content: currentContent.join('\n').trim() });
-      }
-      currentHeading = line.replace(/^#{1,3}\s+/, '').trim().toLowerCase();
-      currentContent = [];
-    } else {
-      currentContent.push(line);
-    }
-  }
-  if (currentHeading || currentContent.length > 0) {
-    sections.push({ heading: currentHeading, content: currentContent.join('\n').trim() });
-  }
-
-  // Map sections to brain fields
-  for (const section of sections) {
-    const h = section.heading;
-    const c = section.content.slice(0, 2000);
-
-    if (!h && !result.summary) {
-      result.summary = c; // Content before first heading = summary
-    } else if (h.match(/overview|summary|about|description|project/i)) {
-      result.summary += (result.summary ? '\n' : '') + c;
-    } else if (h.match(/architect|stack|structure|tech|infra|deploy|server/i)) {
-      result.architecture += (result.architecture ? '\n' : '') + c;
-    } else if (h.match(/convention|style|rule|guideline|standard|format/i)) {
-      result.conventions += (result.conventions ? '\n' : '') + c;
-    } else if (h.match(/issue|bug|todo|fixme|problem|known|warning/i)) {
-      result.knownIssues += (result.knownIssues ? '\n' : '') + c;
-    } else if (h.match(/decision|choice|rationale|why|trade.?off/i)) {
-      result.decisions += (result.decisions ? '\n' : '') + c;
-    } else {
-      // Unknown section — add to summary as extra context
-      result.summary += (result.summary ? '\n\n' : '') + `## ${section.heading}\n${c}`;
-    }
-  }
-
-  return result;
 }

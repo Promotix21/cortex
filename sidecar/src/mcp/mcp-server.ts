@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { getDb } from '../db/index.js';
 import { getProjectBrain } from '../chat/chat-service.js';
 import { assembleContext } from '../intelligence/context-injector.js';
+import { DOCUMENT_TOOLS, handleDocumentTool } from './document-builder.js';
 
 const MCP_PORT = 4710;
 
@@ -31,7 +32,10 @@ interface MCPResponse {
   error?: { code: number; message: string };
 }
 
-const TOOLS_LIST = [
+const TOOLS_LIST: any[] = [
+  // Document tools (global — no per-project install needed)
+  ...DOCUMENT_TOOLS,
+  // Intelligence tools
   {
     name: 'get_project_brain',
     description: 'Get the project brain (summary, architecture, conventions, known issues, decisions, dependencies) for a Cortex-managed project.',
@@ -103,7 +107,12 @@ const TOOLS_LIST = [
   },
 ];
 
-function handleToolCall(name: string, args: Record<string, unknown>): unknown {
+async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
+  // Document tools (create_docx, create_pdf, create_spreadsheet, read_docx, read_pdf)
+  if (['create_docx', 'create_pdf', 'create_spreadsheet', 'read_docx', 'read_pdf'].includes(name)) {
+    return handleDocumentTool(name, args);
+  }
+
   const db = getDb();
 
   switch (name) {
@@ -186,7 +195,7 @@ function handleToolCall(name: string, args: Record<string, unknown>): unknown {
   }
 }
 
-function handleRequest(req: MCPRequest): MCPResponse {
+async function handleRequest(req: MCPRequest): Promise<MCPResponse> {
   switch (req.method) {
     case 'initialize':
       return {
@@ -195,7 +204,7 @@ function handleRequest(req: MCPRequest): MCPResponse {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'cortex-mcp', version: '0.1.0' },
+          serverInfo: { name: 'cortex-mcp', version: '0.2.0' },
         },
       };
 
@@ -209,7 +218,7 @@ function handleRequest(req: MCPRequest): MCPResponse {
     case 'tools/call': {
       const { name, arguments: toolArgs } = req.params as { name: string; arguments: Record<string, unknown> };
       try {
-        const result = handleToolCall(name, toolArgs || {});
+        const result = await handleToolCall(name, toolArgs || {});
         return {
           jsonrpc: '2.0',
           id: req.id,
@@ -261,10 +270,10 @@ export function startMCPServer(port = MCP_PORT): void {
 
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const request = JSON.parse(body) as MCPRequest;
-        const response = handleRequest(request);
+        const response = await handleRequest(request);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(response));
       } catch (err: any) {
