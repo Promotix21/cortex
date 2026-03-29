@@ -3,7 +3,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useProjectStore } from '@/stores/project-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { formatRelativeTime } from '@/lib/utils';
-import { Circle, Square, Clock, Hash, Cpu, ExternalLink, FileText } from 'lucide-react';
+import { Circle, Square, Clock, Hash, Cpu, ExternalLink, FileText, Trash2, Play } from 'lucide-react';
 
 interface SessionCardProps {
   session: Session;
@@ -26,7 +26,7 @@ function formatDuration(startedAt: string): string {
 }
 
 export function SessionCard({ session, projectName }: SessionCardProps) {
-  const { stopSession } = useSessionStore();
+  const { stopSession, deleteSession, spawnSession } = useSessionStore();
   const setActiveProject = useProjectStore(s => s.setActiveProject);
   const setDashboardOpen = useSessionStore(s => s.setDashboardOpen);
   const viewSession = useNavigationStore(s => s.viewSession);
@@ -146,24 +146,67 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
           </button>
         )}
 
-        {/* View Handoff (completed sessions) */}
+        {/* Completed session actions */}
         {!isRunning && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleOpenSession(); }}
-            className="flex items-center rounded-lg transition-all"
-            style={{
-              gap: 8,
-              padding: '8px 18px',
-              fontSize: 13,
-              fontWeight: 700,
-              background: 'var(--accent-dim)',
-              color: 'var(--accent)',
-              border: '1px solid rgba(137,180,250,0.25)',
-            }}
-          >
-            <FileText size={13} />
-            Handoff
-          </button>
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleOpenSession(); }}
+              className="flex items-center rounded-lg transition-all"
+              style={{
+                gap: 6,
+                padding: '8px 14px',
+                fontSize: 13,
+                fontWeight: 700,
+                background: 'var(--accent-dim)',
+                color: 'var(--accent)',
+                border: '1px solid rgba(137,180,250,0.25)',
+              }}
+            >
+              <FileText size={13} />
+              Handoff
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                spawnSession(session.projectId, `${session.name} (resumed)`).then(newSession => {
+                  viewSession(newSession.id);
+                });
+              }}
+              className="flex items-center rounded-lg transition-all"
+              style={{
+                gap: 6,
+                padding: '8px 14px',
+                fontSize: 13,
+                fontWeight: 700,
+                background: 'var(--success-dim)',
+                color: 'var(--success)',
+                border: '1px solid rgba(166,227,161,0.25)',
+              }}
+            >
+              <Play size={13} />
+              Resume
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm('Delete this session and all its history?')) {
+                  deleteSession(session.id);
+                }
+              }}
+              className="flex items-center rounded-lg transition-all"
+              style={{
+                gap: 6,
+                padding: '8px 14px',
+                fontSize: 13,
+                fontWeight: 700,
+                background: 'var(--error-dim)',
+                color: 'var(--error)',
+                border: '1px solid rgba(243,139,168,0.15)',
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
         )}
 
         {/* Stop Button */}

@@ -216,7 +216,7 @@ sessionsRouter.post('/:id/stop', async (req, res) => {
   res.json({ success });
 });
 
-// DELETE /api/sessions/:id — force kill
+// DELETE /api/sessions/:id — force kill running session
 sessionsRouter.delete('/:id', (req, res) => {
   const mgr = getSessionManager();
   const success = mgr.killSession(req.params.id);
@@ -225,6 +225,25 @@ sessionsRouter.delete('/:id', (req, res) => {
     return;
   }
   res.json({ success: true });
+});
+
+// DELETE /api/sessions/:id/permanent — delete session + all history from DB
+sessionsRouter.delete('/:id/permanent', (req, res) => {
+  const db = getDb();
+  const session = db.prepare('SELECT * FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+
+  // Kill if still running
+  const mgr = getSessionManager();
+  mgr.killSession(req.params.id);
+
+  // CASCADE delete handles session_history, session_metrics, execution_history, etc.
+  db.prepare('DELETE FROM claude_sessions WHERE id = ?').run(req.params.id);
+
+  res.json({ success: true, deleted: req.params.id });
 });
 
 // GET /api/sessions/:id/resume-diff — what changed since last session

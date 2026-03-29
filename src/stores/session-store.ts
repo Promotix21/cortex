@@ -16,6 +16,7 @@ interface SessionStore {
   spawnSession: (projectId: string, name: string) => Promise<Session>;
   stopSession: (id: string) => Promise<void>;
   killSession: (id: string) => Promise<void>;
+  deleteSession: (id: string) => Promise<void>;
   toggleDashboard: () => void;
   setDashboardOpen: (open: boolean) => void;
 }
@@ -82,6 +83,14 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
       sessions: s.sessions.map(sess =>
         sess.id === id ? { ...sess, status: 'completed' as const } : sess
       ),
+    }));
+  },
+
+  deleteSession: async (id) => {
+    await api.deleteSession(id);
+    set(s => ({
+      sessions: s.sessions.filter(sess => sess.id !== id),
+      activeSessions: s.activeSessions.filter(sess => sess.id !== id),
     }));
   },
 
