@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { execSync } from 'child_process';
 import fs from 'fs';
-import { OPENROUTER_MODELS, validateOpenRouterKey } from '../chat/openrouter.js';
 
 export const settingsRouter: ReturnType<typeof Router> = Router();
 
@@ -97,22 +96,6 @@ settingsRouter.post('/validate-key', async (req, res) => {
     const message = err instanceof Error ? err.message : 'Unknown error';
     res.json({ valid: false, error: message });
   }
-});
-
-// GET /api/settings/openrouter/models — list available OpenRouter models
-settingsRouter.get('/openrouter/models', (_req, res) => {
-  res.json({ models: OPENROUTER_MODELS });
-});
-
-// POST /api/settings/openrouter/validate — validate OpenRouter API key
-settingsRouter.post('/openrouter/validate', async (req, res) => {
-  const { apiKey } = req.body;
-  if (!apiKey) {
-    res.status(400).json({ valid: false, error: 'apiKey is required' });
-    return;
-  }
-  const result = await validateOpenRouterKey(apiKey);
-  res.json(result);
 });
 
 // GET /api/settings — return all settings as object

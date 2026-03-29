@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '@/stores/chat-store';
-import { useSettingsStore } from '@/stores/settings-store';
 import { FileDropZone } from './FileDropZone';
 import { Send } from 'lucide-react';
 
@@ -112,48 +111,10 @@ export function ChatInput({ projectId, disabled }: ChatInputProps) {
           <Send size={18} />
         </button>
       </div>
-      <ModelIndicator attachedCount={attachedFiles.length} />
-    </div>
-  );
-}
-
-function ModelIndicator({ attachedCount }: { attachedCount: number }) {
-  const { settings } = useSettingsStore();
-  const model = settings.chat_model || 'claude-cli';
-
-  const getModelLabel = () => {
-    if (model === 'claude-cli') return 'Claude CLI (Max)';
-    // Extract short name from model ID
-    const parts = model.split('/');
-    const name = parts[parts.length - 1]?.replace(/:free$/, ' (Free)') || model;
-    return name;
-  };
-
-  const getProviderColor = () => {
-    if (model === 'claude-cli') return 'var(--accent)';
-    if (model.includes('meta-llama')) return '#0084ff';
-    if (model.includes('google')) return '#4285f4';
-    if (model.includes('openai')) return '#10a37f';
-    if (model.includes('anthropic')) return '#d97706';
-    if (model.includes('deepseek')) return '#4a9eff';
-    if (model.includes('qwen')) return '#7c3aed';
-    if (model.includes('mistral')) return '#ff7000';
-    return 'var(--text-tertiary)';
-  };
-
-  return (
-    <div className="flex items-center justify-between" style={{ marginTop: 8, padding: '0 4px' }}>
-      <div className="flex items-center" style={{ gap: 6 }}>
-        <div
-          className="rounded-full"
-          style={{ width: 6, height: 6, background: getProviderColor() }}
-        />
-        <span style={{ fontSize: 12, color: getProviderColor(), fontWeight: 600 }}>
-          {getModelLabel()}
-        </span>
+      <div className="flex items-center justify-between" style={{ marginTop: 8, padding: '0 4px' }}>
         <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-          · Brain injected
-          {attachedCount > 0 && ` · ${attachedCount} file(s)`}
+          Claude Sonnet 4 · Project Brain injected as context
+          {attachedFiles.length > 0 && ` · ${attachedFiles.length} file(s) attached`}
         </span>
       </div>
     </div>

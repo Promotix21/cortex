@@ -210,11 +210,4 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ apiKey }),
     }),
-  getOpenRouterModels: () =>
-    request<{ models: any[] }>('/api/settings/openrouter/models'),
-  validateOpenRouterKey: (apiKey: string) =>
-    request<{ valid: boolean; error?: string; credits?: number }>('/api/settings/openrouter/validate', {
-      method: 'POST',
-      body: JSON.stringify({ apiKey }),
-    }),
 };
