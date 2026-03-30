@@ -4,6 +4,7 @@ import { getSessionManager } from '../sessions/session-manager.js';
 import { getTerminalManager } from '../terminals/terminal-manager.js';
 import { captureSnapshot, getResumeDiff, getLatestSnapshot } from '../sessions/snapshot.js';
 import { injectContext, assembleContext } from '../intelligence/context-injector.js';
+import { importClaudeSessions, importAllClaudeSessions } from '../intelligence/claude-session-importer.js';
 import { generateHandoff, getHandoff } from '../intelligence/handoff-generator.js';
 import { canSpawnSession } from '../intelligence/budget-guard.js';
 import { v4 as uuid } from 'uuid';
@@ -17,6 +18,23 @@ sessionsRouter.get('/', (req, res) => {
   const projectId = req.query.project_id as string | undefined;
   const sessions = projectId ? mgr.getProjectSessions(projectId) : mgr.getAllSessions();
   res.json({ sessions });
+});
+
+// POST /api/sessions/import-all — import Claude Code sessions from ~/.claude/projects/
+// MUST be before /:id routes (Express 5 routing)
+sessionsRouter.post('/import-all', (_req, res) => {
+  const results = importAllClaudeSessions();
+  const total = results.reduce((s, r) => ({
+    sessions: s.sessions + r.sessionsImported,
+    prompts: s.prompts + r.promptsImported,
+    memory: s.memory + r.memoryFilesImported,
+  }), { sessions: 0, prompts: 0, memory: 0 });
+
+  res.json({
+    imported: results,
+    total,
+    message: `Imported ${total.sessions} sessions, ${total.prompts} prompts, ${total.memory} memory files`,
+  });
 });
 
 // GET /api/sessions/active — only live sessions
