@@ -98,6 +98,14 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
       api.writeTerminal(terminalId, data).catch(() => {});
     });
 
+    // Copy selection to clipboard on select (Ctrl+C when text selected, or auto-copy)
+    term.onSelectionChange(() => {
+      const selection = term.getSelection();
+      if (selection) {
+        navigator.clipboard.writeText(selection).catch(() => {});
+      }
+    });
+
     // Notify sidecar of resize
     term.onResize(({ cols, rows }) => {
       api.resizeTerminal(terminalId, cols, rows).catch(() => {});
