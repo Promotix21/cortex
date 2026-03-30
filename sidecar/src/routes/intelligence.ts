@@ -235,6 +235,65 @@ intelligenceRouter.post('/analyze-session/:sessionId', (req, res) => {
 
 // ==================== CROSS-PROJECT SEARCH ====================
 
+// GET /api/intelligence/global-search — cross-project search across everything
+intelligenceRouter.get('/global-search', (req, res) => {
+  const { q } = req.query;
+  if (!q || typeof q !== 'string') { res.status(400).json({ error: 'q (query) is required' }); return; }
+
+  const db = getDb();
+  const term = `%${q}%`;
+
+  // Search projects
+  const projects = db.prepare(`
+    SELECT id, name, path, type, company, 'project' as _type FROM projects
+    WHERE name LIKE ? OR path LIKE ? OR company LIKE ?
+    ORDER BY last_opened DESC LIMIT 10
+  `).all(term, term, term);
+
+  // Search project brains
+  const brains = db.prepare(`
+    SELECT pb.project_id, p.name as project_name, pb.summary, pb.architecture_notes, pb.known_issues, 'brain' as _type
+    FROM project_brain pb JOIN projects p ON pb.project_id = p.id
+    WHERE pb.summary LIKE ? OR pb.architecture_notes LIKE ? OR pb.known_issues LIKE ?
+      OR pb.decisions LIKE ? OR pb.conventions LIKE ?
+    LIMIT 10
+  `).all(term, term, term, term, term);
+
+  // Search session history
+  const sessions = db.prepare(`
+    SELECT sh.id, sh.session_id, sh.prompt_text, sh.response_summary, sh.timestamp,
+      cs.name as session_name, cs.project_id, p.name as project_name, 'session' as _type
+    FROM session_history sh
+    JOIN claude_sessions cs ON sh.session_id = cs.id
+    JOIN projects p ON cs.project_id = p.id
+    WHERE sh.prompt_text LIKE ? OR sh.response_summary LIKE ?
+    ORDER BY sh.timestamp DESC LIMIT 15
+  `).all(term, term);
+
+  // Search patterns
+  const patterns = db.prepare(`
+    SELECT pm.*, p.name as project_name, 'pattern' as _type FROM pattern_memory pm
+    LEFT JOIN projects p ON pm.source_project_id = p.id
+    WHERE (pm.title LIKE ? OR pm.description LIKE ? OR pm.tags LIKE ?)
+    AND pm.confidence != 'deprecated'
+    ORDER BY pm.usage_count DESC LIMIT 10
+  `).all(term, term, term);
+
+  // Search debug memory
+  const debug = db.prepare(`
+    SELECT dm.*, p.name as project_name, 'debug' as _type FROM debug_memory dm
+    LEFT JOIN projects p ON dm.source_project_id = p.id
+    WHERE (dm.problem LIKE ? OR dm.root_cause LIKE ? OR dm.solution LIKE ?)
+    AND dm.confidence != 'deprecated'
+    ORDER BY dm.usage_count DESC LIMIT 10
+  `).all(term, term, term);
+
+  res.json({
+    results: { projects, brains, sessions, patterns, debug },
+    total: projects.length + brains.length + sessions.length + patterns.length + debug.length,
+  });
+});
+
 // GET /api/intelligence/search — search across patterns + debug memory
 intelligenceRouter.get('/search', (req, res) => {
   const { q } = req.query;

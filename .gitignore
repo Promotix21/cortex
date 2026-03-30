@@ -50,3 +50,4 @@ chrome-extension/*.pem
 
 # MCP local data
 .mcp-config.json
+sidecar-bundle/

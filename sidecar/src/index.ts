@@ -27,7 +27,14 @@ const PORT = 4700;
 const app = express();
 
 // Middleware
-app.use(cors({ origin: ['http://localhost:1420', 'tauri://localhost'] }));
+app.use(cors({
+  origin: [
+    'http://localhost:1420',
+    'tauri://localhost',
+    'http://tauri.localhost',
+    'https://tauri.localhost',
+  ],
+}));
 app.use(express.json());
 
 // Initialize database

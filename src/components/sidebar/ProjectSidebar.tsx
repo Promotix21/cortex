@@ -1,8 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useProjectStore } from '@/stores/project-store';
 import { ProjectItem } from './ProjectItem';
 import { AddProjectDialog } from './AddProjectDialog';
-import { Search, Plus, FolderPlus } from 'lucide-react';
+import { Search, Plus, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
+import type { Project } from '@/types/project';
+
+function groupByCompany(projects: Project[]): { company: string; projects: Project[] }[] {
+  const groups = new Map<string, Project[]>();
+  for (const p of projects) {
+    const key = p.company || 'Unassigned';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(p);
+  }
+  // Sort: named companies first (alphabetically), Unassigned last
+  const entries = [...groups.entries()].sort((a, b) => {
+    if (a[0] === 'Unassigned') return 1;
+    if (b[0] === 'Unassigned') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+  return entries.map(([company, projects]) => ({ company, projects }));
+}
 
 export function ProjectSidebar() {
   const {
@@ -16,12 +33,24 @@ export function ProjectSidebar() {
   } = useProjectStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
   const projects = filteredProjects();
+  const hasCompanies = projects.some(p => p.company);
+  const groups = useMemo(() => groupByCompany(projects), [projects]);
+
+  const toggleGroup = (company: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(company)) next.delete(company);
+      else next.add(company);
+      return next;
+    });
+  };
 
   return (
     <aside
@@ -106,7 +135,63 @@ export function ProjectSidebar() {
               {searchQuery ? 'Try a different search' : 'Click + to add your first project'}
             </p>
           </div>
+        ) : hasCompanies ? (
+          /* Grouped by company */
+          groups.map(({ company, projects: groupProjects }) => (
+            <div key={company} style={{ marginBottom: 8 }}>
+              <button
+                onClick={() => toggleGroup(company)}
+                className="flex items-center w-full rounded-lg"
+                style={{
+                  padding: '8px 10px',
+                  gap: 6,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {collapsedGroups.has(company) ? (
+                  <ChevronRight size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                ) : (
+                  <ChevronDown size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                )}
+                <span
+                  className="font-bold uppercase tracking-wider"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.1em',
+                    color: 'var(--text-tertiary)',
+                  }}
+                >
+                  {company}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--text-tertiary)',
+                    opacity: 0.6,
+                    marginLeft: 'auto',
+                  }}
+                >
+                  {groupProjects.length}
+                </span>
+              </button>
+              {!collapsedGroups.has(company) && (
+                <div style={{ paddingLeft: 4 }}>
+                  {groupProjects.map((project) => (
+                    <ProjectItem
+                      key={project.id}
+                      project={project}
+                      isActive={project.id === activeProjectId}
+                      onClick={() => setActiveProject(project.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))
         ) : (
+          /* Flat list (no companies assigned) */
           projects.map((project) => (
             <ProjectItem
               key={project.id}
@@ -130,6 +215,7 @@ export function ProjectSidebar() {
         }}
       >
         {projects.length} project{projects.length !== 1 ? 's' : ''}
+        {hasCompanies && ` · ${groups.length} ${groups.length === 1 ? 'company' : 'companies'}`}
       </div>
 
       {showAddDialog && <AddProjectDialog onClose={() => setShowAddDialog(false)} />}

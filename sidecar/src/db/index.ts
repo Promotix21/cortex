@@ -32,6 +32,14 @@ export function initDb(): Database.Database {
   // Run schema creation
   db.exec(SCHEMA_SQL);
 
+  // Migrations — add columns that may be missing from older schemas
+  const migrations = [
+    "ALTER TABLE projects ADD COLUMN company TEXT DEFAULT NULL",
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch { /* column already exists */ }
+  }
+
   console.log(`[db] SQLite initialized at ${DB_PATH}`);
   console.log(`[db] Tables created/verified`);
 

@@ -8,6 +8,7 @@ import {
   Settings,
   Video,
   FolderOpen,
+  Zap,
 } from 'lucide-react';
 import { useNavigationStore, type ActivityId } from '@/stores/navigation-store';
 import { useState } from 'react';
@@ -20,10 +21,11 @@ interface ActivityItem {
 
 const topActivities: ActivityItem[] = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { id: 'terminal', icon: Terminal, label: 'Terminal' },
+  { id: 'sessions', icon: Zap, label: 'Sessions (Ctrl+N)' },
+  { id: 'terminal', icon: Terminal, label: 'Terminal (Ctrl+T)' },
   { id: 'git', icon: GitBranch, label: 'Git' },
   { id: 'notes', icon: FileText, label: 'Notes' },
-  { id: 'brain', icon: Brain, label: 'Intelligence' },
+  { id: 'brain', icon: Brain, label: 'Intelligence (Ctrl+B)' },
   { id: 'chat', icon: MessageSquare, label: 'AI Chat' },
   { id: 'documents', icon: FolderOpen, label: 'Documents' },
   { id: 'studio', icon: Video, label: 'Remotion Studio' },

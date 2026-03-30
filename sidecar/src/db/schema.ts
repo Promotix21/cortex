@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS projects (
   ssh_configured INTEGER DEFAULT 0,
   ssh_hosts TEXT DEFAULT NULL,
   deploy_method TEXT DEFAULT NULL,
+  company TEXT DEFAULT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

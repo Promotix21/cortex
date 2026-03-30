@@ -21,6 +21,7 @@ export interface Project {
   ssh_configured: boolean;
   ssh_hosts: string | null;
   deploy_method: string | null;
+  company: string | null;
   created_at: string;
   updated_at: string;
 }

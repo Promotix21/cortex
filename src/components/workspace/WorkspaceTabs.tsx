@@ -11,6 +11,7 @@ import { ErrorPanel } from '@/components/bridge/ErrorPanel';
 import { ReferencePanel } from './ReferencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SessionTerminal } from '@/components/sessions/SessionTerminal';
+import { SessionGridPanel } from '@/components/sessions/SessionGridPanel';
 import { RemotionStudio } from '@/components/remotion/RemotionStudio';
 import { DocumentsPanel } from './DocumentsPanel';
 import {
@@ -60,7 +61,7 @@ export function WorkspaceTabs() {
     );
   }
 
-  const fullHeightActivities = ['terminal', 'chat'];
+  const fullHeightActivities = ['terminal', 'sessions', 'chat'];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
@@ -68,6 +69,7 @@ export function WorkspaceTabs() {
         style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
       >
         {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
+        {activeActivity === 'sessions' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <SessionGridPanel />)}
         {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
         {activeActivity === 'git' && <GitPanel />}
         {activeActivity === 'notes' && <NotesAndTasksPanel />}

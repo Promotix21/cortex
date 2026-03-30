@@ -9,6 +9,24 @@ import { indexProject, getProjectStructureSummary } from '../intelligence/file-i
 
 export const projectsRouter: ReturnType<typeof Router> = Router();
 
+// Auto-detect company from project name/path
+const COMPANY_MAP: Record<string, string[]> = {
+  'WebXExpert': ['rankops', 'revops', 'nexara-saas', 'velaro-domain-checker', 'vtest-tia', 'drishti', 'cortex'],
+  'Hiraya Digital': ['hiraya-digital-synergy-hub', 'growth-agent', 'wordpress-seo-optimization', 'honest-fermont', 'celebrate-festival', 'celebrate-festival-emailer', 'content-intelligence-planner', 'project-aura', 'realesgran'],
+  'DigitalDadi': ['umang-boards', 'ninara', 'ninara-new-design', 'saie-paranjape', 'vellaro'],
+};
+
+function detectCompany(name: string, projectPath: string): string | null {
+  const slug = name.toLowerCase().replace(/\s+/g, '-');
+  const dirName = path.basename(projectPath).toLowerCase();
+  for (const [company, projects] of Object.entries(COMPANY_MAP)) {
+    if (projects.some(p => slug.includes(p) || dirName.includes(p))) {
+      return company;
+    }
+  }
+  return null;
+}
+
 // Detect project type from filesystem
 function detectProjectType(projectPath: string): string {
   const checks: [string, string][] = [
@@ -57,7 +75,18 @@ function detectGit(projectPath: string): boolean {
 // GET /api/projects
 projectsRouter.get('/', (req, res) => {
   const db = getDb();
-  const projects = db.prepare('SELECT * FROM projects ORDER BY last_opened DESC').all();
+
+  // Auto-backfill company for existing projects that have no company assigned
+  const unassigned = db.prepare("SELECT id, name, path FROM projects WHERE company IS NULL").all() as any[];
+  if (unassigned.length > 0) {
+    const stmt = db.prepare("UPDATE projects SET company = ? WHERE id = ?");
+    for (const p of unassigned) {
+      const company = detectCompany(p.name, p.path);
+      if (company) stmt.run(company, p.id);
+    }
+  }
+
+  const projects = db.prepare('SELECT * FROM projects ORDER BY company ASC, last_opened DESC').all();
   res.json({ projects });
 });
 
@@ -112,7 +141,7 @@ projectsRouter.get('/:id', (req, res) => {
 
 // POST /api/projects
 projectsRouter.post('/', async (req, res) => {
-  const { name, path: projectPath, status = 'active', dev_server_port = null } = req.body;
+  const { name, path: projectPath, status = 'active', dev_server_port = null, company } = req.body;
 
   if (!name || !projectPath) {
     res.status(400).json({ error: 'name and path are required' });
@@ -129,13 +158,14 @@ projectsRouter.post('/', async (req, res) => {
   const id = uuid();
   const type = detectProjectType(projectPath);
   const gitEnabled = detectGit(projectPath) ? 1 : 0;
+  const resolvedCompany = company || detectCompany(name, projectPath);
   const now = new Date().toISOString();
 
   try {
     db.prepare(`
-      INSERT INTO projects (id, name, path, type, git_enabled, status, last_opened, dev_server_port, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, projectPath, type, gitEnabled, status, now, dev_server_port, now, now);
+      INSERT INTO projects (id, name, path, type, git_enabled, status, last_opened, dev_server_port, company, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, projectPath, type, gitEnabled, status, now, dev_server_port, resolvedCompany, now, now);
 
     // Auto-create project brain
     db.prepare(`
@@ -195,7 +225,7 @@ projectsRouter.put('/:id', (req, res) => {
     return;
   }
 
-  const { name, status, dev_server_port, icon } = req.body;
+  const { name, status, dev_server_port, icon, company } = req.body;
   const now = new Date().toISOString();
 
   db.prepare(`
@@ -204,10 +234,11 @@ projectsRouter.put('/:id', (req, res) => {
       status = COALESCE(?, status),
       dev_server_port = COALESCE(?, dev_server_port),
       icon = COALESCE(?, icon),
+      company = COALESCE(?, company),
       last_opened = ?,
       updated_at = ?
     WHERE id = ?
-  `).run(name ?? null, status ?? null, dev_server_port ?? null, icon ?? null, now, now, req.params.id);
+  `).run(name ?? null, status ?? null, dev_server_port ?? null, icon ?? null, company ?? null, now, now, req.params.id);
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   res.json({ project });

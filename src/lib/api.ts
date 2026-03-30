@@ -138,6 +138,10 @@ export const api = {
     request<{ match: any }>('/api/intelligence/debug/match', { method: 'POST', body: JSON.stringify({ error_signature: signature, error_message: message }) }),
   searchIntelligence: (q: string) =>
     request<{ results: any[] }>(`/api/intelligence/search?q=${encodeURIComponent(q)}`),
+  globalSearch: (q: string) =>
+    request<{ results: { projects: any[]; brains: any[]; sessions: any[]; patterns: any[]; debug: any[] }; total: number }>(
+      `/api/intelligence/global-search?q=${encodeURIComponent(q)}`
+    ),
   getLearningQueue: (projectId: string) =>
     request<{ patterns: any[]; debug: any[] }>(`/api/intelligence/learning-queue/${projectId}`),
   reviewLearningItem: (id: string, type: 'pattern' | 'debug', action: 'approve' | 'dismiss') =>
