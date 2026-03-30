@@ -12,6 +12,7 @@ import { ReferencePanel } from './ReferencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SessionTerminal } from '@/components/sessions/SessionTerminal';
 import { RemotionStudio } from '@/components/remotion/RemotionStudio';
+import { DocumentsPanel } from './DocumentsPanel';
 import {
   LayoutDashboard, Terminal, GitBranch,
   MessageSquare, Brain, FolderOpen, Pencil, RefreshCw,
@@ -78,6 +79,7 @@ export function WorkspaceTabs() {
           </div>
         )}
         {activeActivity === 'chat' && <ChatPanel />}
+        {activeActivity === 'documents' && <DocumentsPanel />}
         {activeActivity === 'studio' && <RemotionStudio />}
       </div>
     </div>

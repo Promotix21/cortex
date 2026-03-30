@@ -274,3 +274,86 @@ projectsRouter.get('/:id/structure', (req, res) => {
   const summary = getProjectStructureSummary(req.params.id);
   res.json({ summary });
 });
+
+// GET /api/projects/:id/documents — list .md, .docx, .xlsx, .pdf files
+projectsRouter.get('/:id/documents', (req, res) => {
+  const db = getDb();
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const docExtensions = new Set(['.md', '.mdx', '.docx', '.xlsx', '.xls', '.pdf', '.csv', '.doc', '.pptx', '.txt']);
+  const skipDirs = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'vendor', 'target', '.cache', 'coverage', '__pycache__']);
+  const documents: { name: string; path: string; relativePath: string; ext: string; size: number; modified: string }[] = [];
+
+  function scanDir(dir: string, depth: number) {
+    if (depth > 5 || documents.length > 200) return;
+    try {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        if (item.isDirectory()) {
+          if (skipDirs.has(item.name)) continue;
+          scanDir(path.join(dir, item.name), depth + 1);
+        } else if (item.isFile()) {
+          const ext = path.extname(item.name).toLowerCase();
+          if (!docExtensions.has(ext)) continue;
+          const fullPath = path.join(dir, item.name);
+          try {
+            const stat = fs.statSync(fullPath);
+            documents.push({
+              name: item.name,
+              path: fullPath,
+              relativePath: path.relative(project.path, fullPath),
+              ext,
+              size: stat.size,
+              modified: stat.mtime.toISOString(),
+            });
+          } catch { /* */ }
+        }
+      }
+    } catch { /* */ }
+  }
+
+  scanDir(project.path, 0);
+  documents.sort((a, b) => b.modified.localeCompare(a.modified));
+  res.json({ documents, total: documents.length });
+});
+
+// GET /api/projects/:id/documents/read — read a document file content
+projectsRouter.get('/:id/documents/read', (req, res) => {
+  const filePath = req.query.path as string;
+  if (!filePath) {
+    res.status(400).json({ error: 'path query parameter required' });
+    return;
+  }
+
+  const db = getDb();
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  // Security: ensure file is within project directory
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(path.resolve(project.path))) {
+    res.status(403).json({ error: 'File outside project directory' });
+    return;
+  }
+
+  if (!fs.existsSync(resolved)) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  const ext = path.extname(resolved).toLowerCase();
+  if (ext === '.md' || ext === '.mdx' || ext === '.txt' || ext === '.csv') {
+    const content = fs.readFileSync(resolved, 'utf-8');
+    res.json({ content, type: 'text' });
+  } else {
+    // Binary files — serve as download
+    res.sendFile(resolved);
+  }
+});

@@ -39,6 +39,10 @@ export const api = {
     request<{ scan: any }>(`/api/projects/${id}/scan`, { method: 'POST' }),
   browseFolder: () =>
     request<{ path: string | null; name?: string; cancelled?: boolean }>('/api/projects/browse', { method: 'POST' }),
+  getProjectDocuments: (id: string) =>
+    request<{ documents: any[]; total: number }>(`/api/projects/${id}/documents`),
+  readDocument: (id: string, filePath: string) =>
+    request<{ content: string; type: string }>(`/api/projects/${id}/documents/read?path=${encodeURIComponent(filePath)}`),
 
   // Sessions
   getSessions: (projectId?: string) =>
