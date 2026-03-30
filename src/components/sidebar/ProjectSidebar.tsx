@@ -1,19 +1,37 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useProjectStore } from '@/stores/project-store';
+import { useSessionStore } from '@/stores/session-store';
 import { ProjectItem } from './ProjectItem';
 import { AddProjectDialog } from './AddProjectDialog';
 import { Search, Plus, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Project } from '@/types/project';
 
-function groupByCompany(projects: Project[]): { company: string; projects: Project[] }[] {
+/** Sort projects so those with active sessions come first, then by last_opened */
+function sortWithActiveSessions(projects: Project[], activeProjectIds: Set<string>): Project[] {
+  return [...projects].sort((a, b) => {
+    const aActive = activeProjectIds.has(a.id) ? 1 : 0;
+    const bActive = activeProjectIds.has(b.id) ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+    return new Date(b.last_opened).getTime() - new Date(a.last_opened).getTime();
+  });
+}
+
+function groupByCompany(projects: Project[], activeProjectIds: Set<string>): { company: string; projects: Project[] }[] {
   const groups = new Map<string, Project[]>();
   for (const p of projects) {
     const key = p.company || 'Unassigned';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(p);
   }
-  // Sort: named companies first (alphabetically), Unassigned last
+  // Sort projects within each group: active sessions first
+  for (const [key, list] of groups) {
+    groups.set(key, sortWithActiveSessions(list, activeProjectIds));
+  }
+  // Sort groups: those with active sessions first, then alphabetically, Unassigned last
   const entries = [...groups.entries()].sort((a, b) => {
+    const aHasActive = a[1].some(p => activeProjectIds.has(p.id)) ? 1 : 0;
+    const bHasActive = b[1].some(p => activeProjectIds.has(p.id)) ? 1 : 0;
+    if (aHasActive !== bHasActive) return bHasActive - aHasActive;
     if (a[0] === 'Unassigned') return 1;
     if (b[0] === 'Unassigned') return -1;
     return a[0].localeCompare(b[0]);
@@ -39,9 +57,19 @@ export function ProjectSidebar() {
     fetchProjects();
   }, [fetchProjects]);
 
-  const projects = filteredProjects();
+  const sessions = useSessionStore(s => s.sessions);
+  const activeProjectIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const s of sessions) {
+      if (s.status === 'running' || s.status === 'idle') ids.add(s.projectId);
+    }
+    return ids;
+  }, [sessions]);
+
+  const allProjects = filteredProjects();
+  const projects = useMemo(() => sortWithActiveSessions(allProjects, activeProjectIds), [allProjects, activeProjectIds]);
   const hasCompanies = projects.some(p => p.company);
-  const groups = useMemo(() => groupByCompany(projects), [projects]);
+  const groups = useMemo(() => groupByCompany(allProjects, activeProjectIds), [allProjects, activeProjectIds]);
 
   const toggleGroup = (company: string) => {
     setCollapsedGroups(prev => {
