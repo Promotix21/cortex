@@ -11,6 +11,7 @@ interface SessionTerminalProps {
 
 export function SessionTerminal({ sessionId }: SessionTerminalProps) {
   const clearSessionView = useNavigationStore(s => s.clearSessionView);
+  const goToDashboard = () => useNavigationStore.getState().setActivity('dashboard');
   const { stopSession } = useSessionStore();
   const session = useSessionStore(s => s.sessions.find(sess => sess.id === sessionId));
 
@@ -30,7 +31,7 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
         }}
       >
         <button
-          onClick={clearSessionView}
+          onClick={goToDashboard}
           className="flex items-center rounded-lg transition-colors"
           style={{
             gap: 6,
@@ -43,7 +44,7 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
           }}
         >
           <ArrowLeft size={14} />
-          Back
+          Dashboard
         </button>
 
         <div style={{ width: 1, height: 24, background: 'var(--border)' }} />

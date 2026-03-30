@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Project, CreateProjectInput, UpdateProjectInput } from '@/types/project';
 import { api } from '@/lib/api';
+import { useNavigationStore } from './navigation-store';
 
 interface ProjectStore {
   projects: Project[];
@@ -52,6 +53,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (id) localStorage.setItem(ACTIVE_PROJECT_KEY, id);
     else localStorage.removeItem(ACTIVE_PROJECT_KEY);
     set({ activeProjectId: id });
+    // Clear any open session view when switching projects
+    useNavigationStore.getState().clearSessionView();
   },
 
   fetchProjects: async () => {

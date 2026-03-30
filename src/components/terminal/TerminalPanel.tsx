@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTerminalStore } from '@/stores/terminal-store';
 import { useProjectStore } from '@/stores/project-store';
+import { useNavigationStore } from '@/stores/navigation-store';
 import { XTerminal } from './XTerminal';
-import { Plus, X, RotateCw, Eraser, Terminal, Server, GitBranch, Zap, Grid3x3, Rows3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, X, RotateCw, Eraser, Terminal, Server, GitBranch, Zap, Grid3x3, Rows3, ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-react';
 import type { TerminalType } from '@/stores/terminal-store';
 
 const typeIcons: Record<TerminalType, React.ElementType> = {
@@ -162,6 +163,16 @@ export function TerminalPanel() {
 
         {/* Right side controls */}
         <div className="flex items-center" style={{ gap: 4 }}>
+          {/* Back to dashboard */}
+          <button
+            onClick={() => useNavigationStore.getState().setActivity('dashboard')}
+            className="rounded transition-colors"
+            style={{ padding: 7, color: 'var(--text-tertiary)' }}
+            title="Back to Dashboard"
+          >
+            <LayoutDashboard size={16} />
+          </button>
+
           {/* View mode toggle */}
           <button
             onClick={() => setViewMode(viewMode === 'tabs' ? 'grid' : 'tabs')}
