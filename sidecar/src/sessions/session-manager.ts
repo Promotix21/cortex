@@ -189,6 +189,7 @@ export class SessionManager extends EventEmitter {
 
     session.status = 'completed';
     this.updateSessionDb(session);
+    this.saveSessionOutput(session);
     this.emit('session:stopped', { sessionId });
     return true;
   }
@@ -199,6 +200,8 @@ export class SessionManager extends EventEmitter {
   killSession(sessionId: string): boolean {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
+
+    this.saveSessionOutput(session);
 
     try {
       session.pty.kill();
@@ -211,6 +214,27 @@ export class SessionManager extends EventEmitter {
     this.sessions.delete(sessionId);
     this.emit('session:killed', { sessionId });
     return true;
+  }
+
+  /**
+   * Save session terminal output to DB for later viewing
+   */
+  private saveSessionOutput(session: ManagedSession): void {
+    if (!session.outputBuffer) return;
+    const db = getDb();
+    try {
+      db.exec('ALTER TABLE claude_sessions ADD COLUMN session_output TEXT DEFAULT NULL');
+    } catch { /* column may already exist */ }
+
+    // Save last 50KB of output (strip ANSI escape codes for readability)
+    const cleanOutput = session.outputBuffer
+      .slice(-51200)
+      .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // strip color codes
+      .replace(/\x1b\].*?\x07/g, '')            // strip OSC sequences
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''); // strip control chars
+
+    db.prepare('UPDATE claude_sessions SET session_output = ? WHERE id = ?')
+      .run(cleanOutput, session.id);
   }
 
   /**

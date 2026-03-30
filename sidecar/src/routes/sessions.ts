@@ -68,11 +68,20 @@ sessionsRouter.get('/:id', (req, res) => {
   res.json({ session });
 });
 
-// GET /api/sessions/:id/output — recent terminal output
+// GET /api/sessions/:id/output — recent terminal output (live or saved)
 sessionsRouter.get('/:id/output', (req, res) => {
   const mgr = getSessionManager();
-  const limit = parseInt(req.query.limit as string) || 4096;
-  const output = mgr.getSessionOutput(req.params.id, limit);
+  const limit = parseInt(req.query.limit as string) || 51200;
+  let output = mgr.getSessionOutput(req.params.id, limit);
+
+  // If no live output, try saved output from DB (completed sessions)
+  if (!output) {
+    const row = db.prepare('SELECT session_output FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
+    if (row?.session_output) {
+      output = row.session_output;
+    }
+  }
+
   res.json({ output });
 });
 
@@ -233,18 +242,8 @@ sessionsRouter.post('/:id/stop', async (req, res) => {
   res.json({ success });
 });
 
-// DELETE /api/sessions/:id — force kill running session
-sessionsRouter.delete('/:id', (req, res) => {
-  const mgr = getSessionManager();
-  const success = mgr.killSession(req.params.id);
-  if (!success) {
-    res.status(404).json({ error: 'Session not found' });
-    return;
-  }
-  res.json({ success: true });
-});
-
 // DELETE /api/sessions/:id/permanent — delete session + all history from DB
+// MUST be before /:id to avoid Express 5 matching "permanent" as :id
 sessionsRouter.delete('/:id/permanent', (req, res) => {
   const db = getDb();
   const session = db.prepare('SELECT * FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
@@ -261,6 +260,17 @@ sessionsRouter.delete('/:id/permanent', (req, res) => {
   db.prepare('DELETE FROM claude_sessions WHERE id = ?').run(req.params.id);
 
   res.json({ success: true, deleted: req.params.id });
+});
+
+// DELETE /api/sessions/:id — force kill running session
+sessionsRouter.delete('/:id', (req, res) => {
+  const mgr = getSessionManager();
+  const success = mgr.killSession(req.params.id);
+  if (!success) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+  res.json({ success: true });
 });
 
 // GET /api/sessions/:id/resume-diff — what changed since last session
