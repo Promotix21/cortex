@@ -94,6 +94,77 @@ sessionsRouter.get('/:id/history', (req, res) => {
   res.json({ history: rows });
 });
 
+// POST /api/sessions/:id/resume — resume a completed session with its context
+sessionsRouter.post('/:id/resume', async (req, res) => {
+  const db = getDb();
+  const oldSession = db.prepare('SELECT * FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
+  if (!oldSession) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(oldSession.project_id) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  // Build resume context from old session
+  const oldHistory = db.prepare('SELECT prompt_text FROM session_history WHERE session_id = ? ORDER BY timestamp ASC').all(oldSession.id) as any[];
+  const oldOutput = oldSession.session_output || '';
+  const handoff = getHandoff(oldSession.project_id, project.path);
+
+  let resumeContext = `You are resuming a previous Claude Code session named "${oldSession.name}".\n\n`;
+
+  if (handoff) {
+    resumeContext += `--- HANDOFF FROM PREVIOUS SESSION ---\n${handoff}\n\n`;
+  }
+
+  if (oldHistory.length > 0) {
+    resumeContext += `--- PREVIOUS SESSION PROMPTS (${oldHistory.length}) ---\n`;
+    for (const h of oldHistory.slice(-10)) {
+      resumeContext += `> ${h.prompt_text}\n`;
+    }
+    resumeContext += '\n';
+  }
+
+  if (oldOutput) {
+    // Include last 3000 chars of output for context
+    const trimmedOutput = oldOutput.slice(-3000);
+    resumeContext += `--- PREVIOUS SESSION OUTPUT (last 3000 chars) ---\n${trimmedOutput}\n\n`;
+  }
+
+  resumeContext += 'Continue from where the previous session left off. Ask me what to work on next.';
+
+  // Inject fresh context
+  try { injectContext(oldSession.project_id, project.path); } catch { /* */ }
+
+  // Spawn terminal + session
+  const tmgr = getTerminalManager();
+  const terminal = tmgr.spawn(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, 'ai_session', 120, 40, 'claude');
+
+  const mgr = getSessionManager();
+  const session = mgr.spawnSession(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, true);
+
+  try { db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL'); } catch { /* */ }
+  db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
+  mgr.setTerminalId(session.id, terminal.id);
+
+  // Auto-inject resume context after Claude boots
+  setTimeout(() => {
+    tmgr.write(terminal.id, resumeContext + '\r');
+    console.log(`[sessions] Resumed session ${oldSession.name} → ${session.id} with ${resumeContext.length} chars context`);
+  }, 5000);
+
+  db.prepare('UPDATE projects SET last_opened = ? WHERE id = ?').run(new Date().toISOString(), oldSession.project_id);
+
+  res.status(201).json({
+    session: { ...session, terminalId: terminal.id },
+    terminalId: terminal.id,
+    resumedFrom: oldSession.id,
+  });
+});
+
 // POST /api/sessions — spawn a new session
 sessionsRouter.post('/', async (req, res) => {
   const { project_id, name } = req.body;

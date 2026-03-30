@@ -68,6 +68,8 @@ export const api = {
     request<{ success: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
   deleteSession: (id: string) =>
     request<{ success: boolean }>(`/api/sessions/${id}/permanent`, { method: 'DELETE' }),
+  resumeSession: (id: string) =>
+    request<{ session: any; terminalId: string }>(`/api/sessions/${id}/resume`, { method: 'POST' }),
   getUsageSummary: () =>
     request<{ today: any; byProject: any[] }>('/api/sessions/usage'),
   getSnapshots: (projectId: string) =>

@@ -3,6 +3,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { useProjectStore } from '@/stores/project-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { formatRelativeTime } from '@/lib/utils';
+import { api } from '@/lib/api';
 import { Circle, Square, Clock, Hash, Cpu, ExternalLink, FileText, Trash2, Play } from 'lucide-react';
 
 interface SessionCardProps {
@@ -166,11 +167,18 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
               Handoff
             </button>
             <button
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                spawnSession(session.projectId, `${session.name} (resumed)`).then(newSession => {
+                try {
+                  const data = await api.resumeSession(session.id);
+                  // Add to session store and open terminal
+                  const newSession = data.session;
+                  useSessionStore.getState().fetchSessions(session.projectId);
                   viewSession(newSession.id);
-                });
+                } catch {
+                  // Fallback to regular spawn
+                  spawnSession(session.projectId, `${session.name} (resumed)`).then(s => viewSession(s.id));
+                }
               }}
               className="flex items-center rounded-lg transition-all"
               style={{
