@@ -521,7 +521,7 @@ pnpm tauri build                        # Full app
 - [ ] File watcher for live index updates
 - [ ] Chat summarization (condense long conversations)
 - [ ] Keyboard shortcuts and command palette
-- [ ] Multi-model support via OpenRouter (Gemini, GPT for micro-tasks)
+- [ ] Multi-model routing for specialized tasks
 - [ ] Per-project billing export (CSV/JSON)
 
 ### Later
