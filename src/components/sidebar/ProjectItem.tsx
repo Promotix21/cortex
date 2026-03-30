@@ -1,5 +1,6 @@
 import type { Project } from '@/types/project';
-import { formatRelativeTime, getStatusColor } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
+import { useSessionStore } from '@/stores/session-store';
 import { Folder, GitBranch } from 'lucide-react';
 
 interface ProjectItemProps {
@@ -10,6 +11,9 @@ interface ProjectItemProps {
 
 export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
   const hasIcon = project.icon && project.icon.length > 0;
+  const hasRunningSession = useSessionStore(s =>
+    s.sessions.some(sess => sess.projectId === project.id && (sess.status === 'running' || sess.status === 'idle'))
+  );
 
   return (
     <button
@@ -69,14 +73,18 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
           >
             {project.name}
           </span>
-          <span
-            className="shrink-0 rounded-full"
-            style={{
-              width: 9,
-              height: 9,
-              background: getStatusColor(project.status),
-            }}
-          />
+          {hasRunningSession && (
+            <span
+              className="shrink-0 rounded-full"
+              style={{
+                width: 9,
+                height: 9,
+                background: 'var(--success)',
+                boxShadow: '0 0 6px rgba(166, 227, 161, 0.5)',
+              }}
+              title="Active session running"
+            />
+          )}
         </div>
         <div className="flex items-center" style={{ gap: 6 }}>
           <span
