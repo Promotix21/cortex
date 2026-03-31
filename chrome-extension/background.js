@@ -100,7 +100,18 @@ async function sendNetworkHTTP(request) {
 
 // ==================== Message Handling ====================
 
+// Skip Cloudflare challenge/protection URLs
+function isCloudflareUrl(url) {
+  return /challenges\.cloudflare\.com|cdn-cgi\/challenge-platform|__cf_chl/.test(url || '');
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Skip messages from Cloudflare-protected pages
+  if (isCloudflareUrl(sender.tab?.url)) {
+    sendResponse({ received: false, reason: 'cloudflare' });
+    return true;
+  }
+
   if (message.type === 'console_error') {
     const errorData = {
       ...message.data,

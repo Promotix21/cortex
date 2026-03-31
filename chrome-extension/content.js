@@ -12,6 +12,28 @@
   if (window.__cortex_bridge_injected) return;
   window.__cortex_bridge_injected = true;
 
+  // Skip Cloudflare-protected pages and challenge pages
+  // These sites detect console/fetch overrides and may block or flag the user
+  const SKIP_PATTERNS = [
+    /challenges\.cloudflare\.com/,
+    /cdn-cgi\/challenge-platform/,
+    /cf-chl-/,
+    /__cf_chl/,
+  ];
+
+  const pageUrl = window.location.href;
+  const pageHtml = document.documentElement?.innerHTML || '';
+
+  if (SKIP_PATTERNS.some(p => p.test(pageUrl))) return;
+
+  // Also detect Cloudflare challenge page by meta/body markers
+  if (document.querySelector('meta[name="cf-2fa-verify"]') ||
+      document.querySelector('#cf-wrapper') ||
+      document.querySelector('#challenge-running') ||
+      document.title === 'Just a moment...') {
+    return;
+  }
+
   // ==================== Console Interception ====================
 
   const originalError = console.error;
