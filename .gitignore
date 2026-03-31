@@ -43,8 +43,7 @@ remotion-demo/
 assets/*.mp4
 ~/.cortex/renders/
 
-# Chrome Extension build artifacts (dev builds)
-chrome-extension/icons/*.png
+# Chrome Extension build artifacts
 chrome-extension/*.crx
 chrome-extension/*.pem
 
