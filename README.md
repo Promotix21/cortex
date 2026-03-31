@@ -61,16 +61,19 @@ This project was developed primarily using **Claude Code** with a **Claude Max**
 
 ## Screenshots
 
-### Session Dashboard
+### Dashboard — Company-Grouped Projects + Project Intelligence
 ![Dashboard](assets/dashboard.png)
 
-### Project Intelligence Panel
+### Project Brain — Persistent Intelligence Across Sessions
 ![Brain](assets/brain.png)
 
-### AI Session Monitor
+### Session Grid — Multi-Session Management with Company Grouping
 ![Sessions](assets/sessions.png)
 
-### Budget Guard & Settings
+### Cross-Project Search — Ctrl+K Command Palette
+![Command Palette](assets/command-palette.png)
+
+### Settings & Budget Guard
 ![Settings](assets/settings.png)
 
 ---
