@@ -17,6 +17,24 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
   const pollSeqRef = useRef(-1);
   const pollIntervalRef = useRef<number | null>(null);
   const initialLoadDone = useRef(false);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const fitTimeoutRef = useRef<number | null>(null);
+
+  /** Debounced fit — coalesces rapid resize events, syncs PTY size */
+  const debouncedFit = useCallback(() => {
+    if (fitTimeoutRef.current) cancelAnimationFrame(fitTimeoutRef.current);
+    fitTimeoutRef.current = requestAnimationFrame(() => {
+      const fit = fitRef.current;
+      const term = termRef.current;
+      if (!fit || !term) return;
+      try {
+        fit.fit();
+        api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
+      } catch {
+        // Terminal might be disposed during rapid switching
+      }
+    });
+  }, [terminalId]);
 
   const startPolling = useCallback((term: Terminal) => {
     if (pollIntervalRef.current) return;
@@ -89,16 +107,22 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
     // Delay fit to ensure container has layout dimensions
     requestAnimationFrame(() => {
       fitAddon.fit();
-      // Notify sidecar of initial size
       api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
     });
+
+    // ResizeObserver — the real fix for tab switches, sidebar collapse, panel resize
+    const observer = new ResizeObserver(() => {
+      if (active) debouncedFit();
+    });
+    observer.observe(containerRef.current);
+    resizeObserverRef.current = observer;
 
     // Send keystrokes to sidecar
     term.onData((data) => {
       api.writeTerminal(terminalId, data).catch(() => {});
     });
 
-    // Copy selection to clipboard on select (Ctrl+C when text selected, or auto-copy)
+    // Copy selection to clipboard on select
     term.onSelectionChange(() => {
       const selection = term.getSelection();
       if (selection) {
@@ -127,29 +151,42 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
 
     return () => {
       stopPolling();
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
+      if (fitTimeoutRef.current) cancelAnimationFrame(fitTimeoutRef.current);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [terminalId, startPolling, stopPolling]);
+  }, [terminalId, startPolling, stopPolling, debouncedFit]);
 
-  // Re-fit on visibility change
+  // Re-fit on tab activation — use double rAF to wait for display:block layout
   useEffect(() => {
-    if (active && fitRef.current) {
-      setTimeout(() => fitRef.current?.fit(), 50);
-    }
-  }, [active]);
+    if (!active || !fitRef.current || !termRef.current) return;
+    // Double requestAnimationFrame ensures the browser has painted after display:block
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const fit = fitRef.current;
+        const term = termRef.current;
+        if (!fit || !term) return;
+        try {
+          fit.fit();
+          api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
+        } catch { /* disposed */ }
+      });
+    });
+  }, [active, terminalId]);
 
   // Re-fit on window resize
   useEffect(() => {
     const handleResize = () => {
-      if (active && fitRef.current) {
-        fitRef.current.fit();
-      }
+      if (active) debouncedFit();
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [active]);
+  }, [active, debouncedFit]);
 
   return (
     <div
