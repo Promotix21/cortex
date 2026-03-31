@@ -20,19 +20,19 @@ interface ActivityItem {
 }
 
 const topActivities: ActivityItem[] = [
-  { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { id: 'sessions', icon: Zap, label: 'Sessions (Ctrl+N)' },
-  { id: 'terminal', icon: Terminal, label: 'Terminal (Ctrl+T)' },
-  { id: 'git', icon: GitBranch, label: 'Git' },
-  { id: 'notes', icon: FileText, label: 'Notes' },
-  { id: 'brain', icon: Brain, label: 'Intelligence (Ctrl+B)' },
-  { id: 'chat', icon: MessageSquare, label: 'AI Chat' },
-  { id: 'documents', icon: FolderOpen, label: 'Documents' },
-  { id: 'studio', icon: Video, label: 'Remotion Studio' },
+  { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard (Ctrl+1)' },
+  { id: 'terminal', icon: Terminal, label: 'Terminal (Ctrl+2)' },
+  { id: 'sessions', icon: Zap, label: 'Sessions (Ctrl+3)' },
+  { id: 'git', icon: GitBranch, label: 'Git (Ctrl+4)' },
+  { id: 'notes', icon: FileText, label: 'Notes (Ctrl+5)' },
+  { id: 'brain', icon: Brain, label: 'Intelligence (Ctrl+6)' },
+  { id: 'chat', icon: MessageSquare, label: 'AI Chat (Ctrl+7)' },
+  { id: 'documents', icon: FolderOpen, label: 'Documents (Ctrl+8)' },
+  { id: 'studio', icon: Video, label: 'Remotion Studio (Ctrl+9)' },
 ];
 
 const bottomActivities: ActivityItem[] = [
-  { id: 'settings', icon: Settings, label: 'Settings' },
+  { id: 'settings', icon: Settings, label: 'Settings (Ctrl+,)' },
 ];
 
 function ActivityIcon({ item, isActive }: { item: ActivityItem; isActive: boolean }) {
