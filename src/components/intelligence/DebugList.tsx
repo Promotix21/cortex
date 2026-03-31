@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { Plus, Search, Trash2, Globe, Lock, Bug } from 'lucide-react';
+import { Plus, Search, Trash2, Globe, Lock, Bug, Loader2 } from 'lucide-react';
 
 const confidenceColors: Record<string, string> = {
   verified: 'var(--success)',
@@ -14,11 +15,18 @@ export function DebugList({ projectId }: { projectId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<{ problem: string; root_cause: string; solution: string; tags: string; scope: 'project' | 'reusable'; error_signature: string }>({ problem: '', root_cause: '', solution: '', tags: '', scope: 'project', error_signature: '' });
 
+  const [loading, setLoading] = useState(true);
+
   const fetch = async () => {
+    setLoading(true);
     try {
       const { debug } = await api.getDebugMemory(projectId, search || undefined);
       setItems(debug);
-    } catch { /* silent */ }
+    } catch {
+      toast.error('Failed to load debug memory');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetch(); }, [projectId, search]);
@@ -120,7 +128,12 @@ export function DebugList({ projectId }: { projectId: string }) {
         </div>
       ))}
 
-      {items.length === 0 && !showForm && (
+      {loading && items.length === 0 && (
+        <div className="flex items-center justify-center" style={{ padding: '32px 0', gap: 8, color: 'var(--text-tertiary)' }}>
+          <Loader2 size={16} className="animate-spin" /> <span style={{ fontSize: 14 }}>Loading debug memory...</span>
+        </div>
+      )}
+      {!loading && items.length === 0 && !showForm && (
         <p className="text-center" style={{ fontSize: 14, padding: '32px 0', color: 'var(--text-tertiary)' }}>No debug solutions yet. Never solve the same bug twice.</p>
       )}
     </div>

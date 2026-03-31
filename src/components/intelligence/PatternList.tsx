@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { Plus, Search, Trash2, Star, Globe, Lock } from 'lucide-react';
+import { Plus, Search, Trash2, Star, Globe, Lock, Loader2 } from 'lucide-react';
 
 const confidenceColors: Record<string, string> = {
   verified: 'var(--success)',
@@ -12,14 +13,20 @@ const confidenceColors: Record<string, string> = {
 export function PatternList({ projectId }: { projectId: string }) {
   const [patterns, setPatterns] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<{ title: string; description: string; code: string; tags: string; scope: 'project' | 'reusable' }>({ title: '', description: '', code: '', tags: '', scope: 'project' });
 
   const fetch = async () => {
+    setLoading(true);
     try {
       const { patterns: p } = await api.getPatterns(projectId, search || undefined);
       setPatterns(p);
-    } catch { /* silent */ }
+    } catch {
+      toast.error('Failed to load patterns');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetch(); }, [projectId, search]);
@@ -118,7 +125,12 @@ export function PatternList({ projectId }: { projectId: string }) {
         </div>
       ))}
 
-      {patterns.length === 0 && !showForm && (
+      {loading && patterns.length === 0 && (
+        <div className="flex items-center justify-center" style={{ padding: '32px 0', gap: 8, color: 'var(--text-tertiary)' }}>
+          <Loader2 size={16} className="animate-spin" /> <span style={{ fontSize: 14 }}>Loading patterns...</span>
+        </div>
+      )}
+      {!loading && patterns.length === 0 && !showForm && (
         <p className="text-center" style={{ fontSize: 14, padding: '32px 0', color: 'var(--text-tertiary)' }}>No patterns yet. Save reusable code snippets here.</p>
       )}
     </div>

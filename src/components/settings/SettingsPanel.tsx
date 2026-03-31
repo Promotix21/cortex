@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings-store';
 import { BudgetSettings } from '@/components/budget/BudgetSettings';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { api } from '@/lib/api';
 import {
   CheckCircle, XCircle, RefreshCw,
@@ -15,6 +16,7 @@ export function SettingsPanel() {
   } = useSettingsStore();
 
   const [copied, setCopied] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -27,11 +29,13 @@ export function SettingsPanel() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleClearData = async () => {
-    const confirmed = window.confirm(
-      'This will clear ALL Cortex data including projects, sessions, notes, and brain data. This cannot be undone. Continue?'
-    );
-    if (!confirmed) return;
+  const handleClearData = () => {
+    setShowClearConfirm(true);
+  };
+
+  const executeClearData = async () => {
+    setShowClearConfirm(false);
+    // TODO: call clear data API when available
   };
 
   return (
@@ -150,6 +154,19 @@ export function SettingsPanel() {
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Cortex v0.1.0</span>
         <span style={{ fontSize: 13, color: 'var(--text-tertiary)', marginLeft: 12 }}>AI Development Workspace — Built by Rajesh Kumar</span>
       </div>
+
+      {/* Clear data confirmation dialog */}
+      {showClearConfirm && (
+        <ConfirmDialog
+          title="Clear All Data"
+          message="This will permanently delete ALL Cortex data including projects, sessions, notes, brain data, and intelligence. This cannot be undone."
+          confirmText="DELETE"
+          confirmLabel="Delete Everything"
+          destructive
+          onConfirm={executeClearData}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
     </div>
   );
 }
