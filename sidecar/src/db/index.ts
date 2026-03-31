@@ -4,9 +4,6 @@ import os from 'os';
 import fs from 'fs';
 import { SCHEMA_SQL } from './schema.js';
 
-const DB_DIR = path.join(os.homedir(), '.cortex');
-const DB_PATH = path.join(DB_DIR, 'cortex.db');
-
 let db: Database.Database;
 
 export function getDb(): Database.Database {
@@ -17,12 +14,15 @@ export function getDb(): Database.Database {
 }
 
 export function initDb(): Database.Database {
+  const dbDir = process.env.CORTEX_DB_DIR || path.join(os.homedir(), '.cortex');
+  const dbPath = path.join(dbDir, 'cortex.db');
+
   // Ensure directory exists
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  db = new Database(DB_PATH);
+  db = new Database(dbPath);
 
   // Enable WAL mode for concurrent reads + single writer performance
   db.pragma('journal_mode = WAL');
@@ -40,7 +40,7 @@ export function initDb(): Database.Database {
     try { db.exec(sql); } catch { /* column already exists */ }
   }
 
-  console.log(`[db] SQLite initialized at ${DB_PATH}`);
+  console.log(`[db] SQLite initialized at ${dbPath}`);
   console.log(`[db] Tables created/verified`);
 
   return db;
@@ -49,6 +49,7 @@ export function initDb(): Database.Database {
 export function closeDb(): void {
   if (db) {
     db.close();
+    (db as any) = undefined;
     console.log('[db] Connection closed');
   }
 }
