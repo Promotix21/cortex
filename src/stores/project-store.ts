@@ -64,7 +64,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const data = await api.getProjects();
       const { activeProjectId } = get();
       // Auto-select first project if saved active doesn't exist in list
-      const activeExists = data.projects.some((p: Project) => p.id === activeProjectId);
+      const activeExists = data.projects.some(p => p.id === activeProjectId);
       const newActiveId = activeExists ? activeProjectId
         : data.projects.length > 0 ? data.projects[0].id : null;
 
@@ -73,8 +73,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
 
       set({ projects: data.projects, loading: false, activeProjectId: newActiveId });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to fetch projects', loading: false });
     }
   },
 

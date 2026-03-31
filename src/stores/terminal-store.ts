@@ -1,26 +1,19 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import type { Terminal, TerminalType } from '@/types/terminal';
 
-export type TerminalType = 'shell' | 'ai_session' | 'dev_server' | 'git';
-
-export interface TerminalInfo {
-  id: string;
-  projectId: string;
-  name: string;
-  type: TerminalType;
-  status: 'running' | 'stopped' | 'error';
-  pid: number | null;
-  createdAt: string;
-}
+// Re-export for consumers that import from this store
+export type { TerminalType } from '@/types/terminal';
+export type TerminalInfo = Terminal;
 
 interface TerminalStore {
-  terminals: TerminalInfo[];
+  terminals: Terminal[];
   activeTerminalId: string | null;
 
   setActiveTerminal: (id: string | null) => void;
   fetchTerminals: (projectId: string) => Promise<void>;
-  spawnTerminal: (projectId: string, name: string, type?: TerminalType, command?: string) => Promise<TerminalInfo>;
+  spawnTerminal: (projectId: string, name: string, type?: TerminalType, command?: string) => Promise<Terminal>;
   killTerminal: (id: string) => Promise<void>;
   renameTerminal: (id: string, name: string) => Promise<void>;
   restartTerminal: (id: string) => Promise<void>;

@@ -23,6 +23,7 @@ import {
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import type { Project } from '@/types/project';
 
 export function WorkspaceTabs() {
   const activeActivity = useNavigationStore((s) => s.activeActivity);
@@ -91,7 +92,7 @@ export function WorkspaceTabs() {
   );
 }
 
-function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id: 'terminal' | 'chat' | 'git' | 'brain') => void }) {
+function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: (id: 'terminal' | 'chat' | 'git' | 'brain') => void }) {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconInput, setIconInput] = useState(project.icon || '');
   const [scanning, setScanning] = useState(false);
@@ -123,7 +124,7 @@ function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id:
           }}
         >
           {hasIcon ? (
-            project.icon.startsWith('http') || project.icon.startsWith('data:') ? (
+            project.icon!.startsWith('http') || project.icon!.startsWith('data:') ? (
               <img src={project.icon} alt="" style={{ width: 34, height: 34, objectFit: 'contain', borderRadius: 8 }} />
             ) : (
               <span style={{ fontSize: 28, lineHeight: 1 }}>{project.icon}</span>
@@ -231,7 +232,7 @@ function OverviewPanel({ project, onNavigate }: { project: any; onNavigate: (id:
               <InfoCard label="Type" value={project.type} accent="var(--accent)" />
               <InfoCard label="Status" value={project.status} accent="var(--success)" />
               <InfoCard label="Git" value={project.git_enabled ? 'Enabled' : 'Disabled'} accent={project.git_enabled ? 'var(--success)' : 'var(--text-tertiary)'} />
-              <InfoCard label="Dev Port" value={project.dev_server_port || 'Not set'} accent="var(--warning)" />
+              <InfoCard label="Dev Port" value={String(project.dev_server_port || 'Not set')} accent="var(--warning)" />
             </div>
             {(cliTools.length > 0 || project.ssh_configured || project.deploy_method) && (
               <div className="grid grid-cols-3" style={{ gap: 16, marginBottom: 32 }}>

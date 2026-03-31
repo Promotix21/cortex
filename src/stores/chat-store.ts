@@ -1,13 +1,9 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import type { ChatMessage } from '@/types/intelligence';
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
+export type { ChatMessage } from '@/types/intelligence';
 
 interface ChatStore {
   messages: ChatMessage[];

@@ -12,7 +12,7 @@ export function DebugList({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ problem: '', root_cause: '', solution: '', tags: '', scope: 'project', error_signature: '' });
+  const [form, setForm] = useState<{ problem: string; root_cause: string; solution: string; tags: string; scope: 'project' | 'reusable'; error_signature: string }>({ problem: '', root_cause: '', solution: '', tags: '', scope: 'project', error_signature: '' });
 
   const fetch = async () => {
     try {
@@ -74,7 +74,7 @@ export function DebugList({ projectId }: { projectId: string }) {
           <div className="flex items-center" style={{ gap: 12 }}>
             <input value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} placeholder="Tags (comma-separated)"
               className="flex-1 rounded-xl bg-transparent outline-none" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-            <select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value })}
+            <select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value as 'project' | 'reusable' })}
               className="rounded-xl bg-transparent outline-none" style={{ padding: '12px 16px', fontSize: 14, border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
               <option value="project">Project</option>
               <option value="reusable">Reusable</option>

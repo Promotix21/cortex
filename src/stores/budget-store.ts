@@ -1,29 +1,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-
-interface BudgetLimit {
-  id: string;
-  name: string;
-  limitType: string;
-  limitValue: number;
-  warnAtPct: number;
-  enabled: boolean;
-  currentValue: number;
-  pct: number;
-  status: 'ok' | 'warning' | 'exceeded';
-}
-
-interface BudgetAlert {
-  id: string;
-  limitId: string;
-  alertType: 'warning' | 'exceeded' | 'reset';
-  currentValue: number;
-  limitValue: number;
-  message: string;
-  acknowledged: boolean;
-  createdAt: string;
-}
+import type { BudgetLimit, BudgetAlert } from '@/types/budget';
 
 interface BudgetStore {
   limits: BudgetLimit[];
