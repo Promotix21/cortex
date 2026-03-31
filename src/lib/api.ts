@@ -5,7 +5,12 @@ import type { Pattern, CreatePatternInput, DebugEntry, CreateDebugInput, BrainDa
 import type { BudgetLimit, BudgetAlert } from '@/types/budget';
 import type { Task, GitStatus, GitCommit, RenderJob, DocumentInfo, ProjectSnapshot, SessionHistoryEntry } from '@/types/workspace';
 
-const SIDECAR_URL = 'http://localhost:4700';
+// Dynamic sidecar URL: in Tauri production, reads from env/config; in dev, uses localhost
+const SIDECAR_PORT = (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__CORTEX_SIDECAR_PORT__) || 4700;
+const SIDECAR_URL = `http://localhost:${SIDECAR_PORT}`;
+
+/** Exported so other files don't hardcode localhost:4700 */
+export const getSidecarUrl = () => SIDECAR_URL;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${SIDECAR_URL}${path}`, {
@@ -246,7 +251,7 @@ export const api = {
 
   // ── MCP ───────────────────────────────────────────────────
   mcpStatus: () =>
-    fetch('http://localhost:4710', {
+    fetch(`http://localhost:${Number(SIDECAR_PORT) + 10}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),

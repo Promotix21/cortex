@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 import { useProjectStore } from '@/stores/project-store';
+import { getSidecarUrl } from '@/lib/api';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { Brain, Trash2, Download, AlertCircle } from 'lucide-react';
@@ -41,7 +42,7 @@ export function ChatPanel() {
           AI Chat — {project.name}
         </span>
         <button
-          onClick={() => window.open(`http://localhost:4700/api/chat/${project.id}/export`, '_blank')}
+          onClick={() => window.open(`${getSidecarUrl()}/api/chat/${project.id}/export`, '_blank')}
           className="rounded hover:bg-[var(--bg-hover)] transition-colors"
           style={{ padding: 6 }}
           title="Export chat"

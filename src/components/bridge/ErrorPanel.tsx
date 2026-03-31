@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
+import { getSidecarUrl } from '@/lib/api';
 import { AlertTriangle, Wifi, WifiOff, Trash2, Bug, CheckCircle } from 'lucide-react';
 
-const SIDECAR = 'http://localhost:4700';
+const SIDECAR = getSidecarUrl();
 
 export function ErrorPanel() {
   const project = useProjectStore(s => s.activeProject());

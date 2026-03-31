@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
-import { api } from '@/lib/api';
+import { api, getSidecarUrl } from '@/lib/api';
 import {
   FileText, FileSpreadsheet, File, FileType, Download,
   ChevronRight, ArrowLeft, Search, FolderOpen,
@@ -80,7 +80,7 @@ export function DocumentsPanel() {
       }
     } else {
       // Binary files — download
-      window.open(`http://localhost:4700/api/projects/${project.id}/documents/read?path=${encodeURIComponent(doc.path)}`, '_blank');
+      window.open(`${getSidecarUrl()}/api/projects/${project.id}/documents/read?path=${encodeURIComponent(doc.path)}`, '_blank');
     }
   };
 

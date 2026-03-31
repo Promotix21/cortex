@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, getSidecarUrl } from '@/lib/api';
 import type { ChatMessage } from '@/types/intelligence';
 
 export type { ChatMessage } from '@/types/intelligence';
@@ -17,8 +17,6 @@ interface ChatStore {
   clearHistory: (projectId: string) => Promise<void>;
   setProjectId: (id: string | null) => void;
 }
-
-const SIDECAR_URL = 'http://localhost:4700';
 
 export const useChatStore = create<ChatStore>((set, _get) => ({
   messages: [],
@@ -54,7 +52,7 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
     }));
 
     try {
-      const res = await fetch(`${SIDECAR_URL}/api/chat/${projectId}`, {
+      const res = await fetch(`${getSidecarUrl()}/api/chat/${projectId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),

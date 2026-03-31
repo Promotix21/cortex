@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { getSidecarUrl } from '@/lib/api';
 import { Book, Plus, Trash2, Tag, AlertCircle } from 'lucide-react';
 
-const SIDECAR = 'http://localhost:4700';
+const SIDECAR = getSidecarUrl();
 
 export function ReferencePanel() {
   const [tools, setTools] = useState<any[]>([]);

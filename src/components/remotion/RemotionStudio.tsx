@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useProjectStore } from '@/stores/project-store';
-import { api } from '@/lib/api';
+import { api, getSidecarUrl } from '@/lib/api';
 import {
   Video, Play, Loader2, CheckCircle, XCircle, Download,
   Lightbulb, MessageSquare, Layout, Film, Plus, Trash2, Send, Sparkles,
@@ -712,13 +712,13 @@ function RenderTab({ projectId, idea }: { projectId: string; idea: VideoIdea | n
           {latestJob.status === 'completed' && latestJob.outputPath && (
             <div style={{ marginTop: 16 }}>
               <video
-                src={`http://localhost:4700/api/remotion/video/${latestJob.id}`}
+                src={`${getSidecarUrl()}/api/remotion/video/${latestJob.id}`}
                 controls
                 className="rounded-xl w-full"
                 style={{ maxHeight: 400, background: '#000' }}
               />
               <a
-                href={`http://localhost:4700/api/remotion/video/${latestJob.id}`}
+                href={`${getSidecarUrl()}/api/remotion/video/${latestJob.id}`}
                 download
                 className="flex items-center rounded-xl font-semibold mt-3 inline-flex"
                 style={{ gap: 8, padding: '10px 20px', fontSize: 14, background: 'var(--accent-dim)', color: 'var(--accent)', textDecoration: 'none' }}
