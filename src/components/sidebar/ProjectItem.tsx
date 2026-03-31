@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { Project } from '@/types/project';
 import { formatRelativeTime } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session-store';
-import { Folder, GitBranch } from 'lucide-react';
+import { Folder, GitBranch, FolderOpen } from 'lucide-react';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 
 interface ProjectItemProps {
   project: Project;
@@ -11,13 +13,21 @@ interface ProjectItemProps {
 
 export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
   const hasIcon = project.icon && project.icon.length > 0;
+  const [hovered, setHovered] = useState(false);
   const hasRunningSession = useSessionStore(s =>
     s.sessions.some(sess => sess.projectId === project.id && (sess.status === 'running' || sess.status === 'idle'))
   );
 
+  const handleOpenFolder = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    revealItemInDir(project.path);
+  };
+
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className="w-full text-left rounded-xl transition-all"
       style={{
         display: 'flex',
@@ -28,6 +38,7 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
         background: isActive ? 'var(--bg-surface)' : 'transparent',
         border: isActive ? '1px solid var(--border-active)' : '1px solid transparent',
         borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+        position: 'relative',
       }}
     >
       {/* Project Icon/Logo */}
@@ -121,6 +132,28 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
           </span>
         </div>
       </div>
+
+      {/* Open Folder button — visible on hover */}
+      {hovered && (
+        <div
+          onClick={handleOpenFolder}
+          title="Open project folder"
+          className="flex items-center justify-center rounded-lg shrink-0 transition-colors"
+          style={{
+            width: 32,
+            height: 32,
+            marginTop: 4,
+            background: 'var(--bg-hover)',
+            border: '1px solid var(--border)',
+            cursor: 'pointer',
+            color: 'var(--text-tertiary)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+        >
+          <FolderOpen size={16} />
+        </div>
+      )}
     </button>
   );
 }
