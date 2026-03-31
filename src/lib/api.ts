@@ -215,7 +215,21 @@ export const api = {
     request<{ jobs: any[] }>('/api/remotion/list'),
 
   // Health
-  health: () => request<{ status: string; activeSessions: number }>('/api/health'),
+  health: () => request<{ status: string; activeSessions: number; activeTerminals: number }>('/api/health'),
+
+  // MCP status
+  mcpStatus: () =>
+    fetch('http://localhost:4710', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    }).then(r => r.json()).then(d => ({ running: true, tools: d.result?.tools || [] }))
+      .catch(() => ({ running: false, tools: [] })),
+
+  // Bridge status (Chrome extension connection)
+  bridgeStatus: () =>
+    request<{ connected: boolean; errors: number; network: number }>('/api/bridge/status')
+      .catch(() => ({ connected: false, errors: 0, network: 0 })),
 
   // Settings
   getSettings: () => request<{ settings: Record<string, string> }>('/api/settings'),

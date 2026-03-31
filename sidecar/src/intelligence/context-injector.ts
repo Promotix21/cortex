@@ -278,6 +278,21 @@ export function assembleContext(projectId: string): { content: string; tokenCoun
     });
   }
 
+  // MCP server info — let Claude Code know about available tools
+  const mcpInfo = [
+    'Cortex MCP Server running at http://127.0.0.1:4710 (JSON-RPC over HTTP)',
+    'Available tools: get_project_brain, search_patterns, match_error, get_file_index, get_server_info, get_context, save_intelligence, create_docx, create_pdf, create_spreadsheet, read_docx, read_pdf',
+    'Use save_intelligence to capture decisions, known issues, patterns, or debug solutions during this session.',
+    'Use match_error to check if a similar bug was solved before.',
+  ].join('\n');
+  sections.push({
+    key: 'mcp_tools',
+    title: 'Cortex MCP Tools (localhost:4710)',
+    content: mcpInfo,
+    tokens: estimateTokens(mcpInfo),
+    priority: 3,
+  });
+
   // Check if masterpiece mode is enabled
   let masterpieceEnabled = false;
   try {

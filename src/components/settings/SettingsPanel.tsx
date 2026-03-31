@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings-store';
 import { BudgetSettings } from '@/components/budget/BudgetSettings';
+import { api } from '@/lib/api';
 import {
   CheckCircle, XCircle, RefreshCw,
   Terminal, Shield, Database, Trash2, Loader2, Zap, Globe, Copy, Check, Sparkles,
+  Server, Chrome, Wrench, Radio,
 } from 'lucide-react';
 
 export function SettingsPanel() {
@@ -30,17 +32,16 @@ export function SettingsPanel() {
       'This will clear ALL Cortex data including projects, sessions, notes, and brain data. This cannot be undone. Continue?'
     );
     if (!confirmed) return;
-    // TODO: call clear endpoint
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="text-2xl font-bold" style={{ marginBottom: 8, color: 'var(--text-primary)' }}>
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>
           Settings
         </h1>
         <p style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
-          Configure your Claude Max subscription connection and Cortex preferences
+          Configure your Claude Max subscription, services, and preferences
         </p>
       </div>
 
@@ -51,280 +52,164 @@ export function SettingsPanel() {
         </div>
       )}
 
-      {/* Claude Max Subscription */}
-      <SectionCard
-        title="Claude Max Subscription"
-        icon={Zap}
-        description="Cortex uses your Claude Max plan through the Claude CLI — no API key needed"
-      >
+      {/* 2-column grid layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+
+        {/* LEFT COLUMN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* How it works explanation */}
-          <div
-            className="rounded-xl"
-            style={{ padding: '16px 20px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
-          >
-            <p className="leading-relaxed" style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-              Cortex connects to Claude through the <strong style={{ color: 'var(--text-primary)' }}>Claude Code CLI</strong>,
-              which uses your Claude Max subscription (browser-based OAuth). No API keys or credit card billing —
-              everything runs through your existing Max plan.
-            </p>
-          </div>
 
-          {/* CLI Installation Status */}
-          <div className="flex items-center justify-between" style={{ padding: '10px 0' }}>
-            <div className="flex items-center" style={{ gap: 12 }}>
-              <Terminal size={18} style={{ color: 'var(--text-secondary)' }} />
-              <div>
-                <div className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-                  Claude CLI
+          {/* Claude Max Subscription — compact */}
+          <SectionCard title="Claude Max Subscription" icon={Zap} description="Uses Claude CLI — no API key needed">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <StatusRow icon={Terminal} label="Claude CLI" sub="Required for AI" ok={claudeStatus.installed} okLabel="Installed" failLabel="Not Installed" />
+              <StatusRow icon={Shield} label="Authentication" sub="Max subscription" ok={claudeStatus.authenticated} okLabel="Connected" failLabel="Not Connected" />
+              {claudeStatus.version && (
+                <div className="flex items-center justify-between" style={{ padding: '6px 0' }}>
+                  <div className="flex items-center" style={{ gap: 10 }}>
+                    <Globe size={16} style={{ color: 'var(--text-tertiary)' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Version</span>
+                  </div>
+                  <span className="font-mono rounded-lg" style={{ fontSize: 13, padding: '5px 12px', background: 'var(--bg-primary)', color: 'var(--accent)' }}>
+                    {claudeStatus.version}
+                  </span>
                 </div>
-                <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-tertiary)' }}>
-                  Required for all AI features
+              )}
+              {claudeStatus.installed && claudeStatus.authenticated && (
+                <div className="flex items-center rounded-lg" style={{ gap: 10, padding: '10px 14px', background: 'var(--success-dim)', border: '1px solid rgba(166,227,161,0.3)' }}>
+                  <CheckCircle size={16} style={{ color: 'var(--success)' }} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>Ready to go</span>
                 </div>
+              )}
+              {!claudeStatus.installed && (
+                <div className="rounded-lg" style={{ padding: '12px 16px', background: 'var(--warning-dim)', border: '1px solid rgba(249,226,175,0.3)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--warning)', marginBottom: 8 }}>Install Claude CLI</div>
+                  <CommandBlock command="npm install -g @anthropic-ai/claude-code" onCopy={() => copyCommand('npm install -g @anthropic-ai/claude-code')} copied={copied} />
+                </div>
+              )}
+              {claudeStatus.installed && !claudeStatus.authenticated && (
+                <div className="rounded-lg" style={{ padding: '12px 16px', background: 'var(--accent-dim)', border: '1px solid rgba(137,180,250,0.3)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', marginBottom: 8 }}>Authenticate with Claude Max</div>
+                  <CommandBlock command="claude login" onCopy={() => copyCommand('claude login')} copied={copied} />
+                </div>
+              )}
+              <div className="flex justify-end">
+                <button onClick={() => checkClaudeStatus()} className="flex items-center rounded-lg" style={{ gap: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                  <RefreshCw size={14} /> Refresh
+                </button>
               </div>
             </div>
-            <StatusBadge
-              ok={claudeStatus.installed}
-              labelOk="Installed"
-              labelFail="Not Installed"
-            />
-          </div>
+          </SectionCard>
 
-          {/* Auth Status */}
-          <div className="flex items-center justify-between" style={{ padding: '10px 0' }}>
-            <div className="flex items-center" style={{ gap: 12 }}>
-              <Shield size={18} style={{ color: 'var(--text-secondary)' }} />
+          {/* Masterpiece Mode */}
+          <SectionCard title="Masterpiece Mode" icon={Sparkles} description="Award-worthy design rules in AI context">
+            <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-                  Authentication
-                </div>
-                <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-tertiary)' }}>
-                  Claude Max subscription login
-                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Enable</div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>Lenis, GSAP, Catppuccin, desktop-quality standards</div>
               </div>
-            </div>
-            <StatusBadge
-              ok={claudeStatus.authenticated}
-              labelOk="Connected"
-              labelFail="Not Connected"
-            />
-          </div>
-
-          {/* Version */}
-          {claudeStatus.version && (
-            <div className="flex items-center justify-between" style={{ padding: '10px 0' }}>
-              <div className="flex items-center" style={{ gap: 12 }}>
-                <Globe size={18} style={{ color: 'var(--text-secondary)' }} />
-                <div className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-                  Version
-                </div>
-              </div>
-              <span
-                className="font-mono rounded-lg"
-                style={{ fontSize: 14, padding: '8px 16px', background: 'var(--bg-primary)', color: 'var(--accent)' }}
+              <button
+                onClick={toggleMasterpieceMode}
+                className="rounded-full transition-colors"
+                style={{ width: 44, height: 24, padding: 3, background: masterpieceMode ? 'var(--accent)' : 'var(--bg-hover)', border: '1px solid var(--border)', position: 'relative', flexShrink: 0 }}
               >
-                {claudeStatus.version}
-              </span>
+                <div className="rounded-full transition-all" style={{ width: 16, height: 16, background: 'white', transform: masterpieceMode ? 'translateX(20px)' : 'translateX(0)' }} />
+              </button>
             </div>
-          )}
+          </SectionCard>
 
-          {/* Divider */}
-          <div style={{ borderTop: '1px solid var(--border)' }} />
-
-          {/* Install Instructions */}
-          {!claudeStatus.installed && (
-            <div
-              className="rounded-xl"
-              style={{ padding: '20px 24px', background: 'var(--warning-dim)', border: '1px solid rgba(249, 226, 175, 0.3)' }}
-            >
-              <div className="font-semibold" style={{ fontSize: 14, marginBottom: 10, color: 'var(--warning)' }}>
-                Step 1: Install Claude CLI
-              </div>
-              <p style={{ fontSize: 14, marginBottom: 14, color: 'var(--text-secondary)' }}>
-                Open a terminal and run:
-              </p>
-              <CommandBlock
-                command="npm install -g @anthropic-ai/claude-code"
-                onCopy={() => copyCommand('npm install -g @anthropic-ai/claude-code')}
-                copied={copied}
-              />
-            </div>
-          )}
-
-          {/* Auth Instructions */}
-          {claudeStatus.installed && !claudeStatus.authenticated && (
-            <div
-              className="rounded-xl"
-              style={{ padding: '20px 24px', background: 'var(--accent-dim)', border: '1px solid rgba(137, 180, 250, 0.3)' }}
-            >
-              <div className="font-semibold" style={{ fontSize: 14, marginBottom: 10, color: 'var(--accent)' }}>
-                {!claudeStatus.installed ? 'Step 2' : 'Step 1'}: Authenticate with Claude Max
-              </div>
-              <p style={{ fontSize: 14, marginBottom: 14, color: 'var(--text-secondary)' }}>
-                This will open your browser to sign in with your Claude Max account:
-              </p>
-              <CommandBlock
-                command="claude login"
-                onCopy={() => copyCommand('claude login')}
-                copied={copied}
-              />
-              <p style={{ fontSize: 13, marginTop: 14, color: 'var(--text-tertiary)' }}>
-                After signing in, click "Refresh Status" below to verify the connection.
-              </p>
-            </div>
-          )}
-
-          {/* All Good State */}
-          {claudeStatus.installed && claudeStatus.authenticated && (
-            <div
-              className="rounded-xl flex items-center"
-              style={{ padding: '20px 24px', gap: 16, background: 'var(--success-dim)', border: '1px solid rgba(166, 227, 161, 0.3)' }}
-            >
-              <CheckCircle size={24} style={{ color: 'var(--success)' }} />
-              <div>
-                <div className="font-semibold" style={{ fontSize: 14, color: 'var(--success)' }}>
-                  Ready to go
-                </div>
-                <p style={{ fontSize: 13, marginTop: 4, color: 'var(--text-secondary)' }}>
-                  Claude Max subscription is connected. All AI features are available.
-                </p>
+          {/* Data & Storage */}
+          <SectionCard title="Data & Storage" icon={Database} description="All data stays on your machine">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <InfoRow label="Data Directory" value="~/.cortex/" />
+              <InfoRow label="Database" value="cortex.db (35 tables)" />
+              <InfoRow label="Privacy" value="Local only" accent="var(--success)" />
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                <button onClick={handleClearData} className="flex items-center rounded-lg" style={{ gap: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--error-dim)', color: 'var(--error)', border: '1px solid rgba(243,139,168,0.3)' }}>
+                  <Trash2 size={14} /> Clear All Data
+                </button>
               </div>
             </div>
-          )}
-
-          {/* Refresh Button */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => checkClaudeStatus()}
-              className="flex items-center rounded-xl font-medium transition-colors"
-              style={{
-                gap: 10,
-                padding: '12px 24px',
-                fontSize: 14,
-                background: 'var(--bg-hover)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border)',
-              }}
-            >
-              <RefreshCw size={16} />
-              Refresh Status
-            </button>
-          </div>
+          </SectionCard>
         </div>
-      </SectionCard>
 
-      {/* Masterpiece Mode */}
-      <SectionCard title="Masterpiece Mode" icon={Sparkles} description="Inject award-worthy design philosophy into all AI suggestions">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-                Enable Masterpiece Mode
-              </div>
-              <div style={{ fontSize: 13, marginTop: 4, color: 'var(--text-tertiary)' }}>
-                Adds premium design rules, animation patterns, and code quality standards to every AI interaction
-              </div>
-            </div>
-            <button
-              onClick={toggleMasterpieceMode}
-              className="rounded-full transition-colors"
-              style={{
-                width: 48,
-                height: 26,
-                padding: 3,
-                background: masterpieceMode ? 'var(--accent)' : 'var(--bg-hover)',
-                border: '1px solid var(--border)',
-                position: 'relative',
-                flexShrink: 0,
-              }}
-            >
-              <div
-                className="rounded-full transition-all"
-                style={{
-                  width: 18,
-                  height: 18,
-                  background: 'white',
-                  transform: masterpieceMode ? 'translateX(22px)' : 'translateX(0)',
-                }}
-              />
-            </button>
-          </div>
-          {masterpieceMode && (
-            <div
-              className="rounded-xl"
-              style={{ padding: '14px 18px', background: 'var(--accent-dim)', border: '1px solid rgba(137,180,250,0.2)' }}
-            >
-              <p style={{ fontSize: 13, color: 'var(--accent)' }}>
-                Active — Lenis scroll, GSAP animations, Catppuccin palette, desktop-quality UI standards, and structured build phases are being injected into all AI context.
-              </p>
-            </div>
-          )}
-        </div>
-      </SectionCard>
-
-      {/* Budget Guard */}
-      <SectionCard title="Budget Guard" icon={Shield} description="Rate limit monitoring — alerts before hitting Claude Max limits">
-        <BudgetSettings />
-      </SectionCard>
-
-      {/* Data & Storage */}
-      <SectionCard title="Data & Storage" icon={Database} description="Local storage — all data stays on your machine">
+        {/* RIGHT COLUMN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <InfoRow
-            label="Data Directory"
-            description="Where Cortex stores its database"
-            value="~/.cortex/"
-          />
-          <InfoRow
-            label="Database"
-            description="SQLite database file (31 tables)"
-            value="cortex.db"
-          />
-          <InfoRow
-            label="Privacy"
-            description="No telemetry, no cloud sync, no data collection"
-            value="Local only"
-            accent="var(--success)"
-          />
 
-          <div style={{ borderTop: '1px solid var(--border)' }} />
+          {/* Services & Integrations */}
+          <ServicesPanel />
 
-          <div>
-            <button
-              onClick={handleClearData}
-              className="flex items-center rounded-xl font-semibold transition-colors"
-              style={{
-                gap: 10,
-                padding: '12px 24px',
-                fontSize: 14,
-                background: 'var(--error-dim)',
-                color: 'var(--error)',
-                border: '1px solid rgba(243, 139, 168, 0.3)',
-              }}
-            >
-              <Trash2 size={16} />
-              Clear All Data
-            </button>
-            <p style={{ fontSize: 13, marginTop: 10, color: 'var(--text-tertiary)' }}>
-              Removes all projects, sessions, notes, brain data, and settings. Cannot be undone.
-            </p>
-          </div>
+          {/* Budget Guard */}
+          <SectionCard title="Budget Guard" icon={Shield} description="Rate limit alerts for Claude Max">
+            <BudgetSettings />
+          </SectionCard>
         </div>
-      </SectionCard>
+      </div>
 
-      {/* About */}
-      <div
-        className="rounded-xl text-center"
-        style={{ padding: '20px 24px', marginBottom: 32, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-      >
-        <p className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-          Cortex v0.1.0
-        </p>
-        <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text-tertiary)' }}>
-          AI Development Workspace — Built by Rajesh Kumar
-        </p>
+      {/* About — full width */}
+      <div className="rounded-xl text-center" style={{ padding: '16px 24px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Cortex v0.1.0</span>
+        <span style={{ fontSize: 13, color: 'var(--text-tertiary)', marginLeft: 12 }}>AI Development Workspace — Built by Rajesh Kumar</span>
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Services & Integrations                                             */
+/* ------------------------------------------------------------------ */
+
+function ServicesPanel() {
+  const [sidecar, setSidecar] = useState<{ ok: boolean; sessions: number; terminals: number }>({ ok: false, sessions: 0, terminals: 0 });
+  const [mcp, setMcp] = useState<{ running: boolean; tools: any[] }>({ running: false, tools: [] });
+  const [bridge, setBridge] = useState<{ connected: boolean }>({ connected: false });
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    const [h, m, b] = await Promise.all([
+      api.health().catch(() => null),
+      api.mcpStatus().catch(() => ({ running: false, tools: [] })),
+      api.bridgeStatus().catch(() => ({ connected: false })),
+    ]);
+    if (h) setSidecar({ ok: true, sessions: h.activeSessions, terminals: h.activeTerminals });
+    else setSidecar({ ok: false, sessions: 0, terminals: 0 });
+    setMcp(m);
+    setBridge(b);
+    setRefreshing(false);
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  return (
+    <SectionCard title="Services & Integrations" icon={Radio} description="Live status of all connected services">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <StatusRow icon={Server} label="Express Sidecar" sub={`Port 4700 · ${sidecar.sessions} sessions · ${sidecar.terminals} terminals`} ok={sidecar.ok} okLabel="Running" failLabel="Offline" />
+        <StatusRow icon={Wrench} label="MCP Server" sub={`Port 4710 · ${mcp.tools.length} tools`} ok={mcp.running} okLabel="Running" failLabel="Offline" />
+        <StatusRow icon={Chrome} label="Chrome Console Bridge" sub="Browser error capture" ok={bridge.connected} okLabel="Connected" failLabel="Not Connected" />
+
+        {/* MCP Tools List */}
+        {mcp.running && mcp.tools.length > 0 && (
+          <div className="rounded-lg" style={{ padding: '10px 14px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: 6 }}>
+              MCP Tools
+            </div>
+            <div className="flex flex-wrap" style={{ gap: 4 }}>
+              {mcp.tools.map((t: any) => (
+                <span key={t.name} className="rounded" style={{ padding: '3px 8px', fontSize: 11, fontWeight: 600, background: 'var(--bg-surface)', color: 'var(--accent)', border: '1px solid var(--border)' }} title={t.description}>
+                  {t.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button onClick={refresh} disabled={refreshing} className="flex items-center rounded-lg" style={{ gap: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -332,30 +217,18 @@ export function SettingsPanel() {
 /* Sub-components                                                      */
 /* ------------------------------------------------------------------ */
 
-function SectionCard({
-  title, icon: Icon, description, children,
-}: {
+function SectionCard({ title, icon: Icon, description, children }: {
   title: string; icon: React.ElementType; description: string; children: React.ReactNode;
 }) {
   return (
-    <div
-      className="rounded-xl"
-      style={{ padding: 24, marginBottom: 24, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-    >
-      <div className="flex items-center" style={{ gap: 14, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
-        <div
-          className="rounded-lg flex items-center justify-center"
-          style={{ width: 40, height: 40, background: 'var(--accent-dim)' }}
-        >
-          <Icon size={20} style={{ color: 'var(--accent)' }} />
+    <div className="rounded-xl" style={{ padding: 20, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center" style={{ gap: 12, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+        <div className="rounded-lg flex items-center justify-center" style={{ width: 36, height: 36, background: 'var(--accent-dim)' }}>
+          <Icon size={18} style={{ color: 'var(--accent)' }} />
         </div>
         <div>
-          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-            {title}
-          </h2>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-            {description}
-          </p>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{description}</p>
         </div>
       </div>
       {children}
@@ -363,65 +236,42 @@ function SectionCard({
   );
 }
 
-function StatusBadge({ ok, labelOk, labelFail }: { ok: boolean; labelOk: string; labelFail: string }) {
+function StatusRow({ icon: Icon, label, sub, ok, okLabel, failLabel }: {
+  icon: React.ElementType; label: string; sub: string; ok: boolean; okLabel: string; failLabel: string;
+}) {
   return (
-    <span
-      className="inline-flex items-center rounded-full font-semibold"
-      style={{
-        gap: 8,
-        padding: '8px 18px',
-        fontSize: 14,
-        background: ok ? 'var(--success-dim)' : 'var(--error-dim)',
-        color: ok ? 'var(--success)' : 'var(--error)',
-      }}
-    >
-      {ok ? <CheckCircle size={16} /> : <XCircle size={16} />}
-      {ok ? labelOk : labelFail}
-    </span>
+    <div className="flex items-center justify-between" style={{ padding: '6px 0' }}>
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <Icon size={16} style={{ color: 'var(--text-tertiary)' }} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{sub}</div>
+        </div>
+      </div>
+      <span className="inline-flex items-center rounded-full" style={{ gap: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, background: ok ? 'var(--success-dim)' : 'var(--error-dim)', color: ok ? 'var(--success)' : 'var(--error)' }}>
+        {ok ? <CheckCircle size={13} /> : <XCircle size={13} />}
+        {ok ? okLabel : failLabel}
+      </span>
+    </div>
   );
 }
 
 function CommandBlock({ command, onCopy, copied }: { command: string; onCopy: () => void; copied: boolean }) {
   return (
-    <div
-      className="flex items-center justify-between rounded-xl"
-      style={{ padding: '14px 20px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
-    >
-      <code className="font-mono" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-        $ {command}
-      </code>
-      <button
-        onClick={onCopy}
-        className="rounded-lg transition-colors"
-        style={{ padding: 8, color: 'var(--text-tertiary)' }}
-      >
-        {copied ? <Check size={16} style={{ color: 'var(--success)' }} /> : <Copy size={16} />}
+    <div className="flex items-center justify-between rounded-lg" style={{ padding: '10px 14px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}>
+      <code className="font-mono" style={{ fontSize: 13, color: 'var(--text-primary)' }}>$ {command}</code>
+      <button onClick={onCopy} className="rounded" style={{ padding: 6, color: 'var(--text-tertiary)' }}>
+        {copied ? <Check size={14} style={{ color: 'var(--success)' }} /> : <Copy size={14} />}
       </button>
     </div>
   );
 }
 
-function InfoRow({
-  label, description, value, accent,
-}: {
-  label: string; description: string; value: string; accent?: string;
-}) {
+function InfoRow({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
-    <div className="flex items-center justify-between" style={{ padding: '6px 0' }}>
-      <div>
-        <div className="font-semibold" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-tertiary)' }}>
-          {description}
-        </div>
-      </div>
-      <span
-        className="font-mono rounded-lg"
-        style={{ fontSize: 14, padding: '8px 16px', background: 'var(--bg-primary)', color: accent || 'var(--text-secondary)' }}
-      >
-        {value}
-      </span>
+    <div className="flex items-center justify-between" style={{ padding: '4px 0' }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
+      <span className="font-mono rounded-lg" style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-primary)', color: accent || 'var(--text-secondary)' }}>{value}</span>
     </div>
   );
 }
