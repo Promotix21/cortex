@@ -249,8 +249,9 @@ The Document Builder MCP means Claude can generate Word docs, PDFs, and spreadsh
 `cortex-chrome-bridge` — Manifest V3:
 
 - Content script intercepts `console.error`, `console.warn`, unhandled errors, failed fetch/XHR
-- Background service worker bridges to sidecar via WebSocket (fallback: HTTP)
-- Popup UI with connection status and queue counts
+- Background service worker posts captured data to sidecar via HTTP
+- Popup UI with connection status, site blocklist (one-click block/unblock), and queue counts
+- Errors auto-matched to projects by `dev_server_port`
 
 ### Remotion Studio (Phase 7)
 
@@ -268,14 +269,20 @@ Programmatic video rendering from project data:
 
 ### Everything Else
 
-- **Terminal Engine** — node-pty + xterm.js, tabbed, 4 types (shell / AI session / dev server / git)
+- **Terminal Engine** — node-pty + xterm.js, tabbed + grid views, 4 types (shell / AI session / dev server / git), ResizeObserver auto-fit
 - **Git Panel** — live branch, status, diff viewer, commit log, pull/push
 - **Markdown Notes** — per-project with 1s debounced autosave
 - **Task Tracker** — click-to-cycle: Pending → Doing → Done → Blocked
 - **Reference Intelligence** — version-pinned tool commands, breaking change log, deprecated API tracking
 - **Workspace Resume** — close Cortex, reopen, everything is exactly where you left it
 - **Project Icons** — per-project emoji or image icons in sidebar and dashboard
-- **9 workspace tabs** — Overview, Terminal, Git, Notes, Brain, AI Chat, Remotion Studio, Settings
+- **Open Project Folder** — hover over any project to reveal a folder button that opens in system file manager
+- **Toast Notifications** — all errors and important actions surfaced via sonner toasts
+- **Error Boundaries** — each workspace tab isolated, crash in one doesn't take down the app
+- **Confirmation Dialogs** — type-to-confirm for destructive actions (clear data, etc.)
+- **12 Keyboard Shortcuts** — Ctrl+1-9 tabs, Ctrl+Tab terminal cycling, Ctrl+K palette, Ctrl+N session, Ctrl+T terminal, Ctrl+W close, Ctrl+, settings, Ctrl+Shift+P project search
+- **Accessibility** — ARIA roles on tabs/modals, aria-live status bar, keyboard navigation
+- **9 workspace tabs** — Overview, Terminal, Sessions, Git, Notes, Brain, AI Chat, Documents, Remotion Studio
 
 ---
 
@@ -462,7 +469,7 @@ Cortex provides the missing infrastructure layer. It doesn't replace Claude Code
 
 **Alpha** — active development. Linux-first release targeted.
 
-Core features are functional. 46/46 API endpoint tests passing. TypeScript strict mode, 0 errors. Testing and hardening in progress.
+Core features are functional. TypeScript strict mode, 0 errors. Typed API client (82 endpoints), toast error UX, error boundaries, ARIA accessibility, 33 database indexes, CSP hardened. Testing infrastructure in progress.
 
 ---
 
@@ -518,6 +525,17 @@ pnpm tauri build                        # Full app
 - [x] Remotion Studio — programmatic video rendering
 - [x] Drag & Drop file attachment in chat
 - [x] Project icons (emoji + custom image)
+- [x] Open project folder (hover button in sidebar)
+- [x] Toast notifications (sonner) — all errors/actions surfaced
+- [x] Error boundaries — per-tab crash isolation
+- [x] CSP hardened — proper Content Security Policy
+- [x] Type safety — 40+ interfaces, typed API client
+- [x] 12 keyboard shortcuts — Ctrl+1-9 tabs, Ctrl+Tab, Ctrl+W, etc.
+- [x] ARIA accessibility — dialog roles, tab roles, live regions
+- [x] 14 additional DB indexes for scalability
+- [x] Dynamic sidecar URL — no more hardcoded localhost
+- [x] Confirmation dialogs — type-to-confirm destructive actions
+- [x] Chrome extension HTTP bridge — POST endpoints for errors/network
 
 ### Next
 - [ ] Tauri AppImage / .deb / .rpm packaging
@@ -553,14 +571,17 @@ pnpm tauri build                        # Full app
 ## Stats
 
 ```
-Source files:    85+ (.ts + .tsx + .js)
-Total lines:    ~10,000+
-API endpoints:  70+
-DB tables:      35
-React components: 30+
+Source files:    90+ (.ts + .tsx + .js)
+Total lines:    ~18,000+
+API endpoints:  170
+DB tables:      33
+DB indexes:     33
+React components: 38+
 Zustand stores:   7
-MCP tools:        6
+Type definitions: 7 files, 40+ interfaces
+MCP tools:        12
 Chrome Extension: Manifest V3
+Keyboard shortcuts: 12
 Build time:     2.3s (Vite)
 ```
 
