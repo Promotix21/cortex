@@ -67,7 +67,8 @@ export function WorkspaceTabs() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      <div className={`flex-1 overflow-auto ${!fullHeightActivities.includes(activeActivity) ? '' : ''}`}
+      <div className={`flex-1 overflow-auto tab-content-enter`}
+        key={activeActivity}
         style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
       >
         <ErrorBoundary fallbackLabel={`Error in ${activeActivity} panel`} key={activeActivity}>

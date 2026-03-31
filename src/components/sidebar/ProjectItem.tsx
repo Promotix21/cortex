@@ -86,12 +86,11 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
           </span>
           {hasRunningSession && (
             <span
-              className="shrink-0 rounded-full"
+              className="shrink-0 rounded-full pulse-dot"
               style={{
                 width: 9,
                 height: 9,
                 background: 'var(--success)',
-                boxShadow: '0 0 6px rgba(166, 227, 161, 0.5)',
               }}
               title="Active session running"
             />

@@ -106,3 +106,74 @@ input:focus, textarea:focus {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   pointer-events: none;
 }
+
+/* ─── Phase 7: Animations & Polish ─── */
+
+/* Tab content fade-in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tab-content-enter {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* Modal overlay animation */
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+[role="dialog"] {
+  animation: overlayFadeIn 0.15s ease-out;
+}
+
+[role="dialog"] > div {
+  animation: modalSlideUp 0.2s ease-out;
+}
+
+/* Skeleton loading shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-hover) 50%, var(--bg-surface) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite ease-in-out;
+  border-radius: 8px;
+}
+
+/* Pulse animation for active session dots */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(166, 227, 161, 0.3); }
+  50% { box-shadow: 0 0 10px rgba(166, 227, 161, 0.6); }
+}
+
+.pulse-dot {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Hover lift effect for cards */
+.hover-lift {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Smooth border transitions for focus */
+.focus-ring:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
