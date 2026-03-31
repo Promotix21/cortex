@@ -130,7 +130,7 @@ sessionsRouter.post('/:id/resume', async (req, res) => {
   // Build resume context from old session
   const oldHistory = db.prepare('SELECT prompt_text FROM session_history WHERE session_id = ? ORDER BY timestamp ASC').all(oldSession.id) as any[];
   const oldOutput = oldSession.session_output || '';
-  const handoff = getHandoff(oldSession.project_id, project.path);
+  const handoff = await getHandoff(project.path);
 
   let resumeContext = `You are resuming a previous Claude Code session named "${oldSession.name}".\n\n`;
 
@@ -383,7 +383,7 @@ sessionsRouter.get('/:id/resume-diff', async (req, res) => {
 });
 
 // GET /api/sessions/:id/handoff — get handoff document for session's project
-sessionsRouter.get('/:id/handoff', (req, res) => {
+sessionsRouter.get('/:id/handoff', async (req, res) => {
   const mgr = getSessionManager();
   const session = mgr.getSessionInfo(req.params.id);
   if (!session) {
@@ -398,7 +398,7 @@ sessionsRouter.get('/:id/handoff', (req, res) => {
     return;
   }
 
-  const content = getHandoff(project.path);
+  const content = await getHandoff(project.path);
   res.json({ handoff: content });
 });
 

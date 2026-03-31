@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { v4 as uuid } from 'uuid';
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import { execFile } from 'child_process';
 import { scanProject } from '../intelligence/project-scanner.js';
@@ -28,7 +29,7 @@ function detectCompany(name: string, projectPath: string): string | null {
 }
 
 // Detect project type from filesystem
-function detectProjectType(projectPath: string): string {
+async function detectProjectType(projectPath: string): Promise<string> {
   const checks: [string, string][] = [
     ['next.config.js', 'nextjs'],
     ['next.config.ts', 'nextjs'],
@@ -47,29 +48,27 @@ function detectProjectType(projectPath: string): string {
   ];
 
   for (const [file, type] of checks) {
-    if (fs.existsSync(path.join(projectPath, file))) return type;
+    try { await fsp.access(path.join(projectPath, file)); return type; } catch { /* not found */ }
   }
 
   // Check package.json for react/express
   const pkgPath = path.join(projectPath, 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-      if (deps['react']) return 'react';
-      if (deps['express']) return 'express';
-      return 'node';
-    } catch {
-      return 'node';
-    }
+  try {
+    const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf-8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    if (deps['react']) return 'react';
+    if (deps['express']) return 'express';
+    return 'node';
+  } catch {
+    // no package.json or parse error
   }
 
   return 'unknown';
 }
 
 // Check if git is initialized
-function detectGit(projectPath: string): boolean {
-  return fs.existsSync(path.join(projectPath, '.git'));
+async function detectGit(projectPath: string): Promise<boolean> {
+  try { await fsp.access(path.join(projectPath, '.git')); return true; } catch { return false; }
 }
 
 // GET /api/projects
@@ -149,15 +148,15 @@ projectsRouter.post('/', async (req, res) => {
   }
 
   // Validate path exists
-  if (!fs.existsSync(projectPath)) {
+  try { await fsp.access(projectPath); } catch {
     res.status(400).json({ error: `Path does not exist: ${projectPath}` });
     return;
   }
 
   const db = getDb();
   const id = uuid();
-  const type = detectProjectType(projectPath);
-  const gitEnabled = detectGit(projectPath) ? 1 : 0;
+  const type = await detectProjectType(projectPath);
+  const gitEnabled = (await detectGit(projectPath)) ? 1 : 0;
   const resolvedCompany = company || detectCompany(name, projectPath);
   const now = new Date().toISOString();
 
@@ -307,7 +306,7 @@ projectsRouter.get('/:id/structure', (req, res) => {
 });
 
 // GET /api/projects/:id/documents — list .md, .docx, .xlsx, .pdf files
-projectsRouter.get('/:id/documents', (req, res) => {
+projectsRouter.get('/:id/documents', async (req, res) => {
   const db = getDb();
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id) as any;
   if (!project) {
@@ -319,20 +318,20 @@ projectsRouter.get('/:id/documents', (req, res) => {
   const skipDirs = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'vendor', 'target', '.cache', 'coverage', '__pycache__']);
   const documents: { name: string; path: string; relativePath: string; ext: string; size: number; modified: string }[] = [];
 
-  function scanDir(dir: string, depth: number) {
+  async function scanDir(dir: string, depth: number) {
     if (depth > 5 || documents.length > 200) return;
     try {
-      const items = fs.readdirSync(dir, { withFileTypes: true });
+      const items = await fsp.readdir(dir, { withFileTypes: true });
       for (const item of items) {
         if (item.isDirectory()) {
           if (skipDirs.has(item.name)) continue;
-          scanDir(path.join(dir, item.name), depth + 1);
+          await scanDir(path.join(dir, item.name), depth + 1);
         } else if (item.isFile()) {
           const ext = path.extname(item.name).toLowerCase();
           if (!docExtensions.has(ext)) continue;
           const fullPath = path.join(dir, item.name);
           try {
-            const stat = fs.statSync(fullPath);
+            const stat = await fsp.stat(fullPath);
             documents.push({
               name: item.name,
               path: fullPath,
@@ -347,13 +346,13 @@ projectsRouter.get('/:id/documents', (req, res) => {
     } catch { /* */ }
   }
 
-  scanDir(project.path, 0);
+  await scanDir(project.path, 0);
   documents.sort((a, b) => b.modified.localeCompare(a.modified));
   res.json({ documents, total: documents.length });
 });
 
 // GET /api/projects/:id/documents/read — read a document file content
-projectsRouter.get('/:id/documents/read', (req, res) => {
+projectsRouter.get('/:id/documents/read', async (req, res) => {
   const filePath = req.query.path as string;
   if (!filePath) {
     res.status(400).json({ error: 'path query parameter required' });
@@ -374,14 +373,14 @@ projectsRouter.get('/:id/documents/read', (req, res) => {
     return;
   }
 
-  if (!fs.existsSync(resolved)) {
+  try { await fsp.access(resolved); } catch {
     res.status(404).json({ error: 'File not found' });
     return;
   }
 
   const ext = path.extname(resolved).toLowerCase();
   if (ext === '.md' || ext === '.mdx' || ext === '.txt' || ext === '.csv') {
-    const content = fs.readFileSync(resolved, 'utf-8');
+    const content = await fsp.readFile(resolved, 'utf-8');
     res.json({ content, type: 'text' });
   } else {
     // Binary files — serve as download

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import { getDb } from '../db/index.js';
 import { getProjectBrain } from '../chat/chat-service.js';
@@ -366,7 +367,7 @@ export function assembleContext(projectId: string): { content: string; tokenCoun
  * Write .cortex-context.md to the project directory.
  * Called before every session spawn.
  */
-export function injectContext(projectId: string, projectPath: string): { written: boolean; tokenCount: number } {
+export async function injectContext(projectId: string, projectPath: string): Promise<{ written: boolean; tokenCount: number }> {
   try {
     const { content, tokenCount } = assembleContext(projectId);
 
@@ -375,11 +376,11 @@ export function injectContext(projectId: string, projectPath: string): { written
     }
 
     const contextPath = path.join(projectPath, '.cortex-context.md');
-    fs.writeFileSync(contextPath, content, 'utf-8');
+    await fsp.writeFile(contextPath, content, 'utf-8');
 
     // Ensure CLAUDE.md references the context file and gitignore entries exist
-    ensureClaudeMdReference(projectPath);
-    ensureGitignoreEntries(projectPath);
+    await ensureClaudeMdReference(projectPath);
+    await ensureGitignoreEntries(projectPath);
 
     return { written: true, tokenCount };
   } catch (err) {
@@ -417,40 +418,39 @@ ${CORTEX_MARKER}
 /**
  * Ensure .cortex-context.md and NEXT_SESSION_PROMPT.md are gitignored.
  */
-function ensureGitignoreEntries(projectPath: string): void {
+async function ensureGitignoreEntries(projectPath: string): Promise<void> {
   const gitignorePath = path.join(projectPath, '.gitignore');
   const entries = ['.cortex-context.md', 'NEXT_SESSION_PROMPT.md', 'NEXT-SESSION-PROMPT.md', 'CORTEX_INTELLIGENCE_MASTER.md'];
 
   try {
     let content = '';
-    if (fs.existsSync(gitignorePath)) {
-      content = fs.readFileSync(gitignorePath, 'utf-8');
-    }
+    try { content = await fsp.readFile(gitignorePath, 'utf-8'); } catch { /* no file */ }
 
     const missing = entries.filter(e => !content.includes(e));
     if (missing.length === 0) return;
 
     const block = '\n# Cortex intelligence files (auto-generated)\n' + missing.join('\n') + '\n';
-    fs.writeFileSync(gitignorePath, content.trimEnd() + '\n' + block, 'utf-8');
+    await fsp.writeFile(gitignorePath, content.trimEnd() + '\n' + block, 'utf-8');
   } catch {
     // Non-fatal
   }
 }
 
-function ensureClaudeMdReference(projectPath: string): void {
+async function ensureClaudeMdReference(projectPath: string): Promise<void> {
   const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
 
   try {
-    if (fs.existsSync(claudeMdPath)) {
-      const existing = fs.readFileSync(claudeMdPath, 'utf-8');
-      if (existing.includes(CORTEX_MARKER)) {
-        return; // Already has our block
-      }
-      // Append to existing CLAUDE.md
-      fs.writeFileSync(claudeMdPath, existing + '\n' + CORTEX_CLAUDE_MD_BLOCK, 'utf-8');
+    let existing = '';
+    try { existing = await fsp.readFile(claudeMdPath, 'utf-8'); } catch { /* no file */ }
+
+    if (existing && existing.includes(CORTEX_MARKER)) {
+      return; // Already has our block
+    }
+
+    if (existing) {
+      await fsp.writeFile(claudeMdPath, existing + '\n' + CORTEX_CLAUDE_MD_BLOCK, 'utf-8');
     } else {
-      // Create new CLAUDE.md
-      fs.writeFileSync(claudeMdPath, CORTEX_CLAUDE_MD_BLOCK.trim() + '\n', 'utf-8');
+      await fsp.writeFile(claudeMdPath, CORTEX_CLAUDE_MD_BLOCK.trim() + '\n', 'utf-8');
     }
   } catch {
     // Non-fatal — project dir may be read-only
