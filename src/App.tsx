@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Toaster } from 'sonner';
 import { ActivityBar } from '@/components/ActivityBar';
 import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
 import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
@@ -140,6 +141,21 @@ export default function App() {
 
       {/* Command palette */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      {/* Toast notifications */}
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-primary)',
+            fontSize: 13,
+            fontFamily: 'inherit',
+          },
+        }}
+        richColors
+      />
     </div>
   );
 }

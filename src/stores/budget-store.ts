@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 
 interface BudgetLimit {
@@ -51,9 +52,14 @@ export const useBudgetStore = create<BudgetStore>((set) => ({
   },
 
   updateLimit: async (id, fields) => {
-    await api.updateBudgetLimit(id, fields);
-    const data = await api.getBudgetStatus();
-    set({ limits: data.limits });
+    try {
+      await api.updateBudgetLimit(id, fields);
+      const data = await api.getBudgetStatus();
+      set({ limits: data.limits });
+      toast.success('Budget limit updated');
+    } catch (err) {
+      toast.error('Failed to update budget limit', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 
   acknowledgeAlert: async (id) => {

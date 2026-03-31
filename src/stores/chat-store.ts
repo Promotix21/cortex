@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 
 export interface ChatMessage {
@@ -110,12 +111,19 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
         streamingContent: '',
       }));
     } catch (err: any) {
-      set({ error: err.message, streaming: false, streamingContent: '' });
+      const msg = err.message || 'Chat failed';
+      set({ error: msg, streaming: false, streamingContent: '' });
+      toast.error('Chat error', { description: msg });
     }
   },
 
   clearHistory: async (projectId) => {
-    await api.clearChat(projectId);
-    set({ messages: [], error: null });
+    try {
+      await api.clearChat(projectId);
+      set({ messages: [], error: null });
+      toast.success('Chat history cleared');
+    } catch (err) {
+      toast.error('Failed to clear chat', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 }));

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 
 interface ClaudeStatus {
@@ -75,9 +76,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   toggleMasterpieceMode: async () => {
-    const current = get().masterpieceMode;
-    const newVal = !current;
-    await api.saveSetting('masterpiece_mode', String(newVal));
-    set({ masterpieceMode: newVal, settings: { ...get().settings, masterpiece_mode: String(newVal) } });
+    try {
+      const current = get().masterpieceMode;
+      const newVal = !current;
+      await api.saveSetting('masterpiece_mode', String(newVal));
+      set({ masterpieceMode: newVal, settings: { ...get().settings, masterpiece_mode: String(newVal) } });
+      toast.success(newVal ? 'Masterpiece Mode enabled' : 'Masterpiece Mode disabled');
+    } catch (err) {
+      toast.error('Failed to toggle Masterpiece Mode', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 }));

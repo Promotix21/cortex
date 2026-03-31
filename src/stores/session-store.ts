@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import type { Session, UsageSummary } from '@/types/session';
 import { api } from '@/lib/api';
 
@@ -57,41 +58,59 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
   },
 
   spawnSession: async (projectId, name) => {
-    const data = await api.spawnSession(projectId, name);
-    const session = data.session;
-    set(s => ({
-      sessions: [session, ...s.sessions],
-      activeSessions: [session, ...s.activeSessions],
-    }));
-    return session;
+    try {
+      const data = await api.spawnSession(projectId, name);
+      const session = data.session;
+      set(s => ({
+        sessions: [session, ...s.sessions],
+        activeSessions: [session, ...s.activeSessions],
+      }));
+      toast.success('Session started');
+      return session;
+    } catch (err) {
+      toast.error('Failed to start session', { description: err instanceof Error ? err.message : 'Unknown error' });
+      throw err;
+    }
   },
 
   stopSession: async (id) => {
-    await api.stopSession(id);
-    set(s => ({
-      activeSessions: s.activeSessions.filter(sess => sess.id !== id),
-      sessions: s.sessions.map(sess =>
-        sess.id === id ? { ...sess, status: 'completed' as const } : sess
-      ),
-    }));
+    try {
+      await api.stopSession(id);
+      set(s => ({
+        activeSessions: s.activeSessions.filter(sess => sess.id !== id),
+        sessions: s.sessions.map(sess =>
+          sess.id === id ? { ...sess, status: 'completed' as const } : sess
+        ),
+      }));
+    } catch (err) {
+      toast.error('Failed to stop session', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 
   killSession: async (id) => {
-    await api.killSession(id);
-    set(s => ({
-      activeSessions: s.activeSessions.filter(sess => sess.id !== id),
-      sessions: s.sessions.map(sess =>
-        sess.id === id ? { ...sess, status: 'completed' as const } : sess
-      ),
-    }));
+    try {
+      await api.killSession(id);
+      set(s => ({
+        activeSessions: s.activeSessions.filter(sess => sess.id !== id),
+        sessions: s.sessions.map(sess =>
+          sess.id === id ? { ...sess, status: 'completed' as const } : sess
+        ),
+      }));
+    } catch (err) {
+      toast.error('Failed to kill session', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 
   deleteSession: async (id) => {
-    await api.deleteSession(id);
-    set(s => ({
-      sessions: s.sessions.filter(sess => sess.id !== id),
-      activeSessions: s.activeSessions.filter(sess => sess.id !== id),
-    }));
+    try {
+      await api.deleteSession(id);
+      set(s => ({
+        sessions: s.sessions.filter(sess => sess.id !== id),
+        activeSessions: s.activeSessions.filter(sess => sess.id !== id),
+      }));
+    } catch (err) {
+      toast.error('Failed to delete session', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 
   toggleDashboard: () => set(s => ({ dashboardOpen: !s.dashboardOpen })),

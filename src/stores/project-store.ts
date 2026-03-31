@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import type { Project, CreateProjectInput, UpdateProjectInput } from '@/types/project';
 import { api } from '@/lib/api';
 import { useNavigationStore } from './navigation-store';
@@ -78,23 +79,39 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   createProject: async (input) => {
-    const data = await api.createProject(input);
-    set(state => ({ projects: [data.project, ...state.projects] }));
-    return data.project;
+    try {
+      const data = await api.createProject(input);
+      set(state => ({ projects: [data.project, ...state.projects] }));
+      toast.success(`Project "${input.name}" added`);
+      return data.project;
+    } catch (err) {
+      toast.error('Failed to create project', { description: err instanceof Error ? err.message : 'Unknown error' });
+      throw err;
+    }
   },
 
   updateProject: async (id, input) => {
-    const data = await api.updateProject(id, input);
-    set(state => ({
-      projects: state.projects.map(p => (p.id === id ? data.project : p)),
-    }));
+    try {
+      const data = await api.updateProject(id, input);
+      set(state => ({
+        projects: state.projects.map(p => (p.id === id ? data.project : p)),
+      }));
+    } catch (err) {
+      toast.error('Failed to update project', { description: err instanceof Error ? err.message : 'Unknown error' });
+      throw err;
+    }
   },
 
   deleteProject: async (id) => {
-    await api.deleteProject(id);
-    set(state => ({
-      projects: state.projects.filter(p => p.id !== id),
-      activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
-    }));
+    try {
+      await api.deleteProject(id);
+      set(state => ({
+        projects: state.projects.filter(p => p.id !== id),
+        activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
+      }));
+      toast.success('Project deleted');
+    } catch (err) {
+      toast.error('Failed to delete project', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   },
 }));

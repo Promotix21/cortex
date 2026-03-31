@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export function WorkspaceTabs() {
   const activeActivity = useNavigationStore((s) => s.activeActivity);
@@ -68,21 +69,23 @@ export function WorkspaceTabs() {
       <div className={`flex-1 overflow-auto ${!fullHeightActivities.includes(activeActivity) ? '' : ''}`}
         style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
       >
-        {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
-        {activeActivity === 'sessions' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <SessionGridPanel />)}
-        {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
-        {activeActivity === 'git' && <GitPanel />}
-        {activeActivity === 'notes' && <NotesAndTasksPanel />}
-        {activeActivity === 'brain' && (
-          <div className="space-y-6">
-            <IntelligencePanel />
-            <ReferencePanel />
-            <ErrorPanel />
-          </div>
-        )}
-        {activeActivity === 'chat' && <ChatPanel />}
-        {activeActivity === 'documents' && <DocumentsPanel />}
-        {activeActivity === 'studio' && <RemotionStudio />}
+        <ErrorBoundary fallbackLabel={`Error in ${activeActivity} panel`} key={activeActivity}>
+          {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
+          {activeActivity === 'sessions' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <SessionGridPanel />)}
+          {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
+          {activeActivity === 'git' && <GitPanel />}
+          {activeActivity === 'notes' && <NotesAndTasksPanel />}
+          {activeActivity === 'brain' && (
+            <div className="space-y-6">
+              <IntelligencePanel />
+              <ReferencePanel />
+              <ErrorPanel />
+            </div>
+          )}
+          {activeActivity === 'chat' && <ChatPanel />}
+          {activeActivity === 'documents' && <DocumentsPanel />}
+          {activeActivity === 'studio' && <RemotionStudio />}
+        </ErrorBoundary>
       </div>
     </div>
   );
