@@ -33,6 +33,9 @@ export function SessionDashboard() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Session dashboard"
       style={{ background: 'rgba(0,0,0,0.7)', paddingTop: 48 }}
       onClick={(e) => e.target === e.currentTarget && setDashboardOpen(false)}
     >

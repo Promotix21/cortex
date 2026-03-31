@@ -47,6 +47,10 @@ function ActivityIcon({ item, isActive }: { item: ActivityItem; isActive: boolea
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className="w-full flex items-center justify-center relative"
+        role="tab"
+        aria-selected={isActive}
+        aria-label={item.label}
+        tabIndex={isActive ? 0 : -1}
         style={{
           height: 56,
           color: isActive ? 'var(--accent)' : hovered ? 'var(--text-secondary)' : 'var(--text-tertiary)',
@@ -121,7 +125,7 @@ export function ActivityBar() {
       </div>
 
       {/* Top activities */}
-      <div className="flex flex-col" style={{ paddingTop: 8 }}>
+      <nav className="flex flex-col" role="tablist" aria-label="Workspace tabs" style={{ paddingTop: 8 }}>
         {topActivities.map((item) => (
           <ActivityIcon
             key={item.id}
@@ -129,7 +133,7 @@ export function ActivityBar() {
             isActive={activeActivity === item.id}
           />
         ))}
-      </div>
+      </nav>
 
       <div className="flex-1" />
 

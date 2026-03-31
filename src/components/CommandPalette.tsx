@@ -128,6 +128,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-start justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette — search projects, sessions, patterns"
       style={{ paddingTop: 80, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >

@@ -26,6 +26,8 @@ export function StatusBar() {
   return (
     <div
       className="flex items-center px-4 text-xs font-medium select-none shrink-0"
+      role="status"
+      aria-live="polite"
       style={{
         height: 28,
         fontSize: 12,

@@ -69,6 +69,9 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add project"
       style={{ background: 'rgba(0,0,0,0.6)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
