@@ -7,6 +7,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { scanProject } from '../intelligence/project-scanner.js';
 import { indexProject, getProjectStructureSummary } from '../intelligence/file-indexer.js';
+import { injectContext } from '../intelligence/context-injector.js';
 
 export const projectsRouter: ReturnType<typeof Router> = Router();
 
@@ -200,6 +201,16 @@ projectsRouter.post('/', async (req, res) => {
       } catch (err: any) {
         console.error(`[projects] Scan failed for ${name}:`, err.message);
       }
+
+      // Inject .cortex-context.md immediately so it has real data from day one
+      try {
+        const ctx = await injectContext(id, projectPath);
+        if (ctx.written) {
+          console.log(`[projects] Context injected: ${ctx.tokenCount} tokens → .cortex-context.md`);
+        }
+      } catch (err: any) {
+        console.error(`[projects] Context injection failed:`, err.message);
+      }
     } else {
       console.log(`[projects] New/empty project — skipping scan`);
     }
@@ -274,6 +285,12 @@ projectsRouter.post('/:id/scan', async (req, res) => {
       db.prepare('UPDATE projects SET type = ?, updated_at = ? WHERE id = ?')
         .run(betterType, new Date().toISOString(), project.id);
     }
+
+    // Re-inject .cortex-context.md with fresh brain data
+    try {
+      const ctx = await injectContext(project.id, project.path);
+      console.log(`[projects] Context re-injected after scan: ${ctx.tokenCount} tokens`);
+    } catch { /* non-fatal */ }
 
     res.json({ scan: result });
   } catch (err: any) {

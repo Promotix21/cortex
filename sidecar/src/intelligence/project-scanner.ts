@@ -1,9 +1,22 @@
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
 import { indexProject, getProjectStructureSummary } from './file-indexer.js';
 import simpleGit from 'simple-git';
+
+/** Check if a port is currently listening on localhost */
+function isPortListening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(300);
+    socket.once('connect', () => { socket.destroy(); resolve(true); });
+    socket.once('timeout', () => { socket.destroy(); resolve(false); });
+    socket.once('error', () => { socket.destroy(); resolve(false); });
+    socket.connect(port, '127.0.0.1');
+  });
+}
 
 interface CompletionEstimate {
   score: number;          // 0-100
@@ -321,8 +334,37 @@ export async function scanProject(projectId: string, projectPath: string): Promi
     } catch { /* */ }
   }
 
+  // 10. Live port detection — check if detected ports are actually listening
+  const livePorts: number[] = [];
+  const portsToCheck = [...new Set(codeIntel.ports)].slice(0, 10); // max 10 ports
+  for (const port of portsToCheck) {
+    if (await isPortListening(port)) livePorts.push(port);
+  }
+  // Also check common dev ports if not already detected
+  for (const port of [3000, 3001, 5173, 8080, 8000, 4200, 5000]) {
+    if (!portsToCheck.includes(port) && await isPortListening(port)) {
+      livePorts.push(port);
+    }
+  }
+
+  // Auto-set dev_server_port if we found exactly one live port
+  if (livePorts.length >= 1) {
+    const port = livePorts[0];
+    const proj = db.prepare('SELECT dev_server_port FROM projects WHERE id = ?').get(projectId) as any;
+    if (proj && !proj.dev_server_port) {
+      db.prepare('UPDATE projects SET dev_server_port = ? WHERE id = ?').run(port, projectId);
+    }
+    // Add live port info to brain
+    const livePortNote = `\n\nLive ports detected: ${livePorts.join(', ')}`;
+    if (!brain.architecture.includes('Live ports')) {
+      brain.architecture += livePortNote;
+      db.prepare('UPDATE project_brain SET architecture_notes = ? WHERE project_id = ?')
+        .run(brain.architecture, projectId);
+    }
+  }
+
   result.brainPopulated = true;
-  result.summary = `Scanned ${indexed} files. Stacks: ${result.detectedStacks.join(', ') || 'unknown'}. Ports: ${result.ports.join(', ') || 'none'}. Sub-projects: ${result.subProjects.length}. Completion: ~${completion.score}%`;
+  result.summary = `Scanned ${indexed} files. Stacks: ${result.detectedStacks.join(', ') || 'unknown'}. Ports: ${result.ports.join(', ') || 'none'}${livePorts.length ? ` (${livePorts.length} live)` : ''}. Sub-projects: ${result.subProjects.length}. Completion: ~${completion.score}%`;
 
   return result;
 }
