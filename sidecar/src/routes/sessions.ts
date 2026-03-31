@@ -107,7 +107,7 @@ sessionsRouter.get('/:id/output', (req, res) => {
 sessionsRouter.get('/:id/history', (req, res) => {
   const db = getDb();
   const rows = db.prepare(`
-    SELECT * FROM session_history WHERE session_id = ? ORDER BY timestamp ASC
+    SELECT * FROM session_history WHERE session_id = ? ORDER BY timestamp ASC LIMIT 1000
   `).all(req.params.id);
   res.json({ history: rows });
 });

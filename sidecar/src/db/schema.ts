@@ -417,4 +417,19 @@ CREATE INDEX IF NOT EXISTS idx_project_snapshots_project ON project_snapshots(pr
 CREATE INDEX IF NOT EXISTS idx_file_index_project ON file_index(project_id);
 CREATE INDEX IF NOT EXISTS idx_file_locks_project ON file_locks(project_id);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
+
+-- Additional indexes for common query patterns (Phase 3B)
+CREATE INDEX IF NOT EXISTS idx_session_metrics_session ON session_metrics(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_history_timestamp ON session_history(session_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_captured_network_project ON captured_network(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_terminals_project ON terminals(project_id);
+CREATE INDEX IF NOT EXISTS idx_playbook_runs_playbook ON playbook_runs(playbook_id);
+CREATE INDEX IF NOT EXISTS idx_playbook_runs_project ON playbook_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_project ON agent_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_execution_policies_project ON execution_policies(project_id);
+CREATE INDEX IF NOT EXISTS idx_context_priorities_project ON context_priorities(project_id);
+CREATE INDEX IF NOT EXISTS idx_captured_errors_timestamp ON captured_errors(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_captured_network_timestamp ON captured_network(timestamp DESC);
 `;

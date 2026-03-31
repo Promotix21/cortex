@@ -28,7 +28,7 @@ intelligenceRouter.get('/patterns', (req, res) => {
     params.push(term, term, term);
   }
 
-  query += " AND confidence != 'deprecated' ORDER BY confidence DESC, usage_count DESC, updated_at DESC";
+  query += " AND confidence != 'deprecated' ORDER BY confidence DESC, usage_count DESC, updated_at DESC LIMIT 500";
 
   const patterns = db.prepare(query).all(...params);
   // Parse tags JSON
@@ -112,7 +112,7 @@ intelligenceRouter.get('/debug', (req, res) => {
     params.push(term, term, term, term);
   }
 
-  query += " AND confidence != 'deprecated' ORDER BY confidence DESC, usage_count DESC";
+  query += " AND confidence != 'deprecated' ORDER BY confidence DESC, usage_count DESC LIMIT 500";
 
   const items = db.prepare(query).all(...params);
   const parsed = (items as any[]).map(d => ({ ...d, tags: JSON.parse(d.tags || '[]') }));
