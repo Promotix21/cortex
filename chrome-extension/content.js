@@ -13,7 +13,6 @@
   window.__cortex_bridge_injected = true;
 
   // Skip Cloudflare-protected pages and challenge pages
-  // These sites detect console/fetch overrides and may block or flag the user
   const SKIP_PATTERNS = [
     /challenges\.cloudflare\.com/,
     /cdn-cgi\/challenge-platform/,
@@ -22,17 +21,27 @@
   ];
 
   const pageUrl = window.location.href;
-  const pageHtml = document.documentElement?.innerHTML || '';
 
   if (SKIP_PATTERNS.some(p => p.test(pageUrl))) return;
 
-  // Also detect Cloudflare challenge page by meta/body markers
+  // Detect Cloudflare challenge page by meta/body markers
   if (document.querySelector('meta[name="cf-2fa-verify"]') ||
       document.querySelector('#cf-wrapper') ||
       document.querySelector('#challenge-running') ||
       document.title === 'Just a moment...') {
     return;
   }
+
+  // Check user-defined blocked sites list before proceeding
+  const hostname = window.location.hostname;
+  chrome.storage.local.get('cortex_blocked_sites', (result) => {
+    const blocked = result.cortex_blocked_sites || [];
+    if (blocked.includes(hostname)) return;
+    // Site is not blocked — initialize the bridge
+    initBridge();
+  });
+
+  function initBridge() {
 
   // ==================== Console Interception ====================
 
@@ -173,4 +182,5 @@
       throw err;
     }
   };
+  } // end initBridge
 })();
