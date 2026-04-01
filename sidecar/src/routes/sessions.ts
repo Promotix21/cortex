@@ -168,6 +168,14 @@ sessionsRouter.post('/:id/resume', async (req, res) => {
   db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
   mgr.setTerminalId(session.id, terminal.id);
 
+  // Wire terminal events to session tracking
+  tmgr.on('terminal:output', ({ terminalId, data }: { terminalId: string; data: string }) => {
+    if (terminalId === terminal.id) mgr.recordTerminalOutput(terminalId, data);
+  });
+  tmgr.on('terminal:exit', ({ terminalId, exitCode }: { terminalId: string; exitCode: number }) => {
+    if (terminalId === terminal.id) mgr.markSessionCompleted(terminalId, exitCode);
+  });
+
   // Auto-inject resume context after Claude boots
   setTimeout(() => {
     tmgr.write(terminal.id, resumeContext + '\r');
@@ -256,6 +264,18 @@ sessionsRouter.post('/', async (req, res) => {
   } catch { /* column may already exist */ }
   db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
   mgr.setTerminalId(session.id, terminal.id);
+
+  // Wire terminal output + exit events to session tracking
+  tmgr.on('terminal:output', ({ terminalId, data }: { terminalId: string; data: string }) => {
+    if (terminalId === terminal.id) {
+      mgr.recordTerminalOutput(terminalId, data);
+    }
+  });
+  tmgr.on('terminal:exit', ({ terminalId, exitCode }: { terminalId: string; exitCode: number }) => {
+    if (terminalId === terminal.id) {
+      mgr.markSessionCompleted(terminalId, exitCode);
+    }
+  });
 
   // AUTO-INJECT context as Claude's FIRST prompt after it boots
   // This ensures Claude has project intelligence from the start without needing to read files

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { getTerminalManager } from '../terminals/terminal-manager.js';
+import { getSessionManager } from '../sessions/session-manager.js';
 import type { TerminalType } from '../terminals/terminal-manager.js';
 import fs from 'fs';
 
@@ -87,6 +88,11 @@ terminalsRouter.post('/:id/write', (req, res) => {
     res.status(404).json({ error: 'Terminal not found or not running' });
     return;
   }
+
+  // Track input in the session manager for prompt history + metrics
+  const smgr = getSessionManager();
+  smgr.recordTerminalInput(req.params.id, data);
+
   res.json({ success: true });
 });
 

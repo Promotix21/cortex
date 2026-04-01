@@ -22,7 +22,7 @@ interface ManagedSession {
   id: string;
   projectId: string;
   name: string;
-  pty: pty.IPty;
+  pty: pty.IPty | null;  // null when terminal manager owns the PTY
   outputBuffer: string;
   lastOutput: string;
   status: 'running' | 'idle' | 'completed' | 'error';
@@ -32,6 +32,7 @@ interface ManagedSession {
   startedAt: string;
   lastActive: string;
   terminalId: string | null;
+  inputBuffer: string;  // accumulates keystrokes until Enter
 }
 
 // Rough token estimation: ~4 chars per token
@@ -54,21 +55,26 @@ export class SessionManager extends EventEmitter {
   spawnSession(projectId: string, sessionName: string, projectPath: string, skipClaude = false): SessionInfo {
     const id = uuid();
     const now = new Date().toISOString();
-    const shell = process.env.SHELL || '/bin/bash';
 
-    // Spawn a PTY running claude in the project directory
-    const ptyProcess = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols: 120,
-      rows: 40,
-      cwd: projectPath,
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        FORCE_COLOR: '3',
-      } as Record<string, string>,
-    });
+    let ptyProcess: pty.IPty | null = null;
+
+    // Only spawn our own PTY if we're managing claude directly.
+    // When skipClaude=true, the terminal manager owns the PTY — we just track metrics.
+    if (!skipClaude) {
+      const shell = process.env.SHELL || '/bin/bash';
+      ptyProcess = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 40,
+        cwd: projectPath,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+          COLORTERM: 'truecolor',
+          FORCE_COLOR: '3',
+        } as Record<string, string>,
+      });
+    }
 
     const session: ManagedSession = {
       id,
@@ -84,28 +90,30 @@ export class SessionManager extends EventEmitter {
       startedAt: now,
       lastActive: now,
       terminalId: null,
+      inputBuffer: '',
     };
 
-    // Collect output
-    ptyProcess.onData((data: string) => {
-      session.outputBuffer += data;
-      session.lastOutput = data;
-      session.lastActive = new Date().toISOString();
+    if (ptyProcess) {
+      // Collect output
+      ptyProcess.onData((data: string) => {
+        session.outputBuffer += data;
+        session.lastOutput = data;
+        session.lastActive = new Date().toISOString();
 
-      // Keep buffer from growing unbounded (last 100KB)
-      if (session.outputBuffer.length > 102400) {
-        session.outputBuffer = session.outputBuffer.slice(-51200);
-      }
+        if (session.outputBuffer.length > 102400) {
+          session.outputBuffer = session.outputBuffer.slice(-51200);
+        }
 
-      this.emit('session:output', { sessionId: id, data });
-    });
+        this.emit('session:output', { sessionId: id, data });
+      });
 
-    // Handle exit
-    ptyProcess.onExit(({ exitCode }) => {
-      session.status = exitCode === 0 ? 'completed' : 'error';
-      this.updateSessionDb(session);
-      this.emit('session:exit', { sessionId: id, exitCode });
-    });
+      // Handle exit
+      ptyProcess.onExit(({ exitCode }) => {
+        session.status = exitCode === 0 ? 'completed' : 'error';
+        this.updateSessionDb(session);
+        this.emit('session:exit', { sessionId: id, exitCode });
+      });
+    }
 
     this.sessions.set(id, session);
 
@@ -123,13 +131,91 @@ export class SessionManager extends EventEmitter {
     `).run(metricsId, id);
 
     // Send the claude command to start Claude Code
-    // (skip if terminal manager handles the PTY separately)
-    if (!skipClaude) {
+    if (!skipClaude && ptyProcess) {
       ptyProcess.write('claude\r');
     }
 
     this.emit('session:spawned', { sessionId: id, projectId, name: sessionName });
     return this.getSessionInfo(id)!;
+  }
+
+  /**
+   * Record input from terminal manager for session tracking.
+   * Called when the frontend writes to a terminal linked to a session.
+   */
+  recordTerminalInput(terminalId: string, data: string): void {
+    // Find session linked to this terminal
+    let session: ManagedSession | undefined;
+    for (const s of this.sessions.values()) {
+      if (s.terminalId === terminalId) {
+        session = s;
+        break;
+      }
+    }
+    if (!session || session.status !== 'running') return;
+
+    session.lastActive = new Date().toISOString();
+    session.inputBuffer += data;
+
+    // Count as a prompt when Enter is pressed
+    if (data.includes('\r') || data.includes('\n')) {
+      const promptText = session.inputBuffer.replace(/[\r\n]+$/, '').trim();
+      session.inputBuffer = '';
+
+      // Skip empty prompts and control sequences
+      if (!promptText || promptText.length < 2) return;
+
+      session.promptCount++;
+      session.tokenEstimateInput += estimateTokens(promptText);
+
+      // Log to session_history
+      const db = getDb();
+      db.prepare(`
+        INSERT INTO session_history (id, session_id, prompt_text, timestamp)
+        VALUES (?, ?, ?, ?)
+      `).run(uuid(), session.id, promptText, session.lastActive);
+
+      this.updateMetrics(session);
+      this.emit('session:prompt', { sessionId: session.id, promptText });
+    }
+  }
+
+  /**
+   * Record terminal output for session tracking (from terminal manager).
+   */
+  recordTerminalOutput(terminalId: string, data: string): void {
+    let session: ManagedSession | undefined;
+    for (const s of this.sessions.values()) {
+      if (s.terminalId === terminalId) {
+        session = s;
+        break;
+      }
+    }
+    if (!session) return;
+
+    session.outputBuffer += data;
+    session.lastOutput = data;
+    session.lastActive = new Date().toISOString();
+    session.tokenEstimateOutput += estimateTokens(data);
+
+    if (session.outputBuffer.length > 102400) {
+      session.outputBuffer = session.outputBuffer.slice(-51200);
+    }
+  }
+
+  /**
+   * Mark session as completed (called when linked terminal exits).
+   */
+  markSessionCompleted(terminalId: string, exitCode: number): void {
+    for (const session of this.sessions.values()) {
+      if (session.terminalId === terminalId) {
+        session.status = exitCode === 0 ? 'completed' : 'error';
+        this.saveSessionOutput(session);
+        this.updateSessionDb(session);
+        this.emit('session:exit', { sessionId: session.id, exitCode });
+        break;
+      }
+    }
   }
 
   /**
@@ -139,23 +225,33 @@ export class SessionManager extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== 'running') return false;
 
-    session.pty.write(input);
+    // If session has its own PTY, write directly
+    if (session.pty) {
+      session.pty.write(input);
+    }
+
     session.lastActive = new Date().toISOString();
+    session.inputBuffer += input;
 
     // Only count as a "prompt" when Enter is pressed (contains \r or \n)
     if (input.includes('\r') || input.includes('\n')) {
-      session.promptCount++;
-      session.tokenEstimateInput += estimateTokens(input);
+      const promptText = session.inputBuffer.replace(/[\r\n]+$/, '').trim();
+      session.inputBuffer = '';
 
-      // Log to session_history
-      const db = getDb();
-      db.prepare(`
-        INSERT INTO session_history (id, session_id, prompt_text, timestamp)
-        VALUES (?, ?, ?, ?)
-      `).run(uuid(), sessionId, input, session.lastActive);
+      if (promptText && promptText.length >= 2) {
+        session.promptCount++;
+        session.tokenEstimateInput += estimateTokens(promptText);
 
-      // Update metrics
-      this.updateMetrics(session);
+        // Log to session_history
+        const db = getDb();
+        db.prepare(`
+          INSERT INTO session_history (id, session_id, prompt_text, timestamp)
+          VALUES (?, ?, ?, ?)
+        `).run(uuid(), sessionId, promptText, session.lastActive);
+
+        // Update metrics
+        this.updateMetrics(session);
+      }
     }
 
     this.emit('session:input', { sessionId, input });
@@ -167,7 +263,7 @@ export class SessionManager extends EventEmitter {
    */
   resizeSession(sessionId: string, cols: number, rows: number): boolean {
     const session = this.sessions.get(sessionId);
-    if (!session) return false;
+    if (!session || !session.pty) return false;
     session.pty.resize(cols, rows);
     return true;
   }
@@ -179,15 +275,17 @@ export class SessionManager extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
 
-    // Send Ctrl+C then exit
-    session.pty.write('\x03');
-    setTimeout(() => {
-      try {
-        session.pty.write('exit\r');
-      } catch {
-        // Process may already be dead
-      }
-    }, 500);
+    if (session.pty) {
+      // Send Ctrl+C then exit
+      session.pty.write('\x03');
+      setTimeout(() => {
+        try {
+          session.pty?.write('exit\r');
+        } catch {
+          // Process may already be dead
+        }
+      }, 500);
+    }
 
     session.status = 'completed';
     this.updateSessionDb(session);
@@ -205,10 +303,12 @@ export class SessionManager extends EventEmitter {
 
     this.saveSessionOutput(session);
 
-    try {
-      session.pty.kill();
-    } catch {
-      // Already dead
+    if (session.pty) {
+      try {
+        session.pty.kill();
+      } catch {
+        // Already dead
+      }
     }
 
     session.status = 'completed';
@@ -277,7 +377,7 @@ export class SessionManager extends EventEmitter {
       status: session.status,
       startedAt: session.startedAt,
       lastActive: session.lastActive,
-      pid: session.pty.pid,
+      pid: session.pty?.pid ?? null,
       promptCount: session.promptCount,
       tokenUsageInput: session.tokenEstimateInput,
       tokenUsageOutput: session.tokenEstimateOutput,
@@ -304,7 +404,7 @@ export class SessionManager extends EventEmitter {
       status: s.status,
       startedAt: s.startedAt,
       lastActive: s.lastActive,
-      pid: s.pty.pid,
+      pid: s.pty?.pid ?? null,
       promptCount: s.promptCount,
       tokenUsageInput: s.tokenEstimateInput,
       tokenUsageOutput: s.tokenEstimateOutput,
@@ -344,7 +444,7 @@ export class SessionManager extends EventEmitter {
           status: live.status,
           startedAt: live.startedAt,
           lastActive: live.lastActive,
-          pid: live.pty.pid,
+          pid: live.pty?.pid ?? null,
           promptCount: live.promptCount,
           tokenUsageInput: live.tokenEstimateInput,
           tokenUsageOutput: live.tokenEstimateOutput,
@@ -514,6 +614,8 @@ export class SessionManager extends EventEmitter {
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       for (const [id, session] of this.sessions) {
+        // Skip sessions without their own PTY (terminal manager tracks those)
+        if (!session.pty) continue;
         try {
           // Check if process is alive by sending signal 0
           process.kill(session.pty.pid, 0);
@@ -541,7 +643,7 @@ export class SessionManager extends EventEmitter {
     for (const [id, session] of this.sessions) {
       try {
         this.updateSessionDb(session);
-        session.pty.kill();
+        if (session.pty) session.pty.kill();
       } catch {
         // Best effort
       }
