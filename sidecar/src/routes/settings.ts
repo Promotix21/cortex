@@ -33,6 +33,7 @@ settingsRouter.get('/claude-status', (_req, res) => {
     installed = whichResult.length > 0;
   } catch {
     const commonPaths = [
+      `${process.env.HOME}/.local/bin/claude`,
       `${process.env.HOME}/.nvm/versions/node/${process.version}/bin/claude`,
       `${process.env.HOME}/.npm-global/bin/claude`,
       '/usr/local/bin/claude',

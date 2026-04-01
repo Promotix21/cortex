@@ -49,6 +49,8 @@ export const api = {
     request<{ success: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
   scanProject: (id: string) =>
     request<{ scan: Record<string, unknown> }>(`/api/projects/${id}/scan`, { method: 'POST' }),
+  getProjectContextSummary: (id: string) =>
+    request<{ project: { id: string; name: string; path: string; type: string }; context: string }>(`/api/projects/context-summary/${id}`),
   browseFolder: () =>
     request<{ path: string | null; name?: string; cancelled?: boolean }>('/api/projects/browse', { method: 'POST' }),
   getProjectDocuments: (id: string) =>

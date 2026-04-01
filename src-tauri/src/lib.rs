@@ -4,6 +4,18 @@ use tauri::Manager;
 
 struct SidecarProcess(Mutex<Option<Child>>);
 
+/// Resolve the user's login-shell PATH so the sidecar (and tools it
+/// invokes, like `claude`) can find binaries in ~/.local/bin, nvm dirs, etc.
+fn resolve_shell_path() -> Option<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+    let output = Command::new(&shell)
+        .args(["-lc", "echo $PATH"])
+        .output()
+        .ok()?;
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() { None } else { Some(path) }
+}
+
 fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let resource_dir = app.path().resource_dir()?;
     let sidecar_script = resource_dir.join("sidecar-bundle").join("dist").join("index.js");
@@ -17,15 +29,23 @@ fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Spawn node with the sidecar script; set CWD to sidecar dir so
-    // native addons in node_modules resolve correctly
+    // native addons in node_modules resolve correctly.
+    // Inherit the user's login-shell PATH so `claude` and other tools
+    // installed in non-standard locations are discoverable.
     let sidecar_dir = resource_dir.join("sidecar-bundle");
-    let child = Command::new("node")
-        .arg(&sidecar_script)
+    let mut cmd = Command::new("node");
+    cmd.arg(&sidecar_script)
         .current_dir(&sidecar_dir)
         .env("NODE_PATH", sidecar_dir.join("node_modules"))
         .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .spawn()?;
+        .stderr(std::process::Stdio::inherit());
+
+    if let Some(path) = resolve_shell_path() {
+        cmd.env("PATH", &path);
+        println!("[cortex] Sidecar PATH: {path}");
+    }
+
+    let child = cmd.spawn()?;
 
     println!(
         "[cortex] Sidecar spawned (pid {}) from {}",

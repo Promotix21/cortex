@@ -122,6 +122,28 @@ const TOOLS_LIST: any[] = [
       required: ['project_id'],
     },
   },
+  // Cross-project discovery tools
+  {
+    name: 'cortex_list_projects',
+    description: 'List all projects registered in Cortex. Returns name, path, type, company, and project ID for each. Use this to discover other projects when the user references a project by name.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        search: { type: 'string', description: 'Optional search term to filter projects by name, path, or company' },
+      },
+    },
+  },
+  {
+    name: 'cortex_get_project_context',
+    description: 'Get the brain and context for ANY Cortex-managed project by name or ID. Use this when the user asks about another project — retrieves its summary, architecture, conventions, known issues, decisions, and dependencies.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID (use cortex_list_projects to find it)' },
+        project_name: { type: 'string', description: 'The project name (fuzzy matched if project_id not provided)' },
+      },
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -225,6 +247,65 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 
     case 'get_context': {
       return assembleContext(args.project_id as string);
+    }
+
+    case 'cortex_list_projects': {
+      const search = args.search as string | undefined;
+      let sql = 'SELECT id, name, path, type, company, git_enabled, last_opened FROM projects ORDER BY last_opened DESC';
+      let projects = db.prepare(sql).all() as any[];
+
+      if (search) {
+        const term = search.toLowerCase();
+        projects = projects.filter((p: any) =>
+          p.name.toLowerCase().includes(term) ||
+          p.path.toLowerCase().includes(term) ||
+          (p.company && p.company.toLowerCase().includes(term))
+        );
+      }
+
+      return {
+        total: projects.length,
+        projects: projects.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          path: p.path,
+          type: p.type,
+          company: p.company || null,
+          git_enabled: !!p.git_enabled,
+          last_opened: p.last_opened,
+        })),
+      };
+    }
+
+    case 'cortex_get_project_context': {
+      let projectId = args.project_id as string | undefined;
+
+      // Fuzzy match by name if no ID provided
+      if (!projectId && args.project_name) {
+        const name = (args.project_name as string).toLowerCase();
+        const match = db.prepare('SELECT id, name FROM projects').all() as any[];
+        const found = match.find((p: any) => p.name.toLowerCase().includes(name));
+        if (found) projectId = found.id;
+        else return { error: `No project found matching "${args.project_name}". Use cortex_list_projects to see available projects.` };
+      }
+
+      if (!projectId) return { error: 'Provide either project_id or project_name' };
+
+      const project = db.prepare('SELECT id, name, path, type, company FROM projects WHERE id = ?').get(projectId) as any;
+      if (!project) return { error: `Project not found: ${projectId}` };
+
+      const brain = getProjectBrain(projectId);
+
+      return {
+        project: {
+          id: project.id,
+          name: project.name,
+          path: project.path,
+          type: project.type,
+          company: project.company,
+        },
+        brain: brain || { note: 'No brain data yet — project may not have been scanned' },
+      };
     }
 
     default:

@@ -23,8 +23,16 @@ export function ProjectItem({ project, isActive, onClick }: ProjectItemProps) {
     revealItemInDir(project.path);
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/cortex-project-id', project.id);
+    e.dataTransfer.setData('text/plain', project.name);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
   return (
     <button
+      draggable
+      onDragStart={handleDragStart}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}

@@ -128,6 +128,39 @@ projectsRouter.post('/browse', (_req, res) => {
   tryNext(0);
 });
 
+// GET /api/projects/context-summary/:id — lightweight context for cross-project injection (drag-and-drop)
+projectsRouter.get('/context-summary/:id', (req, res) => {
+  const db = getDb();
+  const project = db.prepare('SELECT id, name, path, type, company FROM projects WHERE id = ?').get(req.params.id) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const brain = db.prepare('SELECT summary, architecture_notes, known_issues, conventions, decisions, dependencies_notes FROM project_brain WHERE project_id = ?').get(req.params.id) as any;
+
+  // Build a concise context block for injection into a session
+  const sections: string[] = [];
+  sections.push(`# Cross-Project Context: ${project.name}`);
+  sections.push(`**Type:** ${project.type} | **Path:** ${project.path}${project.company ? ` | **Company:** ${project.company}` : ''}`);
+
+  if (brain) {
+    if (brain.summary) sections.push(`\n## Summary\n${brain.summary}`);
+    if (brain.architecture_notes) sections.push(`\n## Architecture\n${brain.architecture_notes}`);
+    if (brain.conventions) sections.push(`\n## Conventions\n${brain.conventions}`);
+    if (brain.known_issues) sections.push(`\n## Known Issues\n${brain.known_issues}`);
+    if (brain.decisions) sections.push(`\n## Decisions\n${brain.decisions}`);
+    if (brain.dependencies_notes) sections.push(`\n## Dependencies\n${brain.dependencies_notes}`);
+  } else {
+    sections.push('\n*No brain data available — project may not have been scanned yet.*');
+  }
+
+  res.json({
+    project: { id: project.id, name: project.name, path: project.path, type: project.type },
+    context: sections.join('\n'),
+  });
+});
+
 // GET /api/projects/:id
 projectsRouter.get('/:id', (req, res) => {
   const db = getDb();

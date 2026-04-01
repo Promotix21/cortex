@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useSessionStore } from '@/stores/session-store';
 import { XTerminal } from '@/components/terminal/XTerminal';
-import { ArrowLeft, Square, Zap, Clock, MessageSquare, FileText, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Square, Zap, Clock, MessageSquare, FileText, CheckCircle, FolderInput } from 'lucide-react';
 
 interface SessionTerminalProps {
   sessionId: string;
@@ -18,8 +18,51 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
   const isRunning = session?.status === 'running' || session?.status === 'idle';
   const terminalId = (session as any)?.terminalId;
 
+  const [dragOver, setDragOver] = useState(false);
+  const [injecting, setInjecting] = useState<string | null>(null);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (!isRunning || !terminalId) return;
+    if (e.dataTransfer.types.includes('application/cortex-project-id')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setDragOver(true);
+    }
+  }, [isRunning, terminalId]);
+
+  const handleDragLeave = useCallback(() => setDragOver(false), []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (!isRunning || !terminalId) return;
+
+    const projectId = e.dataTransfer.getData('application/cortex-project-id');
+    if (!projectId) return;
+
+    try {
+      setInjecting('Loading context...');
+      const { project, context } = await api.getProjectContextSummary(projectId);
+      setInjecting(`Injecting ${project.name}...`);
+
+      // Send the context as a prompt to the Claude session
+      const prompt = `Here is context about the "${project.name}" project (at ${project.path}) that was just shared with you from Cortex. Read and internalize it:\n\n${context}\n`;
+      await api.writeTerminal(terminalId, prompt + '\n');
+      setInjecting(null);
+    } catch (err) {
+      console.error('Failed to inject project context:', err);
+      setInjecting(null);
+    }
+  }, [isRunning, terminalId]);
+
   return (
-    <div className="flex flex-col h-full">
+    <div
+      className="flex flex-col h-full"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{ position: 'relative' }}
+    >
       {/* Header bar */}
       <div
         className="flex items-center shrink-0"
@@ -98,6 +141,55 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
           </button>
         )}
       </div>
+
+      {/* Drop overlay */}
+      {dragOver && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(30, 30, 46, 0.85)',
+            border: '3px dashed var(--accent)',
+            borderRadius: 12,
+            pointerEvents: 'none',
+          }}
+        >
+          <div className="flex flex-col items-center" style={{ gap: 12 }}>
+            <FolderInput size={48} style={{ color: 'var(--accent)' }} />
+            <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
+              Drop to inject project context
+            </span>
+            <span style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
+              Claude will receive the project's brain data
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Injection status toast */}
+      {injecting && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 60,
+            right: 16,
+            zIndex: 51,
+            padding: '10px 20px',
+            borderRadius: 8,
+            background: 'var(--accent-dim)',
+            border: '1px solid var(--accent)',
+            color: 'var(--accent)',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {injecting}
+        </div>
+      )}
 
       {/* Content */}
       {isRunning && terminalId ? (
