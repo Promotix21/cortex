@@ -65,6 +65,8 @@ export class SessionManager extends EventEmitter {
       env: {
         ...process.env,
         TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+        FORCE_COLOR: '3',
       } as Record<string, string>,
     });
 

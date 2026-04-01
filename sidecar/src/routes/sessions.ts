@@ -159,7 +159,7 @@ sessionsRouter.post('/:id/resume', async (req, res) => {
 
   // Spawn terminal + session
   const tmgr = getTerminalManager();
-  const terminal = tmgr.spawn(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, 'ai_session', 120, 40, 'claude');
+  const terminal = tmgr.spawn(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, 'ai_session', 120, 40, 'claude --resume');
 
   const mgr = getSessionManager();
   const session = mgr.spawnSession(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, true);
@@ -237,8 +237,14 @@ sessionsRouter.post('/', async (req, res) => {
 
   // Spawn a terminal with `claude` command using the terminal manager
   // (uses ring-buffer polling which works reliably with XTerminal frontend)
+  // Use `claude --resume` so Claude Code automatically continues the last
+  // conversation in this project directory (stored in ~/.claude/projects/)
   const tmgr = getTerminalManager();
-  const terminal = tmgr.spawn(project_id, name, project.path, 'ai_session', 120, 40, 'claude');
+  const hasPreviousSession = db.prepare(
+    'SELECT 1 FROM claude_sessions WHERE project_id = ? AND status IN (?, ?) LIMIT 1'
+  ).get(project_id, 'completed', 'error');
+  const claudeCmd = hasPreviousSession ? 'claude --resume' : 'claude';
+  const terminal = tmgr.spawn(project_id, name, project.path, 'ai_session', 120, 40, claudeCmd);
 
   // Also create session record for tracking metrics (skip spawning claude — terminal handles it)
   const mgr = getSessionManager();

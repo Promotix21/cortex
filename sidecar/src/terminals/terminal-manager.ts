@@ -61,6 +61,8 @@ export class TerminalManager extends EventEmitter {
       env: {
         ...process.env,
         TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+        FORCE_COLOR: '3',
         CORTEX_TERMINAL_ID: id,
         CORTEX_PROJECT_ID: projectId,
       } as Record<string, string>,
