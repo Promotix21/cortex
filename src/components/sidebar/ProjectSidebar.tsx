@@ -48,6 +48,8 @@ export function ProjectSidebar() {
     activeProjectId,
     setActiveProject,
     loading,
+    projects: storeProjects,
+    error,
   } = useProjectStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -56,6 +58,13 @@ export function ProjectSidebar() {
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
+
+  // Retry if projects failed to load (sidecar may have been slow to start from app menu)
+  useEffect(() => {
+    if (loading || storeProjects.length > 0 || !error) return;
+    const timer = setTimeout(() => fetchProjects(), 3000);
+    return () => clearTimeout(timer);
+  }, [loading, storeProjects.length, error, fetchProjects]);
 
   const sessions = useSessionStore(s => s.sessions);
   const activeProjectIds = useMemo(() => {

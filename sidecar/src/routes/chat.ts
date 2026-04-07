@@ -3,10 +3,11 @@ import { getDb } from '../db/index.js';
 import {
   getChatHistory,
   clearChatHistory,
-  sendMessage,
   getProjectBrain,
   updateProjectBrain,
 } from '../chat/chat-service.js';
+import { orchestrator } from '../orchestrator/index.js';
+import { v4 as uuid } from 'uuid';
 
 export const chatRouter: ReturnType<typeof Router> = Router();
 
@@ -18,18 +19,10 @@ chatRouter.get('/:projectId', (req, res) => {
 
 // POST /api/chat/:projectId — send a message (streaming via SSE)
 chatRouter.post('/:projectId', async (req, res) => {
-  const { message } = req.body;
+  const { message, useCLI = true } = req.body;
 
   if (!message) {
     res.status(400).json({ error: 'message is required' });
-    return;
-  }
-
-  // Get project name
-  const db = getDb();
-  const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(req.params.projectId) as any;
-  if (!project) {
-    res.status(404).json({ error: 'Project not found' });
     return;
   }
 
@@ -40,9 +33,26 @@ chatRouter.post('/:projectId', async (req, res) => {
   res.flushHeaders();
 
   try {
-    for await (const event of sendMessage(req.params.projectId, project.name, message)) {
+    let fullResponse = '';
+    for await (const event of orchestrator.processInteraction(message, {
+      projectId: req.params.projectId,
+      useCLI
+    })) {
+      if (event.type === 'chunk') fullResponse += event.content;
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     }
+
+    // Save history (simplified for now, ideally the orchestrator handles this)
+    const db = getDb();
+    const historyRow = db.prepare('SELECT history_json FROM ai_sessions WHERE project_id = ?').get(req.params.projectId) as any;
+    let history = JSON.parse(historyRow?.history_json || '[]');
+    history.push({ id: uuid(), role: 'user', content: message, timestamp: new Date().toISOString() });
+    if (fullResponse) {
+      history.push({ id: uuid(), role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() });
+    }
+    db.prepare('UPDATE ai_sessions SET history_json = ?, updated_at = ? WHERE project_id = ?')
+      .run(JSON.stringify(history), new Date().toISOString(), req.params.projectId);
+
   } catch (err: any) {
     res.write(`data: ${JSON.stringify({ type: 'error', content: err.message })}\n\n`);
   }

@@ -40,6 +40,25 @@ All intelligence (brain, patterns, debug memory, server info) is LOCAL ONLY. Nev
 - On sidecar restart, mark all "running" sessions as "completed" (zombie cleanup)
 - Sessions are in-memory (Map) — DB is persistence layer, not source of truth for live sessions
 
+### Claude CLI Detection (sidecar/src/routes/settings.ts)
+NEVER use `process.env.HOME` to build paths for the Claude binary check. When Cortex is launched from the app menu (not terminal), Tauri may strip the environment, leaving `HOME` undefined — making all `${process.env.HOME}/.local/bin/claude` checks silently fail.
+
+**Always use `os.homedir()`** which reads from `/etc/passwd` and is immune to missing env:
+```ts
+import os from 'os';
+const HOME = process.env.HOME || os.homedir();
+```
+
+Also: run the binary directly via `spawnSync(claudePath, ['--version'])` rather than through a shell command. Claude installs to `~/.local/share/claude/versions/<version>` (the `~/.local/bin/claude` symlink points there) — scan that directory as the last fallback in `findClaudeBinary()`.
+
+### Sidecar Hot-Swap (no Tauri recompile needed)
+After any sidecar change, just:
+```bash
+cd sidecar && pnpm build
+sudo cp dist/index.js /usr/lib/Cortex/sidecar-bundle/dist/index.js
+```
+Tauri bundles the sidecar as a resource file at `/usr/lib/Cortex/sidecar-bundle/dist/index.js`. Hot-swapping it updates the installed app instantly — no Rust recompile, no deb rebuild, no reinstall required. Restart Cortex after the copy.
+
 ## Known Issues
 - Token estimates use rough 4-char heuristic, not actual API counts
 - Console bridge polling assumes localhost:9877

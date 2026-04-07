@@ -9,6 +9,8 @@ const CORTEX_URL = 'http://127.0.0.1:4700/api/bridge';
 let connected = false;
 let errorQueue = [];
 let networkQueue = [];
+let errorsSent = 0;
+let networkSent = 0;
 let healthTimer = null;
 
 // ==================== Health Check ====================
@@ -22,6 +24,8 @@ async function checkHealth() {
         updateBadge('connected');
         flushQueues();
       }
+      // Send active tab on every health ping so Cortex always knows which page you're on
+      sendActiveTab();
     } else {
       connected = false;
       updateBadge('disconnected');
@@ -30,6 +34,18 @@ async function checkHealth() {
     connected = false;
     updateBadge('disconnected');
   }
+}
+
+async function sendActiveTab() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab?.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) return;
+    await fetch(`${CORTEX_URL}/tab`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: tab.url, title: tab.title || '', tab_id: tab.id }),
+    });
+  } catch { /* silent */ }
 }
 
 function startHealthPolling() {
@@ -47,6 +63,7 @@ async function sendErrorHTTP(error) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(error),
     });
+    errorsSent++;
   } catch {
     if (errorQueue.length < 100) errorQueue.push(error);
   }
@@ -59,6 +76,7 @@ async function sendNetworkHTTP(request) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     });
+    networkSent++;
   } catch {
     if (networkQueue.length < 100) networkQueue.push(request);
   }
@@ -106,6 +124,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       connected,
       errorQueueSize: errorQueue.length,
       networkQueueSize: networkQueue.length,
+      errorsSent,
+      networkSent,
     });
   }
 
@@ -123,16 +143,29 @@ function updateBadge(status) {
 
 // ==================== Network Request Monitoring ====================
 
+// webRequest listeners MUST be synchronous in MV3 — use callback-style tabs.get inside
 chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (details.statusCode >= 400) {
-      sendNetworkHTTP({
-        method: details.method,
-        url: details.url,
-        status_code: details.statusCode,
-        type: details.type,
-        failed: details.statusCode >= 500 ? 1 : 0,
-      });
+      if (details.tabId >= 0) {
+        chrome.tabs.get(details.tabId, (tab) => {
+          sendNetworkHTTP({
+            method: details.method,
+            url: details.url,
+            status_code: details.statusCode,
+            tab_url: tab?.url || '',
+            failed: details.statusCode >= 500 ? 1 : 0,
+          });
+        });
+      } else {
+        sendNetworkHTTP({
+          method: details.method,
+          url: details.url,
+          status_code: details.statusCode,
+          tab_url: '',
+          failed: details.statusCode >= 500 ? 1 : 0,
+        });
+      }
     }
   },
   { urls: ['<all_urls>'] }
@@ -140,13 +173,27 @@ chrome.webRequest.onCompleted.addListener(
 
 chrome.webRequest.onErrorOccurred.addListener(
   (details) => {
-    sendNetworkHTTP({
-      method: details.method || 'GET',
-      url: details.url,
-      status_code: 0,
-      error: details.error,
-      failed: 1,
-    });
+    if (details.tabId >= 0) {
+      chrome.tabs.get(details.tabId, (tab) => {
+        sendNetworkHTTP({
+          method: details.method || 'GET',
+          url: details.url,
+          status_code: 0,
+          tab_url: tab?.url || '',
+          error: details.error,
+          failed: 1,
+        });
+      });
+    } else {
+      sendNetworkHTTP({
+        method: details.method || 'GET',
+        url: details.url,
+        status_code: 0,
+        tab_url: '',
+        error: details.error,
+        failed: 1,
+      });
+    }
   },
   { urls: ['<all_urls>'] }
 );

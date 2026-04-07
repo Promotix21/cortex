@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS claude_sessions (
   status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','idle','completed','error')),
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_active TEXT NOT NULL DEFAULT (datetime('now')),
-  terminal_id TEXT REFERENCES terminals(id) ON DELETE SET NULL
+  terminal_id TEXT REFERENCES terminals(id) ON DELETE SET NULL,
+  claude_session_id TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS session_metrics (

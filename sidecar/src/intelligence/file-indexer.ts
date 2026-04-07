@@ -297,3 +297,83 @@ export function getProjectStructureSummary(projectId: string): string {
 
   return lines.join('\n');
 }
+
+// ==================== WATCHER ====================
+
+const activeWatchers = new Map<string, fs.FSWatcher>();
+const debounceTimers = new Map<string, NodeJS.Timeout>();
+
+/**
+ * Start watching a project for file changes.
+ * Uses native fs.watch (recursive: true on Linux requires more care,
+ * but it's simpler for this implementation).
+ */
+export function watchProject(projectId: string, projectPath: string): void {
+  if (activeWatchers.has(projectId)) return;
+
+  try {
+    const watcher = fs.watch(projectPath, { recursive: true }, (event, filename) => {
+      if (!filename) return;
+
+      // Skip ignored dirs if we can detect them from the filename
+      if (filename.includes('node_modules') || filename.includes('.git')) return;
+
+      // Debounce indexing to avoid hammering the DB during npm install/git pull
+      if (debounceTimers.has(projectId)) {
+        clearTimeout(debounceTimers.get(projectId)!);
+      }
+
+      const timer = setTimeout(() => {
+        console.log(`[watcher] Change detected in ${projectId}: ${filename}. Re-indexing...`);
+        try {
+          indexProject(projectId, projectPath);
+        } catch (err: any) {
+          console.error(`[watcher] Error re-indexing project ${projectId}: ${err.message}`);
+        }
+        debounceTimers.delete(projectId);
+      }, 2000);
+
+      debounceTimers.set(projectId, timer);
+    });
+
+    // Handle errors on the watcher instance — ENOSPC means the Linux inotify
+    // watch limit is exhausted (too many projects open at once). Without this
+    // handler, Node emits an unhandled 'error' event that crashes the process.
+    watcher.on('error', (err: NodeJS.ErrnoException) => {
+      activeWatchers.delete(projectId);
+      if (err.code === 'ENOSPC') {
+        console.warn(
+          `[watcher] inotify limit reached — file watching disabled for ${projectPath}.\n` +
+          `  Fix: echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p`
+        );
+      } else {
+        console.error(`[watcher] Error on ${projectPath}: ${err.message}`);
+      }
+    });
+
+    activeWatchers.set(projectId, watcher);
+    console.log(`[watcher] Started watching project ${projectId} at ${projectPath}`);
+
+    // Initial index
+    indexProject(projectId, projectPath);
+  } catch (err: any) {
+    console.error(`[watcher] Could not start watcher for ${projectPath}: ${err.message}`);
+  }
+}
+
+/**
+ * Stop watching a project.
+ */
+export function unwatchProject(projectId: string): void {
+  const watcher = activeWatchers.get(projectId);
+  if (watcher) {
+    watcher.close();
+    activeWatchers.delete(projectId);
+    console.log(`[watcher] Stopped watching project ${projectId}`);
+  }
+
+  if (debounceTimers.has(projectId)) {
+    clearTimeout(debounceTimers.get(projectId)!);
+    debounceTimers.delete(projectId);
+  }
+}

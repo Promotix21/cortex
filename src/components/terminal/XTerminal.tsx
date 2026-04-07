@@ -1,9 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { api } from '@/lib/api';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 
 interface XTerminalProps {
   terminalId: string;
@@ -19,6 +22,19 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
   const initialLoadDone = useRef(false);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const fitTimeoutRef = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  /** Fallback clipboard copy for Tauri webview where navigator.clipboard may fail */
+  const fallbackCopy = useCallback((text: string) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }, []);
 
   /** Debounced fit — coalesces rapid resize events, syncs PTY size */
   const debouncedFit = useCallback(() => {
@@ -96,10 +112,24 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
 
     const fitAddon = new FitAddon();
     const webLinksAddon = new WebLinksAddon();
+    const unicode11Addon = new Unicode11Addon();
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
+    term.loadAddon(unicode11Addon);
+    term.unicode.activeVersion = '11';
 
     term.open(containerRef.current);
+
+    // Use WebGL renderer for proper color rendering (DOM renderer can be broken by Tailwind CSS)
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+      });
+      term.loadAddon(webglAddon);
+    } catch {
+      // WebGL not available — fall back to default DOM renderer
+    }
 
     termRef.current = term;
     fitRef.current = fitAddon;
@@ -122,12 +152,80 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
       api.writeTerminal(terminalId, data).catch(() => {});
     });
 
-    // Copy selection to clipboard on select
+    // Copy selection to clipboard on select (with Tauri-safe fallback)
     term.onSelectionChange(() => {
       const selection = term.getSelection();
       if (selection) {
-        navigator.clipboard.writeText(selection).catch(() => {});
+        // navigator.clipboard can silently fail in Tauri webview — use fallback
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(selection).catch(() => {
+            fallbackCopy(selection);
+          });
+        } else {
+          fallbackCopy(selection);
+        }
       }
+    });
+
+    // Key handler: copy/paste + Ctrl+C-with-selection guard
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true;
+
+      if (e.ctrlKey && !e.shiftKey) {
+        // Ctrl+C — if text is selected, copy to clipboard instead of sending SIGINT
+        if (e.key === 'C' || e.key === 'c') {
+          const selection = term.getSelection();
+          if (selection) {
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(selection).catch(() => fallbackCopy(selection));
+            } else {
+              fallbackCopy(selection);
+            }
+            return false; // Prevent SIGINT
+          }
+          return true; // No selection — let SIGINT through
+        }
+        // Ctrl+V — handle paste exactly once (WebKitGTK fires both a native paste
+        // event AND xterm's built-in handler, causing double paste)
+        if (e.key === 'V' || e.key === 'v') {
+          navigator.clipboard?.readText?.().then((text) => {
+            if (text) api.writeTerminal(terminalId, text).catch(() => {});
+          }).catch(() => {});
+          return false; // Prevent xterm's own paste handler
+        }
+      }
+
+      if (e.ctrlKey && e.shiftKey) {
+        // Ctrl+Shift+C → explicit copy
+        if (e.key === 'C' || e.key === 'c') {
+          const selection = term.getSelection();
+          if (selection) {
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(selection).catch(() => fallbackCopy(selection));
+            } else {
+              fallbackCopy(selection);
+            }
+          }
+          return false;
+        }
+        // Ctrl+Shift+V → paste
+        if (e.key === 'V' || e.key === 'v') {
+          navigator.clipboard?.readText?.().then((text) => {
+            if (text) api.writeTerminal(terminalId, text).catch(() => {});
+          }).catch(() => {});
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Right-click paste
+    containerRef.current?.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      navigator.clipboard?.readText?.().then((text) => {
+        if (text) api.writeTerminal(terminalId, text).catch(() => {});
+      }).catch(() => {});
     });
 
     // Notify sidecar of resize
@@ -188,11 +286,64 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
     return () => window.removeEventListener('resize', handleResize);
   }, [active, debouncedFit]);
 
+  // Tauri drag-drop: paste file/folder paths into terminal.
+  // Uses the drop position to scope the event to THIS terminal's container only —
+  // prevents all active terminals in a multi-session window from receiving the same drop.
+  useEffect(() => {
+    if (!active) return;
+    let unlisten: (() => void) | null = null;
+
+    const isOverContainer = (pos: { x: number; y: number } | undefined): boolean => {
+      if (!pos || !containerRef.current) return true; // fall back to allow if no position
+      const rect = containerRef.current.getBoundingClientRect();
+      return pos.x >= rect.left && pos.x <= rect.right && pos.y >= rect.top && pos.y <= rect.bottom;
+    };
+
+    getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'enter') {
+        if (isOverContainer((event.payload as any).position)) setDragOver(true);
+      } else if (event.payload.type === 'leave') {
+        setDragOver(false);
+      } else if (event.payload.type === 'drop') {
+        setDragOver(false);
+        if (!isOverContainer((event.payload as any).position)) return;
+        const paths = event.payload.paths;
+        if (paths.length > 0) {
+          const quoted = paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ');
+          api.writeTerminal(terminalId, quoted).catch(() => {});
+        }
+      }
+    }).then(fn => { unlisten = fn; });
+
+    return () => { unlisten?.(); };
+  }, [active, terminalId]);
+
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full"
-      style={{ display: active ? 'block' : 'none' }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%', display: active ? 'block' : 'none' }}>
+      <div
+        ref={containerRef}
+        className="w-full h-full"
+      />
+      {dragOver && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(30, 30, 46, 0.8)',
+            border: '3px dashed var(--accent)',
+            borderRadius: 8,
+            pointerEvents: 'none',
+          }}
+        >
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)' }}>
+            Drop to paste path
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

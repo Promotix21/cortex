@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 export default function App() {
   const { claudeStatus, checkClaudeStatus } = useSettingsStore();
   const fetchSessions = useSessionStore(s => s.fetchSessions);
+  const fetchProjects = useProjectStore(s => s.fetchProjects);
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [sidecarReady, setSidecarReady] = useState(false);
@@ -42,8 +43,9 @@ export default function App() {
     waitForSidecar().then(() => {
       checkClaudeStatus().finally(() => setChecking(false));
       fetchSessions();
+      fetchProjects();
     });
-  }, [waitForSidecar, checkClaudeStatus, fetchSessions]);
+  }, [waitForSidecar, checkClaudeStatus, fetchSessions, fetchProjects]);
 
   useEffect(() => {
     if (!sidecarReady) return;

@@ -22,6 +22,7 @@ import { remotionRouter } from './routes/remotion.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getTerminalManager } from './terminals/terminal-manager.js';
 import { startMCPServer, stopMCPServer } from './mcp/mcp-server.js';
+import { watchProject } from './intelligence/file-indexer.js';
 
 const PORT = 4700;
 const app = express();
@@ -97,11 +98,22 @@ bgWorker.start(300000);
 // Start MCP server (port 4710)
 startMCPServer();
 
-// Start server
+// Start server FIRST so the frontend can connect immediately
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[cortex-sidecar] Running on http://127.0.0.1:${PORT}`);
   console.log(`[cortex-sidecar] Session manager ready`);
   console.log(`[cortex-sidecar] Terminal manager ready`);
+});
+
+// Initialize watchers AFTER the server is up — watchProject does synchronous
+// file indexing per project which can take many seconds across 20+ projects.
+// Doing this before app.listen() was blocking the port from opening, causing
+// the 15-second waitForSidecar timeout to expire with an empty project list.
+setImmediate(() => {
+  const allProjects = dbClean.prepare('SELECT id, path FROM projects').all() as any[];
+  for (const p of allProjects) {
+    watchProject(p.id, p.path);
+  }
 });
 
 // Graceful shutdown

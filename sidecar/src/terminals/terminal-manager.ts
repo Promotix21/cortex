@@ -52,20 +52,35 @@ export class TerminalManager extends EventEmitter {
     const now = new Date().toISOString();
     const shell = process.env.SHELL || '/bin/bash';
 
-    const args: string[] = [];
+    // Use login shell to ensure full env (PATH, locale, etc.)
+    const args: string[] = ['-l'];
+    // Build a clean env — filter out undefined values and NO_COLOR from process.env,
+    // then apply terminal color settings. In production (Tauri desktop), process.env
+    // is sparse, so we must ensure all color-critical vars are explicitly set.
+    const cleanEnv: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && k !== 'NO_COLOR') {
+        cleanEnv[k] = v;
+      }
+    }
+
     const ptyProcess = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols,
       rows,
       cwd: projectPath,
       env: {
-        ...process.env,
+        ...cleanEnv,
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
         FORCE_COLOR: '3',
+        TERM_PROGRAM: 'cortex',
+        LANG: process.env.LANG || 'en_US.UTF-8',
+        LC_ALL: process.env.LC_ALL || '',
+        HOME: process.env.HOME || '',
         CORTEX_TERMINAL_ID: id,
         CORTEX_PROJECT_ID: projectId,
-      } as Record<string, string>,
+      },
     });
 
     const terminal: ManagedTerminal = {

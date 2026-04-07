@@ -122,6 +122,45 @@ const TOOLS_LIST: any[] = [
       required: ['project_id'],
     },
   },
+  // Chrome Console Bridge tools
+  {
+    name: 'get_active_browser_context',
+    description: 'Get the currently active browser tab (what page the user has open right now) and its recent errors. Call this FIRST before get_browser_errors — it tells you exactly which page and project the user is looking at so you fetch the right errors.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_browser_errors',
+    description: 'Get browser console errors captured by the Cortex Chrome Console Bridge. If project_id is omitted, returns the most recent errors across all pages grouped by source URL — useful when you are not sure which project to look at.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project ID to filter by. Omit to get all recent errors across all pages.' },
+        limit: { type: 'number', description: 'Max errors to return (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'get_network_failures',
+    description: 'Get failed network requests captured by the Cortex Chrome Console Bridge. If project_id is omitted, returns recent failures across all pages.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project ID to filter by. Omit to get all recent failures.' },
+        limit: { type: 'number', description: 'Max requests to return (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'clear_browser_errors',
+    description: 'Clear captured browser errors for a project from the Cortex Console Bridge buffer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID' },
+      },
+      required: ['project_id'],
+    },
+  },
   // Cross-project discovery tools
   {
     name: 'cortex_list_projects',
@@ -249,6 +288,105 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       return assembleContext(args.project_id as string);
     }
 
+    case 'get_active_browser_context': {
+      // Fetch live active tab from bridge route state
+      let activeTab: any = null;
+      try {
+        const res = await fetch('http://127.0.0.1:4700/api/bridge/active-tab');
+        activeTab = await res.json();
+      } catch { /* sidecar internal call */ }
+
+      if (!activeTab?.active) {
+        return {
+          active: false,
+          message: 'No active browser tab detected. Make sure the Cortex Chrome extension is installed and the browser has focus.',
+        };
+      }
+
+      // Get recent errors for this tab's project or URL
+      const limit = 10;
+      let errors: any[] = [];
+      if (activeTab.projectId) {
+        errors = db.prepare(`
+          SELECT error_type, message, source, timestamp FROM captured_errors
+          WHERE project_id = ? ORDER BY timestamp DESC LIMIT ?
+        `).all(activeTab.projectId, limit) as any[];
+      } else {
+        // No project match — get errors from this exact URL
+        errors = db.prepare(`
+          SELECT error_type, message, source, timestamp FROM captured_errors
+          WHERE source LIKE ? ORDER BY timestamp DESC LIMIT ?
+        `).all(`%${new URL(activeTab.url).hostname}%`, limit) as any[];
+      }
+
+      const project = activeTab.projectId
+        ? db.prepare('SELECT id, name, path FROM projects WHERE id = ?').get(activeTab.projectId) as any
+        : null;
+
+      return {
+        active: true,
+        tab: { url: activeTab.url, title: activeTab.title },
+        project: project
+          ? { id: project.id, name: project.name, path: project.path }
+          : { id: null, note: `No Cortex project matched for ${activeTab.url} — you can still use get_browser_errors without a project_id` },
+        recent_errors: errors,
+        error_count: errors.length,
+      };
+    }
+
+    case 'get_browser_errors': {
+      const limit = (args.limit as number) || 20;
+      let errors: any[];
+      if (args.project_id) {
+        errors = db.prepare(`
+          SELECT ce.error_type, ce.message, ce.stack, ce.source, ce.timestamp,
+                 ce.error_signature, dm.solution as matched_solution
+          FROM captured_errors ce
+          LEFT JOIN debug_memory dm ON dm.id = ce.matched_debug_id
+          WHERE ce.project_id = ?
+          ORDER BY ce.timestamp DESC LIMIT ?
+        `).all(args.project_id as string, limit) as any[];
+      } else {
+        // No project_id — return all recent errors across all pages with their source URLs
+        errors = db.prepare(`
+          SELECT ce.error_type, ce.message, ce.stack, ce.source, ce.timestamp,
+                 ce.project_id, dm.solution as matched_solution
+          FROM captured_errors ce
+          LEFT JOIN debug_memory dm ON dm.id = ce.matched_debug_id
+          ORDER BY ce.timestamp DESC LIMIT ?
+        `).all(limit) as any[];
+      }
+      return {
+        count: errors.length,
+        tip: errors.length === 0 ? 'No errors captured yet. Call get_active_browser_context to check what page is active.' : undefined,
+        errors,
+      };
+    }
+
+    case 'get_network_failures': {
+      const limit = (args.limit as number) || 20;
+      let requests: any[];
+      if (args.project_id) {
+        requests = db.prepare(`
+          SELECT * FROM captured_network
+          WHERE project_id = ? AND (failed = 1 OR status_code >= 400)
+          ORDER BY timestamp DESC LIMIT ?
+        `).all(args.project_id as string, limit) as any[];
+      } else {
+        requests = db.prepare(`
+          SELECT * FROM captured_network
+          WHERE failed = 1 OR status_code >= 400
+          ORDER BY timestamp DESC LIMIT ?
+        `).all(limit) as any[];
+      }
+      return { count: requests.length, requests };
+    }
+
+    case 'clear_browser_errors': {
+      db.prepare('DELETE FROM captured_errors WHERE project_id = ?').run(args.project_id as string);
+      return { success: true, message: 'Browser errors cleared.' };
+    }
+
     case 'cortex_list_projects': {
       const search = args.search as string | undefined;
       let sql = 'SELECT id, name, path, type, company, git_enabled, last_opened FROM projects ORDER BY last_opened DESC';
@@ -322,7 +460,7 @@ async function handleRequest(req: MCPRequest): Promise<MCPResponse> {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'cortex-mcp', version: '0.2.0' },
+          serverInfo: { name: 'cortex-mcp', version: '0.3.0' },
         },
       };
 
@@ -403,6 +541,16 @@ export function startMCPServer(port = MCP_PORT): void {
         }));
       }
     });
+  });
+
+  mcpServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      // Port already held by a previous Cortex instance — MCP is non-critical, keep going
+      console.warn(`[cortex-mcp] Port ${port} already in use — MCP server skipped (sidecar continues normally)`);
+      mcpServer = null;
+    } else {
+      console.error('[cortex-mcp] Server error:', err.message);
+    }
   });
 
   mcpServer.listen(port, '127.0.0.1', () => {

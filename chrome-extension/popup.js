@@ -110,6 +110,7 @@ chrome.runtime.sendMessage({ type: 'get_status' }, (response) => {
     text.style.color = '#f38ba8';
   }
 
-  errorCount.textContent = response.errorQueueSize || 0;
-  networkCount.textContent = response.networkQueueSize || 0;
+  // Show total captured (sent) — not queue size, which is always 0 when connected
+  errorCount.textContent = response.errorsSent ?? response.errorQueueSize ?? 0;
+  networkCount.textContent = response.networkSent ?? response.networkQueueSize ?? 0;
 });

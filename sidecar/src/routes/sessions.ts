@@ -127,39 +127,18 @@ sessionsRouter.post('/:id/resume', async (req, res) => {
     return;
   }
 
-  // Build resume context from old session
-  const oldHistory = db.prepare('SELECT prompt_text FROM session_history WHERE session_id = ? ORDER BY timestamp ASC').all(oldSession.id) as any[];
-  const oldOutput = oldSession.session_output || '';
-  const handoff = await getHandoff(project.path);
-
-  let resumeContext = `You are resuming a previous Claude Code session named "${oldSession.name}".\n\n`;
-
-  if (handoff) {
-    resumeContext += `--- HANDOFF FROM PREVIOUS SESSION ---\n${handoff}\n\n`;
-  }
-
-  if (oldHistory.length > 0) {
-    resumeContext += `--- PREVIOUS SESSION PROMPTS (${oldHistory.length}) ---\n`;
-    for (const h of oldHistory.slice(-10)) {
-      resumeContext += `> ${h.prompt_text}\n`;
-    }
-    resumeContext += '\n';
-  }
-
-  if (oldOutput) {
-    // Include last 3000 chars of output for context
-    const trimmedOutput = oldOutput.slice(-3000);
-    resumeContext += `--- PREVIOUS SESSION OUTPUT (last 3000 chars) ---\n${trimmedOutput}\n\n`;
-  }
-
-  resumeContext += 'Continue from where the previous session left off. Ask me what to work on next.';
-
-  // Inject fresh context
+  // Inject fresh context file (CLAUDE.md etc.) — Claude --resume reads it automatically
   try { injectContext(oldSession.project_id, project.path); } catch { /* */ }
 
-  // Spawn terminal + session
+  // Spawn terminal + session — use specific Claude session ID if we captured one
+  // claude --resume handles context restoration natively, no need to inject text
   const tmgr = getTerminalManager();
-  const terminal = tmgr.spawn(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, 'ai_session', 120, 40, 'claude --resume');
+  const claudeSessionId = oldSession.claude_session_id;
+  const colorEnv = 'FORCE_COLOR=3 COLORTERM=truecolor TERM=xterm-256color';
+  const resumeCmd = claudeSessionId
+    ? `${colorEnv} claude --resume ${claudeSessionId}`
+    : `${colorEnv} claude --resume`;
+  const terminal = tmgr.spawn(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, 'ai_session', 120, 40, resumeCmd);
 
   const mgr = getSessionManager();
   const session = mgr.spawnSession(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, true);
@@ -176,11 +155,7 @@ sessionsRouter.post('/:id/resume', async (req, res) => {
     if (terminalId === terminal.id) mgr.markSessionCompleted(terminalId, exitCode);
   });
 
-  // Auto-inject resume context after Claude boots
-  setTimeout(() => {
-    tmgr.write(terminal.id, resumeContext + '\r');
-    console.log(`[sessions] Resumed session ${oldSession.name} → ${session.id} with ${resumeContext.length} chars context`);
-  }, 5000);
+  console.log(`[sessions] Resumed session ${oldSession.name} → ${session.id} (claude --resume handles context)`);
 
   db.prepare('UPDATE projects SET last_opened = ? WHERE id = ?').run(new Date().toISOString(), oldSession.project_id);
 
@@ -245,30 +220,47 @@ sessionsRouter.post('/', async (req, res) => {
 
   // Spawn a terminal with `claude` command using the terminal manager
   // (uses ring-buffer polling which works reliably with XTerminal frontend)
-  // Use `claude --resume` so Claude Code automatically continues the last
-  // conversation in this project directory (stored in ~/.claude/projects/)
+  // Always start fresh — explicit resume uses the resume endpoint with --resume flag
+  // Pass --name so Claude stores the session with a name we can identify for resume
   const tmgr = getTerminalManager();
-  const hasPreviousSession = db.prepare(
-    'SELECT 1 FROM claude_sessions WHERE project_id = ? AND status IN (?, ?) LIMIT 1'
-  ).get(project_id, 'completed', 'error');
-  const claudeCmd = hasPreviousSession ? 'claude --resume' : 'claude';
-  const terminal = tmgr.spawn(project_id, name, project.path, 'ai_session', 120, 40, claudeCmd);
+  const safeName = name.replace(/['"\\]/g, '');
+  const colorEnv = 'FORCE_COLOR=3 COLORTERM=truecolor TERM=xterm-256color';
+  const terminal = tmgr.spawn(project_id, name, project.path, 'ai_session', 120, 40, `${colorEnv} claude --name "${safeName}"`);
 
   // Also create session record for tracking metrics (skip spawning claude — terminal handles it)
   const mgr = getSessionManager();
   const session = mgr.spawnSession(project_id, name, project.path, true);
 
   // Link the terminal to the session (DB + in-memory)
-  try {
-    db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL');
-  } catch { /* column may already exist */ }
+  try { db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL'); } catch { /* */ }
+  try { db.exec('ALTER TABLE claude_sessions ADD COLUMN claude_session_id TEXT DEFAULT NULL'); } catch { /* */ }
   db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
   mgr.setTerminalId(session.id, terminal.id);
+
+  // Capture Claude Code's session ID from terminal output for proper resume
+  let claudeIdCaptured = false;
+  const captureClaudeSessionId = ({ terminalId, data }: { terminalId: string; data: string }) => {
+    if (terminalId !== terminal.id || claudeIdCaptured) return;
+    // Claude Code outputs session info like "session: abc123" or in its status bar
+    // The most reliable way is to check ~/.claude/projects/ after Claude starts
+    // For now, capture from the output buffer after Claude boots
+    const stripped = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    // Claude Code v2+ shows session ID in output or we can read from filesystem
+    const sessionIdMatch = stripped.match(/session[:\s]+([a-f0-9-]{36})/i)
+      || stripped.match(/Resuming session[:\s]+([a-f0-9-]{36})/i);
+    if (sessionIdMatch) {
+      claudeIdCaptured = true;
+      const claudeSessionId = sessionIdMatch[1];
+      db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeSessionId, session.id);
+      console.log(`[sessions] Captured Claude session ID: ${claudeSessionId} for ${session.id}`);
+    }
+  };
 
   // Wire terminal output + exit events to session tracking
   tmgr.on('terminal:output', ({ terminalId, data }: { terminalId: string; data: string }) => {
     if (terminalId === terminal.id) {
       mgr.recordTerminalOutput(terminalId, data);
+      captureClaudeSessionId({ terminalId, data });
     }
   });
   tmgr.on('terminal:exit', ({ terminalId, exitCode }: { terminalId: string; exitCode: number }) => {
@@ -276,6 +268,29 @@ sessionsRouter.post('/', async (req, res) => {
       mgr.markSessionCompleted(terminalId, exitCode);
     }
   });
+
+  // Fallback: after Claude boots, try to read the session ID from Claude's project dir
+  setTimeout(() => {
+    if (claudeIdCaptured) return;
+    try {
+      const projectDir = project.path.replace(/\//g, '-').replace(/^-/, '');
+      const claudeProjectDir = `${process.env.HOME}/.claude/projects/${projectDir}`;
+      if (fs.existsSync(claudeProjectDir)) {
+        const sessions = fs.readdirSync(claudeProjectDir)
+          .filter((f: string) => f.endsWith('.json'))
+          .map((f: string) => ({ name: f, mtime: fs.statSync(`${claudeProjectDir}/${f}`).mtimeMs }))
+          .sort((a: { mtime: number }, b: { mtime: number }) => b.mtime - a.mtime);
+        if (sessions.length > 0) {
+          const claudeId = sessions[0].name.replace('.json', '');
+          db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeId, session.id);
+          claudeIdCaptured = true;
+          console.log(`[sessions] Captured Claude session ID from filesystem: ${claudeId} for ${session.id}`);
+        }
+      }
+    } catch (err) {
+      console.warn('[sessions] Failed to capture Claude session ID from filesystem:', err);
+    }
+  }, 8000);
 
   // AUTO-INJECT context as Claude's FIRST prompt after it boots
   // This ensures Claude has project intelligence from the start without needing to read files

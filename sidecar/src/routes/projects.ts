@@ -6,7 +6,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { execFile } from 'child_process';
 import { scanProject } from '../intelligence/project-scanner.js';
-import { indexProject, getProjectStructureSummary } from '../intelligence/file-indexer.js';
+import { indexProject, getProjectStructureSummary, watchProject, unwatchProject } from '../intelligence/file-indexer.js';
 import { injectContext } from '../intelligence/context-injector.js';
 
 export const projectsRouter: ReturnType<typeof Router> = Router();
@@ -248,6 +248,9 @@ projectsRouter.post('/', async (req, res) => {
       console.log(`[projects] New/empty project — skipping scan`);
     }
 
+    // Start watcher
+    watchProject(id, projectPath);
+
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     res.status(201).json({ project, scan: scanResult });
   } catch (err: any) {
@@ -295,6 +298,9 @@ projectsRouter.delete('/:id', (req, res) => {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
+
+  // Stop watcher
+  unwatchProject(req.params.id);
 
   db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
   res.json({ success: true });

@@ -5,6 +5,7 @@
   "description": "Captures console errors and network failures, sends to Cortex sidecar for AI debugging",
   "permissions": [
     "activeTab",
+    "tabs",
     "scripting",
     "storage",
     "webRequest"

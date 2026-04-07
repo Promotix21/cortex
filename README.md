@@ -48,6 +48,7 @@ Cortex is a Linux desktop app that adds:
 - **Error intelligence** — browser + server errors auto-captured and matched to known solutions
 - **Context injection** — project brain assembled and injected before every AI session
 - **Budget guardrails** — rate limit monitoring for Claude Max subscriptions
+- **OpenRouter fallback** — automatic switch to OpenRouter when limits are reached
 
 All stored locally using SQLite. No cloud. No telemetry.
 

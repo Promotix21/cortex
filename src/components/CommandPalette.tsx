@@ -1,5 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Folder, Brain, MessageSquare, Bug, Lightbulb, X } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+  Search, Folder, Brain, MessageSquare, Bug, Lightbulb, X,
+  Terminal, GitBranch, Settings, LayoutDashboard, Play, FileText, Zap
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { useProjectStore } from '@/stores/project-store';
 import { useNavigationStore } from '@/stores/navigation-store';
@@ -9,9 +12,19 @@ interface CommandPaletteProps {
   onClose: () => void;
 }
 
-type ResultCategory = 'projects' | 'brains' | 'sessions' | 'patterns' | 'debug';
+type ResultCategory = 'actions' | 'projects' | 'brains' | 'sessions' | 'patterns' | 'debug';
+
+interface QuickAction {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: React.ElementType;
+  color: string;
+  handler: () => void;
+}
 
 const CATEGORY_META: Record<ResultCategory, { label: string; icon: React.ElementType; color: string }> = {
+  actions: { label: 'Quick Actions', icon: Zap, color: 'var(--yellow)' },
   projects: { label: 'Projects', icon: Folder, color: 'var(--accent)' },
   brains: { label: 'Project Brains', icon: Brain, color: 'var(--mauve)' },
   sessions: { label: 'Session History', icon: MessageSquare, color: 'var(--blue)' },
@@ -22,41 +35,73 @@ const CATEGORY_META: Record<ResultCategory, { label: string; icon: React.Element
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Record<ResultCategory, any[]>>({
-    projects: [], brains: [], sessions: [], patterns: [], debug: [],
+    actions: [], projects: [], brains: [], sessions: [], patterns: [], debug: [],
   });
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const activeProject = useProjectStore(s => s.activeProject());
   const setActiveProject = useProjectStore(s => s.setActiveProject);
   const setActivity = useNavigationStore(s => s.setActivity);
   const viewSession = useNavigationStore(s => s.viewSession);
+
+  // Define quick actions
+  const quickActions = useMemo<QuickAction[]>(() => {
+    const actions: QuickAction[] = [
+      { id: 'act-dash', title: 'Go to Dashboard', subtitle: 'View project overview and health', icon: LayoutDashboard, color: 'var(--accent)', handler: () => setActivity('dashboard') },
+      { id: 'act-term', title: 'Open Terminal', subtitle: 'Project shell and AI sessions', icon: Terminal, color: 'var(--blue)', handler: () => setActivity('terminal') },
+      { id: 'act-chat', title: 'Open AI Chat', subtitle: 'Dedicated project AI assistant', icon: MessageSquare, color: 'var(--mauve)', handler: () => setActivity('chat') },
+      { id: 'act-git', title: 'Git Management', subtitle: 'Branching, diffs, and commits', icon: GitBranch, color: 'var(--red)', handler: () => setActivity('git') },
+      { id: 'act-brain', title: 'Project Brain', subtitle: 'Edit architecture and conventions', icon: Brain, color: 'var(--yellow)', handler: () => setActivity('brain') },
+      { id: 'act-docs', title: 'Document Builder', subtitle: 'Generate PDF, DOCX, and spreadsheets', icon: FileText, color: 'var(--green)', handler: () => setActivity('documents') },
+      { id: 'act-settings', title: 'App Settings', subtitle: 'Configure AI keys and masterpiece mode', icon: Settings, color: 'var(--text-tertiary)', handler: () => setActivity('settings') },
+    ];
+
+    if (activeProject) {
+      actions.unshift({ id: 'act-new-sess', title: `New Session: ${activeProject.name}`, subtitle: 'Start a named Claude Code session', icon: Play, color: 'var(--green)', handler: () => setActivity('terminal') });
+    }
+
+    return actions;
+  }, [activeProject, setActivity]);
 
   // Focus input when opened
   useEffect(() => {
     if (open) {
       setQuery('');
-      setResults({ projects: [], brains: [], sessions: [], patterns: [], debug: [] });
-      setTotal(0);
+      setResults({ actions: quickActions, projects: [], brains: [], sessions: [], patterns: [], debug: [] });
+      setTotal(quickActions.length);
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [open]);
+  }, [open, quickActions]);
 
   // Debounced search
   useEffect(() => {
-    if (!query.trim() || query.length < 2) {
-      setResults({ projects: [], brains: [], sessions: [], patterns: [], debug: [] });
-      setTotal(0);
+    if (!query.trim()) {
+      setResults({ actions: quickActions, projects: [], brains: [], sessions: [], patterns: [], debug: [] });
+      setTotal(quickActions.length);
       return;
     }
 
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
+        const filteredActions = quickActions.filter(a =>
+          a.title.toLowerCase().includes(query.toLowerCase()) ||
+          a.subtitle.toLowerCase().includes(query.toLowerCase())
+        );
+
         const data = await api.globalSearch(query);
-        setResults(data.results as Record<ResultCategory, any[]>);
-        setTotal(data.total);
+        const searchResults = data.results as Record<ResultCategory, any[]>;
+
+        setResults({
+          actions: filteredActions,
+          ...searchResults
+        } as any);
+
+        setTotal(filteredActions.length + data.total);
         setSelectedIndex(0);
       } catch {
         // silent
@@ -66,24 +111,28 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, quickActions]);
 
   // Flatten results for keyboard navigation
-  const flatResults = useCallback(() => {
+  const flat = useMemo(() => {
     const items: { category: ResultCategory; item: any; index: number }[] = [];
-    for (const cat of Object.keys(CATEGORY_META) as ResultCategory[]) {
-      for (const item of results[cat]) {
+    const categories: ResultCategory[] = ['actions', 'projects', 'brains', 'sessions', 'patterns', 'debug'];
+
+    for (const cat of categories) {
+      const categoryItems = results[cat] || [];
+      for (const item of categoryItems) {
         items.push({ category: cat, item, index: items.length });
       }
     }
     return items;
   }, [results]);
 
-  const flat = flatResults();
-
   const handleSelect = (category: ResultCategory, item: any) => {
     onClose();
     switch (category) {
+      case 'actions':
+        item.handler();
+        break;
       case 'projects':
         setActiveProject(item.id);
         setActivity('dashboard');
@@ -153,7 +202,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search across all projects, brains, sessions, patterns..."
+            placeholder="Type a command or search everything..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -169,22 +218,22 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '8px 0' }}>
-          {loading && (
+          {loading && total === 0 && (
             <div style={{ padding: '20px', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
               Searching...
             </div>
           )}
 
-          {!loading && query.length >= 2 && total === 0 && (
+          {!loading && query && total === 0 && (
             <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 14, color: 'var(--text-tertiary)' }}>
               No results for "{query}"
             </div>
           )}
 
-          {!loading && total > 0 && (
+          {total > 0 && (
             <>
               {(Object.keys(CATEGORY_META) as ResultCategory[]).map(cat => {
-                const items = results[cat];
+                const items = results[cat] || [];
                 if (items.length === 0) return null;
                 const { label, icon: Icon, color } = CATEGORY_META[cat];
 
@@ -232,12 +281,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               })}
             </>
           )}
-
-          {!loading && !query && (
-            <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
-              Type to search across all projects
-            </div>
-          )}
         </div>
 
         {/* Footer */}
@@ -245,7 +288,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           className="flex items-center justify-between"
           style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-tertiary)' }}
         >
-          <span>{total > 0 ? `${total} results` : ''}</span>
+          <span>{total > 0 ? `${total} results` : 'Search projects, brains, sessions...'}</span>
           <span style={{ display: 'flex', gap: 12 }}>
             <kbd style={kbdStyle}>↑↓</kbd> navigate
             <kbd style={kbdStyle}>↵</kbd> select
@@ -268,6 +311,7 @@ const kbdStyle: React.CSSProperties = {
 
 function renderTitle(cat: ResultCategory, item: any): string {
   switch (cat) {
+    case 'actions': return item.title;
     case 'projects': return item.name;
     case 'brains': return item.project_name;
     case 'sessions': return `${item.session_name} — ${item.prompt_text?.slice(0, 80)}`;
@@ -278,6 +322,7 @@ function renderTitle(cat: ResultCategory, item: any): string {
 
 function renderSubtitle(cat: ResultCategory, item: any): string {
   switch (cat) {
+    case 'actions': return item.subtitle;
     case 'projects': return `${item.company || 'No company'} · ${item.type} · ${item.path}`;
     case 'brains': return item.summary?.slice(0, 120) || 'No summary';
     case 'sessions': return `${item.project_name} · ${item.timestamp}`;
