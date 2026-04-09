@@ -3,6 +3,10 @@ import { getDb } from '../db/index.js';
 import { getProjectBrain } from '../chat/chat-service.js';
 import { assembleContext } from '../intelligence/context-injector.js';
 import { DOCUMENT_TOOLS, handleDocumentTool } from './document-builder.js';
+import { getRoomContext, listProjectRooms, detectRoomFromContent } from '../intelligence/room-detector.js';
+import { getActiveFacts, getFactHistory, addFact, parseDecisionToTriples, buildMemory } from '../intelligence/temporal-service.js';
+import { checkConsistency } from '../intelligence/contradiction-service.js';
+import { invalidateCache, getCompressionStats } from '../intelligence/aaak-service.js';
 
 const MCP_PORT = 4710;
 
@@ -183,6 +187,59 @@ const TOOLS_LIST: any[] = [
       },
     },
   },
+  // MemPalace tools
+  {
+    name: 'recall_room',
+    description: 'Get deep context for a specific technical domain (room) in a project. Returns all patterns, debug solutions, and knowledge graph facts tagged with that room. Rooms: auth, database, ui, api, testing, deploy, config, state, build, intelligence, chat, terminal. Use this when working on a specific area to get targeted context.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID' },
+        room_name: { type: 'string', description: 'Room name (e.g. auth, database, ui, api, testing, deploy, config, state, build)' },
+      },
+      required: ['project_id', 'room_name'],
+    },
+  },
+  {
+    name: 'query_history',
+    description: 'Access the temporal knowledge graph to see how facts and decisions evolved over time. Shows what was used before, why things changed, and which decisions superseded others. Use this to understand project evolution.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID' },
+        subject: { type: 'string', description: 'Filter by subject (e.g. "framework", "database", "auth")' },
+        room_tag: { type: 'string', description: 'Filter by room tag' },
+        start_date: { type: 'string', description: 'Start date (ISO format)' },
+        end_date: { type: 'string', description: 'End date (ISO format)' },
+        active_only: { type: 'boolean', description: 'Only show active facts (default false)' },
+      },
+      required: ['project_id'],
+    },
+  },
+  {
+    name: 'check_consistency',
+    description: 'Validate a new finding against existing memory before committing it. Checks for contradictions, stale references, and superseded decisions. Use this BEFORE save_intelligence to prevent memory corruption.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID' },
+        fact: { type: 'string', description: 'The new fact or decision to validate' },
+        room_tag: { type: 'string', description: 'Optional room tag for scoped checking' },
+      },
+      required: ['project_id', 'fact'],
+    },
+  },
+  {
+    name: 'build_memory',
+    description: 'Build the MemPalace memory for a project. Scans the project brain and creates knowledge graph entries, AAAK compression cache, and room tags. Use this to initialize or rebuild memory for a project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'The project ID' },
+      },
+      required: ['project_id'],
+    },
+  },
 ];
 
 async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -191,11 +248,17 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     return handleDocumentTool(name, args);
   }
 
-  // Intelligence capture
+  // Intelligence capture (MemPalace-enhanced)
   if (name === 'save_intelligence') {
     const db = getDb();
     const { project_id, type, content } = args as { project_id: string; type: string; content: string };
     const now = new Date().toISOString();
+
+    // Auto-detect room tag from content
+    const roomTag = detectRoomFromContent(content);
+
+    // Run contradiction check before saving
+    const consistency = checkConsistency(project_id, content, roomTag || undefined);
 
     if (type === 'decision' || type === 'known_issue' || type === 'server' || type === 'convention') {
       const fieldMap: Record<string, string> = { decision: 'decisions', known_issue: 'known_issues', server: 'architecture_notes', convention: 'conventions' };
@@ -206,7 +269,26 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         const updated = existing + `\n\n--- Captured ${new Date().toLocaleDateString()} ---\n${content}`;
         db.prepare(`UPDATE project_brain SET ${field} = ?, updated_at = ? WHERE project_id = ?`).run(updated, now, project_id);
       }
-      return { success: true, saved: type };
+
+      // For decisions, also create knowledge graph triples
+      if (type === 'decision') {
+        const triples = parseDecisionToTriples(content);
+        for (const triple of triples) {
+          triple.roomTag = roomTag || undefined;
+          triple.source = 'mcp';
+          addFact(project_id, triple);
+        }
+      }
+
+      // Invalidate AAAK cache for the updated field
+      invalidateCache(project_id, field);
+
+      return {
+        success: true,
+        saved: type,
+        roomTag,
+        consistency: consistency.safe ? 'clean' : { conflicts: consistency.conflicts.length, details: consistency.conflicts },
+      };
     }
     return { error: `Use API endpoint for type: ${type}` };
   }
@@ -444,6 +526,46 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
         },
         brain: brain || { note: 'No brain data yet — project may not have been scanned' },
       };
+    }
+
+    // MemPalace tools
+    case 'recall_room': {
+      const roomCtx = getRoomContext(args.project_id as string, args.room_name as string);
+      const allRooms = listProjectRooms(args.project_id as string);
+      return {
+        ...roomCtx,
+        availableRooms: allRooms.map(r => r.room),
+      };
+    }
+
+    case 'query_history': {
+      if (args.active_only) {
+        const facts = getActiveFacts(args.project_id as string, args.room_tag as string | undefined);
+        return { facts, total: facts.length, mode: 'active_only' };
+      }
+      const history = getFactHistory(args.project_id as string, {
+        subject: args.subject as string | undefined,
+        roomTag: args.room_tag as string | undefined,
+        startDate: args.start_date as string | undefined,
+        endDate: args.end_date as string | undefined,
+      });
+      return { facts: history, total: history.length, mode: 'full_history' };
+    }
+
+    case 'check_consistency': {
+      const result = checkConsistency(
+        args.project_id as string,
+        args.fact as string,
+        args.room_tag as string | undefined
+      );
+      return result;
+    }
+
+    case 'build_memory': {
+      const result = buildMemory(args.project_id as string);
+      // Also get compression stats
+      const stats = getCompressionStats(args.project_id as string);
+      return { ...result, compressionStats: stats };
     }
 
     default:

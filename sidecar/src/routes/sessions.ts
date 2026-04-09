@@ -236,7 +236,7 @@ sessionsRouter.post('/', async (req, res) => {
   // Inject Cortex intelligence context before spawn
   let contextInjected = false;
   try {
-    const ctx = injectContext(project_id, project.path);
+    const ctx = await injectContext(project_id, project.path);
     contextInjected = ctx.written;
     if (ctx.written) {
       console.log(`[sessions] Injected context for ${project.name}: ~${ctx.tokenCount} tokens`);

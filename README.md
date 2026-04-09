@@ -191,13 +191,37 @@ Reusable step-by-step workflows for repetitive tasks:
 }
 ```
 
+### MemPalace Intelligence System (NEW)
+
+A next-generation memory system inspired by [mempalace](https://github.com/milla-jovovich/mempalace) that transforms how Cortex understands and recalls project knowledge.
+
+**AAAK Compression** — AI-to-AI Knowledge format compresses verbose English intelligence into dense, LLM-readable shorthand. 60+ technical abbreviations (`architecture→arch`, `database→db`, `middleware→mw`), structural markers (`!` critical, `#` decision, `?` pending), filler word stripping, relationship compaction (`uses→→`, `depends on→>`). Achieves 40-70% token reduction while preserving meaning for LLMs.
+
+**Temporal Knowledge Graph** — Subject-predicate-object triples with `valid_from`/`valid_until` timestamps stored in SQLite. Tracks how facts and decisions evolve — knows what was used before, why things changed, and which decisions superseded others. When you switch from Express 4 to Express 5, the old fact is retired (not deleted), so Claude can answer "what did we use before and why did we switch?"
+
+**Room-Aware Context** — Files and intelligence are tagged with semantic "rooms": `auth`, `database`, `ui`, `api`, `testing`, `deploy`, `config`, `state`, `build`, `intelligence`, `chat`, `terminal`. Context injection auto-detects what room you're working in from the file path and pulls only relevant patterns, debug solutions, and knowledge graph facts.
+
+**Layered Memory Stack (L0-L3)** — Replaces the flat priority-based context assembly:
+
+| Layer | Budget | Content | When Loaded |
+|-------|--------|---------|-------------|
+| **L0 Identity** | ~100 tokens | Project name, type, stack | Always |
+| **L1 Critical** | ~500 tokens | AAAK-compressed brain summary + verified facts | Always |
+| **L2 Room Recall** | ~800 tokens | Room-specific patterns, debug solutions, facts | Auto-detected from file path |
+| **L3 Deep Search** | Unlimited | Full temporal history | On-demand via MCP tools |
+
+**Contradiction Detection** — Before new intelligence is saved, checks existing knowledge graph for conflicts: direct contradictions ("uses Express 4" vs "uses Express 5"), stale references (file paths that no longer exist), and superseded decisions. Prevents memory corruption.
+
+**Build Memory** — One-click button in the project dashboard Quick Actions to scan the project brain, create knowledge graph entries, and pre-compress AAAK cache. Also available via MCP tool.
+
 ### Context Injector (Phase 0)
 
-Before every Claude Code session spawn, Cortex assembles a `.cortex-context.md` file:
+Before every Claude Code session spawn, Cortex assembles a `.cortex-context.md` file using the MemPalace layered memory stack:
 
-- Priority-weighted source selection (brain > errors > patterns > server info)
+- L0-L3 layered assembly with room-aware context injection
+- AAAK compression for 40-70% token savings
 - ~11,500 token default budget with per-project tuning via `context_priorities` table
-- Truncation by priority — highest-value context always fits
+- Truncation by layer priority — highest-value context always fits
 - Includes Masterpiece Design Rules when enabled
 
 ### Budget Guard (Phase 1)
@@ -239,8 +263,11 @@ Toggle in Settings that injects award-worthy design philosophy into every AI int
 
 Cortex exposes intelligence and document generation to Claude Code via Model Context Protocol:
 
-- **Intelligence tools** (port 4710): `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`
+- **Intelligence tools** (port 4710): `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`, `save_intelligence`
+- **MemPalace tools**: `recall_room`, `query_history`, `check_consistency`, `build_memory`
 - **Document tools** (global, no per-project install): `create_docx`, `create_pdf`, `create_spreadsheet`, `read_docx`, `read_pdf`
+- **Cross-project tools**: `cortex_list_projects`, `cortex_get_project_context`
+- **Browser tools**: `get_active_browser_context`, `get_browser_errors`, `get_network_failures`, `clear_browser_errors`
 - **Client**: Connects to external MCP servers (console-bridge, etc.)
 
 The Document Builder MCP means Claude can generate Word docs, PDFs, and spreadsheets from **any project** without installing `docx`, `pdfkit`, or `exceljs` locally.
@@ -349,9 +376,10 @@ cortex/
 │       ├── sessions/             # Session manager, snapshots, execution history
 │       ├── terminals/            # Terminal manager (node-pty)
 │       ├── chat/                 # Claude CLI integration + masterpiece injection
-│       ├── intelligence/         # Context injector, budget guard, handoff generator,
-│       │                         # session analyzer, masterpiece context, file indexer,
-│       │                         # project scanner, remotion renderer, background worker
+│       ├── intelligence/         # MemPalace: AAAK compression, temporal knowledge graph,
+│       │                         # room detector, contradiction detection, context injector,
+│       │                         # budget guard, handoff generator, session analyzer,
+│       │                         # masterpiece context, file indexer, project scanner
 │       ├── mcp/                  # MCP server (port 4710) + MCP client
 │       └── bridge/               # Console bridge client
 ├── chrome-extension/             # Manifest V3 Chrome extension
@@ -383,6 +411,7 @@ cortex/
 │   │  xterm.js Terminals   │                │  Budget Guard        │  │
 │   │  AI Chat + File Drop  │                │  Handoff Generator   │  │
 │   │  Intelligence + Queue │                │  Session Analyzer    │  │
+│   │  Build Memory Button  │                │  MemPalace Engine    │  │
 │   │  Remotion Studio      │                │  Background Worker   │  │
 │   │  Masterpiece Toggle   │                │  Remotion Renderer   │  │
 │   └───────────────────────┘                └──────────┬───────────┘  │
@@ -395,13 +424,13 @@ cortex/
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Database: 35 SQLite Tables
+### Database: 35+ SQLite Tables
 
 | Group | Tables | Purpose |
 |---|---|---|
 | **Core** | projects, terminals, notes, tasks, workspace, ai_sessions | Project management |
 | **Sessions** | claude_sessions, session_metrics, session_history, usage_daily | Session tracking + billing |
-| **Intelligence** | project_brain, pattern_memory, debug_memory, file_index | AI memory layer |
+| **Intelligence** | project_brain, pattern_memory, debug_memory, file_index, knowledge_graph, aaak_cache | AI memory layer + MemPalace |
 | **Reference** | tools, tool_versions, commands, api_changes, project_tools | Version-aware docs |
 | **Snapshots** | project_snapshots, execution_history, execution_groups | State capture + recovery |
 | **Playbooks** | playbooks, playbook_runs | Reusable workflows |
@@ -524,6 +553,7 @@ pnpm tauri build                        # Full app
 - [x] MCP Server — 6 tools, Claude Code auto-discovers intelligence
 - [x] Chrome Extension — console + network error capture
 - [x] Remotion Studio — programmatic video rendering
+- [x] MemPalace Intelligence — AAAK compression, temporal knowledge graph, room-aware context, L0-L3 layered memory, contradiction detection, Build Memory button
 - [x] Drag & Drop file attachment in chat
 - [x] Project icons (emoji + custom image)
 - [x] Open project folder (hover button in sidebar)
@@ -539,15 +569,14 @@ pnpm tauri build                        # Full app
 - [x] Chrome extension HTTP bridge — POST endpoints for errors/network
 
 ### Next
-- [ ] Tauri AppImage / .deb / .rpm packaging
 - [ ] File watcher for live index updates
 - [ ] Chat summarization (condense long conversations)
-- [ ] Keyboard shortcuts and command palette
 - [ ] Multi-model routing for specialized tasks
 - [ ] Per-project billing export (CSV/JSON)
+- [ ] MemPalace UI panel — visual room explorer, fact timeline, compression stats dashboard
 
 ### Later
-- [ ] Vector search (ChromaDB) for semantic pattern matching
+- [ ] Vector search for semantic pattern matching
 - [ ] Local model support via Ollama
 - [ ] AI Orchestrator (multi-agent pipelines)
 - [ ] Community playbook sharing
@@ -572,18 +601,19 @@ pnpm tauri build                        # Full app
 ## Stats
 
 ```
-Source files:    90+ (.ts + .tsx + .js)
-Total lines:    ~18,000+
-API endpoints:  170
-DB tables:      33
-DB indexes:     33
+Source files:    95+ (.ts + .tsx + .js)
+Total lines:    ~20,000+
+API endpoints:  75+
+DB tables:      35
+DB indexes:     35+
 React components: 38+
 Zustand stores:   7
 Type definitions: 7 files, 40+ interfaces
-MCP tools:        12
+MCP tools:        22
 Chrome Extension: Manifest V3
 Keyboard shortcuts: 12
-Build time:     2.3s (Vite)
+Build time:     2.8s (Vite)
+Intelligence:   AAAK compression, temporal knowledge graph, 12 room types
 ```
 
 ---

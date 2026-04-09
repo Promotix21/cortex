@@ -63,13 +63,19 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
 
       const decoder = new TextDecoder();
       let fullContent = '';
+      let lineBuffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const text = decoder.decode(value, { stream: true });
-        const lines = text.split('\n');
+        lineBuffer += decoder.decode(value, { stream: true });
+        const newlineIdx = lineBuffer.lastIndexOf('\n');
+        if (newlineIdx === -1) continue;
+
+        const complete = lineBuffer.slice(0, newlineIdx);
+        lineBuffer = lineBuffer.slice(newlineIdx + 1);
+        const lines = complete.split('\n');
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;

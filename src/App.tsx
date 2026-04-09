@@ -27,9 +27,10 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Wait for sidecar to be available (retries on connection refused)
+  // After reboot, the sidecar can take 10-20s to start — be patient
   const waitForSidecar = useCallback(async () => {
     setSidecarFailed(false);
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 60; i++) {
       try {
         await api.health();
         setSidecarReady(true);
@@ -38,7 +39,7 @@ export default function App() {
         await new Promise(r => setTimeout(r, 500));
       }
     }
-    // After 15s, show a retry screen instead of a broken app
+    // After 30s, show a retry screen instead of a broken app
     setSidecarFailed(true);
   }, []);
 
@@ -203,17 +204,21 @@ export default function App() {
         className="flex flex-col items-center justify-center h-screen w-screen"
         style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}
       >
-        <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 12 }}>Cortex</div>
+        <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Cortex</div>
         {sidecarFailed ? (
           <>
-            <div style={{ fontSize: 14, color: 'var(--error)', marginBottom: 16 }}>
-              Could not connect to sidecar (port 4700)
+            <div style={{ fontSize: 14, color: 'var(--error)', marginBottom: 20, textAlign: 'center', maxWidth: 400 }}>
+              Could not connect to sidecar (port 4700).
+              <br />
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                The sidecar may still be starting after a system reboot.
+              </span>
             </div>
             <button
-              onClick={() => { setRetryCount(c => c + 1); setSidecarFailed(false); }}
+              onClick={() => { setRetryCount(c => c + 1); setSidecarFailed(false); setSidecarReady(false); }}
               style={{
-                padding: '10px 28px',
-                fontSize: 14,
+                padding: '12px 32px',
+                fontSize: 15,
                 fontWeight: 600,
                 background: 'var(--accent)',
                 color: 'var(--bg-primary)',
@@ -224,12 +229,38 @@ export default function App() {
             >
               Retry Connection
             </button>
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 12 }}>
-              Try closing all Cortex windows and reopening the app
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 16, textAlign: 'center' }}>
+              If this keeps happening, try closing all Cortex windows and reopening
             </div>
           </>
         ) : (
-          <div style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>Starting sidecar…</div>
+          <>
+            <div style={{ fontSize: 14, color: 'var(--text-tertiary)', marginBottom: 20 }}>
+              Connecting to sidecar…
+            </div>
+            <div style={{
+              width: 28, height: 28, border: '3px solid var(--border)',
+              borderTopColor: 'var(--accent)', borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            <button
+              onClick={() => { setRetryCount(c => c + 1); setSidecarFailed(false); setSidecarReady(false); }}
+              style={{
+                marginTop: 24,
+                padding: '8px 24px',
+                fontSize: 13,
+                fontWeight: 500,
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              Retry Now
+            </button>
+          </>
         )}
       </div>
     );

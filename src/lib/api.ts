@@ -49,6 +49,8 @@ export const api = {
     request<{ success: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
   scanProject: (id: string) =>
     request<{ scan: Record<string, unknown> }>(`/api/projects/${id}/scan`, { method: 'POST' }),
+  buildMemory: (id: string) =>
+    request<{ success: boolean; factsCreated: number; factsRetired: number; errors: string[]; compressionStats: Record<string, unknown> | null }>(`/api/intelligence/build-memory/${id}`, { method: 'POST' }),
   getProjectContextSummary: (id: string) =>
     request<{ project: { id: string; name: string; path: string; type: string }; context: string }>(`/api/projects/context-summary/${id}`),
   browseFolder: () =>

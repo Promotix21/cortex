@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
+import { createErrorSignature } from './error-normalizer.js';
 
 /**
  * Error signature patterns to detect in session output
@@ -67,7 +68,7 @@ export function analyzeSession(sessionId: string, projectId: string): AnalysisRe
       result.errorsFound++;
 
       // Create an error signature
-      const signature = `${pattern.type}:${errorMsg.slice(0, 100)}`;
+      const signature = createErrorSignature(pattern.type, errorMsg);
 
       // Check if we already have this error in debug_memory
       const existing = db.prepare(

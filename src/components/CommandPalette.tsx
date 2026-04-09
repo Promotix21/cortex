@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search, Folder, Brain, MessageSquare, Bug, Lightbulb, X,
   Terminal, GitBranch, Settings, LayoutDashboard, Play, FileText, Zap
@@ -97,9 +97,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         const searchResults = data.results as Record<ResultCategory, any[]>;
 
         setResults({
+          ...searchResults,
           actions: filteredActions,
-          ...searchResults
-        } as any);
+        } as Record<ResultCategory, any[]>);
 
         setTotal(filteredActions.length + data.total);
         setSelectedIndex(0);

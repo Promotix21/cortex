@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { v4 as uuid } from 'uuid';
 import { analyzeSession, getLearningQueue, reviewLearningItem } from '../intelligence/session-analyzer.js';
+import { listProjectRooms, getRoomContext } from '../intelligence/room-detector.js';
+import { getActiveFacts, getFactHistory, buildMemory } from '../intelligence/temporal-service.js';
+import { checkConsistency } from '../intelligence/contradiction-service.js';
+import { getCompressionStats, compressBrainField } from '../intelligence/aaak-service.js';
 
 export const intelligenceRouter: ReturnType<typeof Router> = Router();
 
@@ -412,4 +416,99 @@ intelligenceRouter.post('/capture', (req, res) => {
     default:
       res.status(400).json({ error: `Unknown intelligence type: ${type}. Use: decision, known_issue, pattern, debug, server, convention` });
   }
+});
+
+// ==================== MEMPALACE: ROOMS ====================
+
+// GET /api/intelligence/rooms/:projectId — list all rooms with fact counts
+intelligenceRouter.get('/rooms/:projectId', (req, res) => {
+  const rooms = listProjectRooms(req.params.projectId);
+  res.json({ rooms });
+});
+
+// GET /api/intelligence/rooms/:projectId/:room — get all intelligence for a room
+intelligenceRouter.get('/rooms/:projectId/:room', (req, res) => {
+  const context = getRoomContext(req.params.projectId, req.params.room);
+  res.json(context);
+});
+
+// ==================== MEMPALACE: TEMPORAL HISTORY ====================
+
+// GET /api/intelligence/history/:projectId — temporal fact timeline
+intelligenceRouter.get('/history/:projectId', (req, res) => {
+  const { subject, room_tag, start_date, end_date, active_only } = req.query;
+
+  if (active_only === 'true') {
+    const facts = getActiveFacts(req.params.projectId, room_tag as string | undefined);
+    res.json({ facts, total: facts.length, mode: 'active_only' });
+    return;
+  }
+
+  const facts = getFactHistory(req.params.projectId, {
+    subject: subject as string | undefined,
+    roomTag: room_tag as string | undefined,
+    startDate: start_date as string | undefined,
+    endDate: end_date as string | undefined,
+  });
+  res.json({ facts, total: facts.length, mode: 'full_history' });
+});
+
+// ==================== MEMPALACE: CONSISTENCY CHECK ====================
+
+// POST /api/intelligence/check-consistency — check a fact before saving
+intelligenceRouter.post('/check-consistency', (req, res) => {
+  const { project_id, fact, room_tag } = req.body;
+  if (!project_id || !fact) {
+    res.status(400).json({ error: 'project_id and fact are required' });
+    return;
+  }
+  const result = checkConsistency(project_id, fact, room_tag);
+  res.json(result);
+});
+
+// ==================== MEMPALACE: COMPRESSION STATS ====================
+
+// GET /api/intelligence/compression-stats/:projectId — AAAK compression metrics
+intelligenceRouter.get('/compression-stats/:projectId', (req, res) => {
+  const stats = getCompressionStats(req.params.projectId);
+  res.json(stats);
+});
+
+// ==================== MEMPALACE: BUILD MEMORY ====================
+
+// POST /api/intelligence/build-memory/:projectId — build/rebuild memory for a project
+intelligenceRouter.post('/build-memory/:projectId', (req, res) => {
+  const projectId = req.params.projectId;
+  const db = getDb();
+
+  // Verify project exists
+  const project = db.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  // Build knowledge graph from brain
+  const result = buildMemory(projectId);
+
+  // Pre-compress brain fields for AAAK cache
+  const brain = db.prepare('SELECT summary, architecture_notes, conventions, decisions, dependencies_notes FROM project_brain WHERE project_id = ?')
+    .get(projectId) as any;
+
+  let compressionStats = null;
+  if (brain) {
+    if (brain.summary) compressBrainField(projectId, 'summary', brain.summary);
+    if (brain.architecture_notes) compressBrainField(projectId, 'architecture', brain.architecture_notes);
+    if (brain.conventions) compressBrainField(projectId, 'conventions', brain.conventions);
+    if (brain.decisions) compressBrainField(projectId, 'decisions', brain.decisions);
+    if (brain.dependencies_notes) compressBrainField(projectId, 'dependencies', brain.dependencies_notes);
+    compressionStats = getCompressionStats(projectId);
+  }
+
+  res.json({
+    success: true,
+    project: project.name,
+    ...result,
+    compressionStats,
+  });
 });

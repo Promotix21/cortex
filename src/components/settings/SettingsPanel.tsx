@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings-store';
 import { BudgetSettings } from '@/components/budget/BudgetSettings';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -35,7 +36,12 @@ export function SettingsPanel() {
 
   const executeClearData = async () => {
     setShowClearConfirm(false);
-    // TODO: call clear data API when available
+    try {
+      await api.clearAllData();
+      toast.success('All data cleared', { description: 'Cortex database has been wiped. Restart the app.' });
+    } catch (err) {
+      toast.error('Failed to clear data', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
   };
 
   return (

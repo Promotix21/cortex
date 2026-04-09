@@ -18,7 +18,7 @@ import {
   LayoutDashboard, Terminal, GitBranch,
   MessageSquare, Brain, FolderOpen, Pencil, RefreshCw,
   CheckCircle, AlertTriangle, Code2, Database, Globe, Shield, CreditCard, Mail, HardDrive,
-  FileText, Zap, Layers,
+  FileText, Zap, Layers, Sparkles,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -98,6 +98,8 @@ function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: 
   const [iconInput, setIconInput] = useState(project.icon || '');
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
+  const [buildingMemory, setBuildingMemory] = useState(false);
+  const [memoryMessage, setMemoryMessage] = useState('');
   const { fetchProjects } = useProjectStore();
 
   const handleSaveIcon = async () => {
@@ -296,6 +298,21 @@ function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: 
           <ActionChip label="Start AI Chat" icon={MessageSquare} onClick={() => onNavigate('chat')} />
           <ActionChip label="View Git Status" icon={GitBranch} onClick={() => onNavigate('git')} />
           <ActionChip label="Edit Brain" icon={Brain} onClick={() => onNavigate('brain')} />
+          <ActionChip label={buildingMemory ? 'Building...' : memoryMessage || 'Build Memory'} icon={Sparkles} onClick={async () => {
+            if (buildingMemory) return;
+            setBuildingMemory(true);
+            setMemoryMessage('');
+            try {
+              const result = await api.buildMemory(project.id);
+              setMemoryMessage(`${result.factsCreated} facts built`);
+              setTimeout(() => setMemoryMessage(''), 4000);
+            } catch {
+              setMemoryMessage('Build failed');
+              setTimeout(() => setMemoryMessage(''), 3000);
+            } finally {
+              setBuildingMemory(false);
+            }
+          }} />
         </div>
       </div>
     </div>

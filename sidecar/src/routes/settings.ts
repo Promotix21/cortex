@@ -156,6 +156,19 @@ settingsRouter.get('/', (_req, res) => {
   res.json({ settings });
 });
 
+// POST /api/settings/clear-data — wipe all user data from cortex.db
+settingsRouter.post('/clear-data', (_req, res) => {
+  const db = getDb();
+  const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`).all() as { name: string }[]).map(r => r.name);
+  const wipe = db.transaction(() => {
+    for (const table of tables) {
+      db.exec(`DELETE FROM ${table}`);
+    }
+  });
+  wipe();
+  res.json({ success: true, tablesCleared: tables.length });
+});
+
 // PUT /api/settings — save a single setting
 settingsRouter.put('/', (req, res) => {
   ensureTable();

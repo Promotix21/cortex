@@ -433,4 +433,45 @@ CREATE INDEX IF NOT EXISTS idx_execution_policies_project ON execution_policies(
 CREATE INDEX IF NOT EXISTS idx_context_priorities_project ON context_priorities(project_id);
 CREATE INDEX IF NOT EXISTS idx_captured_errors_timestamp ON captured_errors(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_captured_network_timestamp ON captured_network(timestamp DESC);
+
+-- MemPalace: Knowledge Graph (Temporal Facts)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS knowledge_graph (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  predicate TEXT NOT NULL,
+  object TEXT NOT NULL,
+  room_tag TEXT,
+  confidence TEXT NOT NULL DEFAULT 'probable' CHECK(confidence IN ('verified','probable','unverified','deprecated')),
+  source TEXT NOT NULL DEFAULT 'auto' CHECK(source IN ('auto','user','scan','mcp')),
+  valid_from TEXT NOT NULL DEFAULT (datetime('now')),
+  valid_until TEXT DEFAULT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_kg_project ON knowledge_graph(project_id);
+CREATE INDEX IF NOT EXISTS idx_kg_subject ON knowledge_graph(subject);
+CREATE INDEX IF NOT EXISTS idx_kg_room ON knowledge_graph(room_tag);
+CREATE INDEX IF NOT EXISTS idx_kg_valid ON knowledge_graph(valid_from, valid_until);
+CREATE INDEX IF NOT EXISTS idx_kg_active ON knowledge_graph(project_id, valid_until);
+
+-- MemPalace: AAAK Compression Cache
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS aaak_cache (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  source_field TEXT NOT NULL,
+  original_tokens INTEGER NOT NULL DEFAULT 0,
+  compressed_text TEXT NOT NULL,
+  compressed_tokens INTEGER NOT NULL DEFAULT 0,
+  room_tag TEXT,
+  valid_from TEXT NOT NULL DEFAULT (datetime('now')),
+  valid_until TEXT DEFAULT NULL,
+  UNIQUE(project_id, source_field, room_tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_aaak_project ON aaak_cache(project_id);
 `;

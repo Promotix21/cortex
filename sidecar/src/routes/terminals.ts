@@ -4,8 +4,75 @@ import { getTerminalManager } from '../terminals/terminal-manager.js';
 import { getSessionManager } from '../sessions/session-manager.js';
 import type { TerminalType } from '../terminals/terminal-manager.js';
 import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { execSync, spawnSync } from 'child_process';
 
 export const terminalsRouter: ReturnType<typeof Router> = Router();
+
+// POST /api/terminals/save-image — save base64 image data (from frontend) to temp file
+terminalsRouter.post('/save-image', (req, res) => {
+  const { data, mimeType } = req.body;
+  if (!data || !mimeType) {
+    res.status(400).json({ error: 'data and mimeType are required' });
+    return;
+  }
+
+  const ext = mimeType === 'image/png' ? '.png'
+    : mimeType === 'image/jpeg' ? '.jpg'
+    : mimeType === 'image/gif' ? '.gif'
+    : mimeType === 'image/webp' ? '.webp'
+    : '.png';
+
+  const tmpDir = path.join(os.tmpdir(), 'cortex-clipboard');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const filename = `clipboard-${Date.now()}${ext}`;
+  const filePath = path.join(tmpDir, filename);
+
+  try {
+    const buffer = Buffer.from(data, 'base64');
+    fs.writeFileSync(filePath, buffer);
+    res.json({ path: filePath, filename });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/terminals/clipboard-image — read image from SYSTEM clipboard using
+// wl-paste (Wayland) or xclip (X11), save to temp file, return path.
+// Returns { hasImage: false } if clipboard has no image data.
+terminalsRouter.post('/clipboard-image', (_req, res) => {
+  const tmpDir = path.join(os.tmpdir(), 'cortex-clipboard');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const filename = `clipboard-${Date.now()}.png`;
+  const filePath = path.join(tmpDir, filename);
+
+  // Try wl-paste first (Wayland), then xclip (X11)
+  const strategies = [
+    { cmd: 'wl-paste', args: ['--type', 'image/png'], check: 'wl-paste' },
+    { cmd: 'xclip', args: ['-selection', 'clipboard', '-t', 'image/png', '-o'], check: 'xclip' },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      // Check if tool exists
+      spawnSync('which', [strategy.check], { stdio: 'ignore' });
+      const result = spawnSync(strategy.cmd, strategy.args, {
+        timeout: 3000,
+        maxBuffer: 50 * 1024 * 1024, // 50MB max
+      });
+      if (result.status === 0 && result.stdout && result.stdout.length > 0) {
+        fs.writeFileSync(filePath, result.stdout);
+        res.json({ hasImage: true, path: filePath, filename });
+        return;
+      }
+    } catch {
+      // Try next strategy
+    }
+  }
+
+  res.json({ hasImage: false });
+});
 
 // GET /api/terminals — all active terminals (optionally by project)
 terminalsRouter.get('/', (req, res) => {

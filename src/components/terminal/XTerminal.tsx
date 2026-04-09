@@ -185,13 +185,25 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
           }
           return true; // No selection — let SIGINT through
         }
-        // Ctrl+V — handle paste exactly once (WebKitGTK fires both a native paste
-        // event AND xterm's built-in handler, causing double paste)
+        // Ctrl+V — check system clipboard for image via sidecar (wl-paste/xclip).
+        // If image found, write the temp file path to the terminal.
+        // If no image, paste text. Blocks browser default to prevent WebKitGTK double-paste.
         if (e.key === 'V' || e.key === 'v') {
-          navigator.clipboard?.readText?.().then((text) => {
-            if (text) api.writeTerminal(terminalId, text).catch(() => {});
-          }).catch(() => {});
-          return false; // Prevent xterm's own paste handler
+          api.getClipboardImage().then(({ hasImage, path: imgPath }) => {
+            if (hasImage && imgPath) {
+              api.writeTerminal(terminalId, imgPath).catch(() => {});
+            } else {
+              navigator.clipboard?.readText?.().then((text) => {
+                if (text) api.writeTerminal(terminalId, text).catch(() => {});
+              }).catch(() => {});
+            }
+          }).catch(() => {
+            // Sidecar unreachable — fall back to text paste
+            navigator.clipboard?.readText?.().then((text) => {
+              if (text) api.writeTerminal(terminalId, text).catch(() => {});
+            }).catch(() => {});
+          });
+          return false;
         }
       }
 
@@ -208,7 +220,7 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
           }
           return false;
         }
-        // Ctrl+Shift+V → paste
+        // Ctrl+Shift+V → explicit text paste (standard Linux terminal paste)
         if (e.key === 'V' || e.key === 'v') {
           navigator.clipboard?.readText?.().then((text) => {
             if (text) api.writeTerminal(terminalId, text).catch(() => {});
@@ -220,7 +232,7 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
       return true;
     });
 
-    // Right-click paste
+    // Right-click paste (text)
     containerRef.current?.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       navigator.clipboard?.readText?.().then((text) => {

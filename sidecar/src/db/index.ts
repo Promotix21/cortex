@@ -45,6 +45,13 @@ export function initDb(): Database.Database {
   // Migrations — add columns that may be missing from older schemas
   const migrations = [
     "ALTER TABLE projects ADD COLUMN company TEXT DEFAULT NULL",
+    // MemPalace: temporal columns on project_brain
+    "ALTER TABLE project_brain ADD COLUMN valid_from TEXT DEFAULT (datetime('now'))",
+    "ALTER TABLE project_brain ADD COLUMN valid_until TEXT DEFAULT NULL",
+    // MemPalace: room tags on intelligence tables
+    "ALTER TABLE pattern_memory ADD COLUMN room_tag TEXT",
+    "ALTER TABLE debug_memory ADD COLUMN room_tag TEXT",
+    "ALTER TABLE notes ADD COLUMN room_tag TEXT",
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* column already exists */ }
