@@ -29,6 +29,16 @@ export function initDb(): Database.Database {
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
 
+  // Checkpoint WAL on startup to recover from dirty shutdowns (hibernation, crash, battery loss).
+  // This forces any uncommitted WAL transactions to be flushed into the main DB file,
+  // preventing corruption and reclaiming the WAL file space.
+  try {
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    console.log('[db] WAL checkpoint completed (crash recovery)');
+  } catch (err) {
+    console.warn('[db] WAL checkpoint failed (non-fatal):', err);
+  }
+
   // Run schema creation
   db.exec(SCHEMA_SQL);
 

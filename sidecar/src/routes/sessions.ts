@@ -43,6 +43,36 @@ sessionsRouter.get('/active', (_req, res) => {
   res.json({ sessions: mgr.getActiveSessions() });
 });
 
+// GET /api/sessions/recent — recent sessions across all projects (for sidebar)
+sessionsRouter.get('/recent', (req, res) => {
+  const db = getDb();
+  const limit = parseInt(req.query.limit as string) || 10;
+  const rows = db.prepare(`
+    SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output,
+           p.name as project_name
+    FROM claude_sessions cs
+    LEFT JOIN session_metrics sm ON sm.session_id = cs.id
+    LEFT JOIN projects p ON p.id = cs.project_id
+    ORDER BY cs.last_active DESC
+    LIMIT ?
+  `).all(limit) as any[];
+
+  const sessions = rows.map(r => ({
+    id: r.id,
+    projectId: r.project_id,
+    projectName: r.project_name || 'Unknown',
+    name: r.name,
+    status: r.status,
+    startedAt: r.started_at,
+    lastActive: r.last_active,
+    promptCount: r.prompt_count || 0,
+    tokenUsageInput: r.token_usage_input || 0,
+    tokenUsageOutput: r.token_usage_output || 0,
+  }));
+
+  res.json({ sessions });
+});
+
 // GET /api/sessions/usage — usage summary
 sessionsRouter.get('/usage', (_req, res) => {
   const mgr = getSessionManager();
@@ -94,6 +124,7 @@ sessionsRouter.get('/:id/output', (req, res) => {
 
   // If no live output, try saved output from DB (completed sessions)
   if (!output) {
+    const db = getDb();
     const row = db.prepare('SELECT session_output FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
     if (row?.session_output) {
       output = row.session_output;

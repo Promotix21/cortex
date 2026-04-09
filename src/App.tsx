@@ -22,10 +22,13 @@ export default function App() {
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [sidecarReady, setSidecarReady] = useState(false);
+  const [sidecarFailed, setSidecarFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Wait for sidecar to be available (retries on connection refused)
   const waitForSidecar = useCallback(async () => {
+    setSidecarFailed(false);
     for (let i = 0; i < 30; i++) {
       try {
         await api.health();
@@ -35,17 +38,24 @@ export default function App() {
         await new Promise(r => setTimeout(r, 500));
       }
     }
-    // After 15s of retries, show the app anyway (sidecar may be started manually)
-    setSidecarReady(true);
+    // After 15s, show a retry screen instead of a broken app
+    setSidecarFailed(true);
   }, []);
 
   useEffect(() => {
     waitForSidecar().then(() => {
-      checkClaudeStatus().finally(() => setChecking(false));
-      fetchSessions();
-      fetchProjects();
+      if (!sidecarReady) return; // don't fetch if sidecar never came up
     });
-  }, [waitForSidecar, checkClaudeStatus, fetchSessions, fetchProjects]);
+  }, [waitForSidecar, retryCount]);
+
+  // Once sidecar is confirmed ready, load data
+  useEffect(() => {
+    if (!sidecarReady) return;
+    setSidecarFailed(false);
+    checkClaudeStatus().finally(() => setChecking(false));
+    fetchSessions();
+    fetchProjects();
+  }, [sidecarReady, checkClaudeStatus, fetchSessions, fetchProjects]);
 
   useEffect(() => {
     if (!sidecarReady) return;
@@ -186,7 +196,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Sidecar loading screen
+  // Sidecar loading / connection error screen
   if (!sidecarReady) {
     return (
       <div
@@ -194,7 +204,33 @@ export default function App() {
         style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}
       >
         <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 12 }}>Cortex</div>
-        <div style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>Starting sidecar…</div>
+        {sidecarFailed ? (
+          <>
+            <div style={{ fontSize: 14, color: 'var(--error)', marginBottom: 16 }}>
+              Could not connect to sidecar (port 4700)
+            </div>
+            <button
+              onClick={() => { setRetryCount(c => c + 1); setSidecarFailed(false); }}
+              style={{
+                padding: '10px 28px',
+                fontSize: 14,
+                fontWeight: 600,
+                background: 'var(--accent)',
+                color: 'var(--bg-primary)',
+                border: 'none',
+                borderRadius: 8,
+                cursor: 'pointer',
+              }}
+            >
+              Retry Connection
+            </button>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 12 }}>
+              Try closing all Cortex windows and reopening the app
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>Starting sidecar…</div>
+        )}
       </div>
     );
   }

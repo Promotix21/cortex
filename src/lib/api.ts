@@ -63,6 +63,8 @@ export const api = {
     request<{ sessions: Session[] }>(projectId ? `/api/sessions?project_id=${projectId}` : '/api/sessions'),
   getActiveSessions: () =>
     request<{ sessions: Session[] }>('/api/sessions/active'),
+  getRecentSessions: (limit = 10) =>
+    request<{ sessions: (Session & { projectName: string })[] }>(`/api/sessions/recent?limit=${limit}`),
   getSession: (id: string) =>
     request<{ session: Session }>(`/api/sessions/${id}`),
   getSessionOutput: (id: string) =>
@@ -136,6 +138,16 @@ export const api = {
     request<{ terminal: Terminal }>(`/api/terminals/${id}/restart`, { method: 'POST' }),
   killTerminal: (id: string) =>
     request<{ success: boolean }>(`/api/terminals/${id}`, { method: 'DELETE' }),
+  saveClipboardImage: (data: string, mimeType: string) =>
+    request<{ path: string; filename: string }>('/api/terminals/save-image', {
+      method: 'POST',
+      body: JSON.stringify({ data, mimeType }),
+    }),
+  /** Read image from system clipboard via wl-paste/xclip, save to temp file */
+  getClipboardImage: () =>
+    request<{ hasImage: boolean; path?: string; filename?: string }>('/api/terminals/clipboard-image', {
+      method: 'POST',
+    }),
 
   // ── Intelligence ──────────────────────────────────────────
   getPatterns: (projectId?: string, search?: string) =>
@@ -282,4 +294,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ apiKey }),
     }),
+  clearAllData: () =>
+    request<{ success: boolean; tablesCleared: number }>('/api/settings/clear-data', { method: 'POST' }),
 };

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { execSync } from 'child_process';
 import { initDb, closeDb, getDb } from './db/index.js';
 import { projectsRouter } from './routes/projects.js';
 import { sessionsRouter } from './routes/sessions.js';
@@ -41,11 +42,20 @@ app.use(express.json());
 // Initialize database
 initDb();
 
-// Clean up stale sessions from previous runs
+// Clean up stale sessions AND terminals from previous runs (crash/hibernation recovery)
 const dbClean = getDb();
 const staleCount = dbClean.prepare("UPDATE claude_sessions SET status = 'completed' WHERE status = 'running' OR status = 'idle'").run();
 if (staleCount.changes > 0) {
   console.log(`[cleanup] Marked ${staleCount.changes} stale session(s) as completed`);
+}
+const staleTerminals = dbClean.prepare("UPDATE terminals SET status = 'stopped' WHERE status = 'running'").run();
+if (staleTerminals.changes > 0) {
+  console.log(`[cleanup] Marked ${staleTerminals.changes} stale terminal(s) as exited`);
+}
+// Clear any stale file locks left by a crashed process
+const staleLocks = dbClean.prepare("DELETE FROM file_locks WHERE 1=1").run();
+if (staleLocks.changes > 0) {
+  console.log(`[cleanup] Cleared ${staleLocks.changes} stale file lock(s)`);
 }
 
 // Initialize managers
@@ -98,12 +108,54 @@ bgWorker.start(300000);
 // Start MCP server (port 4710)
 startMCPServer();
 
+// Kill zombie sidecar processes from a previous crash BEFORE we try to bind the port.
+function killZombiesOnPort(port: number): void {
+  try {
+    // fuser -k is more reliable than lsof+kill — it atomically finds and kills all processes on the port
+    execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { encoding: 'utf8' });
+  } catch {
+    // fuser not available, try lsof fallback
+    try {
+      const output = execSync(`lsof -ti tcp:${port} 2>/dev/null || true`, { encoding: 'utf8' }).trim();
+      if (!output) return;
+      const pids = output.split('\n').map(p => parseInt(p.trim(), 10)).filter(p => p && p !== process.pid);
+      for (const pid of pids) {
+        try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
+      }
+    } catch { /* no tools available */ }
+  }
+}
+
+// Start server with retry — handles zombie processes and TIME_WAIT port states after crash/hibernation.
+// On EADDRINUSE: kill zombies, wait for OS to release the port, retry up to 5 times.
+function startServerWithRetry(attempt = 0): Promise<ReturnType<typeof app.listen>> {
+  return new Promise((resolve, reject) => {
+    const srv = app.listen(PORT, '127.0.0.1', () => {
+      console.log(`[cortex-sidecar] Running on http://127.0.0.1:${PORT}`);
+      console.log(`[cortex-sidecar] Session manager ready`);
+      console.log(`[cortex-sidecar] Terminal manager ready`);
+      resolve(srv);
+    });
+
+    srv.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE' && attempt < 5) {
+        console.warn(`[cortex-sidecar] Port ${PORT} in use (attempt ${attempt + 1}/5) — killing zombies and retrying...`);
+        killZombiesOnPort(PORT);
+        // Wait for OS to fully release the port (TIME_WAIT can linger)
+        setTimeout(() => {
+          startServerWithRetry(attempt + 1).then(resolve, reject);
+        }, 1000);
+      } else {
+        console.error(`[cortex-sidecar] FATAL: Could not bind port ${PORT}: ${err.message}`);
+        process.exit(1);
+      }
+    });
+  });
+}
+
 // Start server FIRST so the frontend can connect immediately
-const server = app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[cortex-sidecar] Running on http://127.0.0.1:${PORT}`);
-  console.log(`[cortex-sidecar] Session manager ready`);
-  console.log(`[cortex-sidecar] Terminal manager ready`);
-});
+let server: ReturnType<typeof app.listen>;
+startServerWithRetry().then(srv => { server = srv; });
 
 // Initialize watchers AFTER the server is up — watchProject does synchronous
 // file indexing per project which can take many seconds across 20+ projects.

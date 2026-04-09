@@ -3,6 +3,7 @@ import { useProjectStore } from '@/stores/project-store';
 import { useSessionStore } from '@/stores/session-store';
 import { ProjectItem } from './ProjectItem';
 import { AddProjectDialog } from './AddProjectDialog';
+import { RecentSessions } from './RecentSessions';
 import { Search, Plus, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Project } from '@/types/project';
 
@@ -239,6 +240,9 @@ export function ProjectSidebar() {
           ))
         )}
       </div>
+
+      {/* Recent Sessions */}
+      <RecentSessions />
 
       {/* Footer */}
       <div
