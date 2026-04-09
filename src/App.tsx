@@ -204,6 +204,7 @@ export default function App() {
         className="flex flex-col items-center justify-center h-screen w-screen"
         style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}
       >
+        <img src="/logo.png" alt="Cortex" style={{ width: 72, height: 72, marginBottom: 12 }} />
         <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Cortex</div>
         {sidecarFailed ? (
           <>

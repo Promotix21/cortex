@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/cortex-demo.gif" alt="Cortex Demo" width="800" />
+  <img src="assets/cortex-logo.png" alt="Cortex Logo" width="180" />
 </p>
 
 <h1 align="center">Cortex</h1>
