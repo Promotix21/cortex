@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useSessionStore } from '@/stores/session-store';
 import { XTerminal } from '@/components/terminal/XTerminal';
-import { ArrowLeft, Square, Zap, Clock, MessageSquare, FileText, CheckCircle, FolderInput } from 'lucide-react';
+import { ArrowLeft, Square, Zap, Clock, MessageSquare, FileText, CheckCircle, FolderInput, ListTodo, ChevronRight, ChevronLeft, Circle, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface SessionTerminalProps {
   sessionId: string;
@@ -20,6 +20,9 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
 
   const [dragOver, setDragOver] = useState(false);
   const [injecting, setInjecting] = useState<string | null>(null);
+  const [todosPanelOpen, setTodosPanelOpen] = useState(true);
+  const [todos, setTodos] = useState<Array<{ id: string; content: string; status: string; priority: string }>>([]);
+  const todosIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     if (!isRunning || !terminalId) return;
@@ -31,6 +34,19 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
   }, [isRunning, terminalId]);
 
   const handleDragLeave = useCallback(() => setDragOver(false), []);
+
+  // Poll todos every 2s while running
+  useEffect(() => {
+    if (!isRunning) return;
+    const fetchTodos = () => {
+      api.getSessionTodos(sessionId).then(data => setTodos(data.todos || [])).catch(() => {});
+    };
+    fetchTodos();
+    todosIntervalRef.current = setInterval(fetchTodos, 2000);
+    return () => {
+      if (todosIntervalRef.current) clearInterval(todosIntervalRef.current);
+    };
+  }, [sessionId, isRunning]);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -193,8 +209,15 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
 
       {/* Content */}
       {isRunning && terminalId ? (
-        // Use the SAME XTerminal component that works for regular terminals
-        <XTerminal terminalId={terminalId} active={true} />
+        <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+          <XTerminal terminalId={terminalId} active={true} />
+          {/* Live Tasks Sidebar */}
+          <TodosSidebar
+            todos={todos}
+            open={todosPanelOpen}
+            onToggle={() => setTodosPanelOpen(o => !o)}
+          />
+        </div>
       ) : isRunning ? (
         // Fallback: session is running but no terminal ID (old session)
         <div className="flex-1 flex items-center justify-center" style={{ background: '#1e1e2e' }}>
@@ -205,6 +228,153 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
       ) : (
         // Completed session — show history
         <CompletedSessionView sessionId={sessionId} session={session} />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// LIVE TODOS SIDEBAR
+// ============================================================
+
+interface Todo {
+  id: string;
+  content: string;
+  status: string;
+  priority: string;
+}
+
+function TodosSidebar({ todos, open, onToggle }: { todos: Todo[]; open: boolean; onToggle: () => void }) {
+  const pending = todos.filter(t => t.status === 'pending' || t.status === 'in_progress');
+  const done = todos.filter(t => t.status === 'completed');
+
+  const priorityColor = (p: string) => {
+    if (p === 'high') return 'var(--error)';
+    if (p === 'medium') return 'var(--warning)';
+    return 'var(--text-tertiary)';
+  };
+
+  const StatusIcon = ({ status }: { status: string }) => {
+    if (status === 'completed') return <CheckCircle2 size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />;
+    if (status === 'in_progress') return <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)', flexShrink: 0 }} />;
+    return <Circle size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />;
+  };
+
+  return (
+    <div
+      className="flex shrink-0"
+      style={{
+        width: open ? 260 : 36,
+        transition: 'width 0.2s ease',
+        borderLeft: '1px solid var(--border)',
+        background: 'var(--bg-secondary)',
+        overflow: 'hidden',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Toggle button */}
+      <button
+        onClick={onToggle}
+        className="flex items-center justify-center shrink-0"
+        style={{
+          height: 36,
+          width: '100%',
+          background: 'transparent',
+          borderBottom: '1px solid var(--border)',
+          color: 'var(--text-tertiary)',
+          cursor: 'pointer',
+        }}
+        title={open ? 'Collapse tasks' : 'Expand tasks'}
+      >
+        {open ? (
+          <div className="flex items-center w-full" style={{ gap: 8, padding: '0 12px' }}>
+            <ListTodo size={14} style={{ color: 'var(--accent)' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', flex: 1 }}>
+              Claude Tasks
+            </span>
+            {todos.length > 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999,
+                background: 'var(--accent-dim)', color: 'var(--accent)',
+              }}>
+                {todos.length}
+              </span>
+            )}
+            <ChevronRight size={12} />
+          </div>
+        ) : (
+          <ChevronLeft size={14} />
+        )}
+      </button>
+
+      {/* Task list */}
+      {open && (
+        <div className="flex-1 overflow-auto" style={{ padding: '8px 0' }}>
+          {todos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center" style={{ padding: '32px 16px', gap: 8 }}>
+              <ListTodo size={24} style={{ color: 'var(--text-tertiary)' }} />
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', lineHeight: 1.4 }}>
+                No tasks yet. Claude will show tasks here when it uses TodoWrite.
+              </p>
+            </div>
+          ) : (
+            <>
+              {pending.length > 0 && (
+                <div style={{ padding: '0 12px 4px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 6 }}>
+                    Active ({pending.length})
+                  </div>
+                  <div className="flex flex-col" style={{ gap: 4 }}>
+                    {pending.map(todo => (
+                      <div
+                        key={todo.id}
+                        className="flex items-start rounded-lg"
+                        style={{ gap: 8, padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                      >
+                        <StatusIcon status={todo.status} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{
+                            fontSize: 12, lineHeight: 1.4, color: 'var(--text-primary)',
+                            wordBreak: 'break-word', margin: 0,
+                          }}>
+                            {todo.content}
+                          </p>
+                          <span style={{ fontSize: 10, color: priorityColor(todo.priority), fontWeight: 600, textTransform: 'uppercase' }}>
+                            {todo.priority}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {done.length > 0 && (
+                <div style={{ padding: `${pending.length > 0 ? 12 : 0}px 12px 4px` }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 6 }}>
+                    Done ({done.length})
+                  </div>
+                  <div className="flex flex-col" style={{ gap: 4 }}>
+                    {done.map(todo => (
+                      <div
+                        key={todo.id}
+                        className="flex items-start rounded-lg"
+                        style={{ gap: 8, padding: '8px 10px', background: 'var(--bg-hover)', border: '1px solid transparent' }}
+                      >
+                        <StatusIcon status={todo.status} />
+                        <p style={{
+                          fontSize: 12, lineHeight: 1.4, color: 'var(--text-tertiary)',
+                          wordBreak: 'break-word', margin: 0, textDecoration: 'line-through',
+                        }}>
+                          {todo.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );

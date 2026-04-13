@@ -5,6 +5,88 @@ import type { Pattern, CreatePatternInput, DebugEntry, CreateDebugInput, BrainDa
 import type { BudgetLimit, BudgetAlert } from '@/types/budget';
 import type { Task, GitStatus, GitCommit, RenderJob, DocumentInfo, ProjectSnapshot, SessionHistoryEntry } from '@/types/workspace';
 
+export interface MemPalaceOverview {
+  totalFacts: number;
+  totalProjects: number;
+  totalCompanies: number;
+  factsByCompany: { company: string; count: number }[];
+  factsByRoom: { room: string; count: number }[];
+  topSubjects: { subject: string; count: number }[];
+  crossProjectPatterns: number;
+  companyInsights: number;
+  lastSyncedAt: string | null;
+}
+
+export interface MemPalaceFact {
+  id: string;
+  projectId: string | null;
+  projectName: string | null;
+  company: string | null;
+  subject: string;
+  predicate: string;
+  object: string;
+  roomTag: string | null;
+  confidence: string;
+  source: string;
+  validFrom: string;
+  createdAt: string;
+}
+
+export interface MemPalaceInsight {
+  id: string;
+  company: string;
+  insightType: string;
+  title: string;
+  description: string;
+  projectIds: string[];
+  confidence: string;
+  updatedAt: string;
+}
+
+export interface MemPalacePattern {
+  id: string;
+  patternType: string;
+  title: string;
+  description: string;
+  projectIds: string[];
+  projectNames: string[];
+  roomTag: string | null;
+  occurrenceCount: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export interface LiveWorkItem {
+  kind: 'session' | 'terminal';
+  id: string;
+  projectId: string;
+  projectName: string;
+  name: string;
+  status: string;
+  startedAt: string;
+  lastActive: string;
+  terminalId: string | null;
+  type?: string;
+  promptCount?: number;
+}
+
+export interface LiveProjectGroup {
+  projectId: string;
+  projectName: string;
+  items: LiveWorkItem[];
+  count: number;
+}
+
+export interface ExplorerTreeNode {
+  name: string;
+  path: string;
+  relativePath: string;
+  type: 'file' | 'directory';
+  ext?: string;
+  size?: number;
+  children?: ExplorerTreeNode[];
+}
+
 // Dynamic sidecar URL: in Tauri production, reads from env/config; in dev, uses localhost
 const SIDECAR_PORT = (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__CORTEX_SIDECAR_PORT__) || 4700;
 const SIDECAR_URL = `http://localhost:${SIDECAR_PORT}`;
@@ -65,14 +147,18 @@ export const api = {
     request<{ sessions: Session[] }>(projectId ? `/api/sessions?project_id=${projectId}` : '/api/sessions'),
   getActiveSessions: () =>
     request<{ sessions: Session[] }>('/api/sessions/active'),
-  getRecentSessions: (limit = 10) =>
-    request<{ sessions: (Session & { projectName: string })[] }>(`/api/sessions/recent?limit=${limit}`),
+  getLiveWork: () =>
+    request<{ items: LiveWorkItem[]; projects: LiveProjectGroup[] }>('/api/sessions/live'),
+  getRecentSessions: (limit = 10, projectId?: string) =>
+    request<{ sessions: (Session & { projectName: string })[] }>(`/api/sessions/recent?limit=${limit}${projectId ? `&project_id=${projectId}` : ''}`),
   getSession: (id: string) =>
     request<{ session: Session }>(`/api/sessions/${id}`),
   getSessionOutput: (id: string) =>
     request<{ output: string }>(`/api/sessions/${id}/output`),
   getSessionHistory: (id: string) =>
     request<{ history: SessionHistoryEntry[] }>(`/api/sessions/${id}/history`),
+  getSessionTodos: (id: string) =>
+    request<{ todos: Array<{ id: string; content: string; status: string; priority: string }> }>(`/api/sessions/${id}/todos`),
   spawnSession: (projectId: string, name: string) =>
     request<{ session: Session }>('/api/sessions', {
       method: 'POST',
@@ -260,6 +346,55 @@ export const api = {
     request<{ job: RenderJob | null }>(`/api/remotion/latest/${projectId}`),
   listRenders: () =>
     request<{ jobs: RenderJob[] }>('/api/remotion/list'),
+
+  // ── Explorer ─────────────────────────────────────────────
+  getFileTree: (projectId: string, depth?: number) =>
+    request<{ tree: ExplorerTreeNode[]; projectPath: string }>(`/api/explorer/${projectId}/tree${depth ? `?depth=${depth}` : ''}`),
+  readFile: (projectId: string, filePath: string) =>
+    request<{ content: string | null; type: 'text' | 'binary'; language?: string; size?: number; ext?: string }>(`/api/explorer/${projectId}/read?path=${encodeURIComponent(filePath)}`),
+  writeFile: (projectId: string, filePath: string, content: string) =>
+    request<{ success: boolean }>(`/api/explorer/${projectId}/write`, {
+      method: 'PUT',
+      body: JSON.stringify({ filePath, content }),
+    }),
+  renameFile: (projectId: string, oldPath: string, newName: string) =>
+    request<{ success: boolean; newPath: string }>(`/api/explorer/${projectId}/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ oldPath, newName }),
+    }),
+  createFileOrFolder: (projectId: string, parentPath: string, name: string, type: 'file' | 'directory') =>
+    request<{ success: boolean; path: string; relativePath: string }>(`/api/explorer/${projectId}/create`, {
+      method: 'POST',
+      body: JSON.stringify({ parentPath, name, type }),
+    }),
+  deleteFileOrFolder: (projectId: string, filePath: string) =>
+    request<{ success: boolean }>(`/api/explorer/${projectId}/delete?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' }),
+  searchFiles: (projectId: string, query: string) =>
+    request<{ results: { name: string; path: string; relativePath: string; type: 'file' | 'directory' }[] }>(`/api/explorer/${projectId}/search?q=${encodeURIComponent(query)}`),
+  getRawFileUrl: (projectId: string, filePath: string) =>
+    `${SIDECAR_URL}/api/explorer/${projectId}/raw?path=${encodeURIComponent(filePath)}`,
+
+  // ── MemPalace (Global) ────────────────────────────────────
+  mempalaceOverview: () =>
+    request<MemPalaceOverview>('/api/mempalace/overview'),
+  mempalaceSync: () =>
+    request<{ factsCreated: number; factsRetired: number; patternsFound: number; insightsGenerated: number }>('/api/mempalace/sync', { method: 'POST' }),
+  mempalaceFacts: (options?: { company?: string; room?: string; subject?: string; search?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.company) params.set('company', options.company);
+    if (options?.room) params.set('room', options.room);
+    if (options?.subject) params.set('subject', options.subject);
+    if (options?.search) params.set('search', options.search);
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.offset) params.set('offset', String(options.offset));
+    return request<{ facts: MemPalaceFact[]; total: number }>(`/api/mempalace/facts?${params}`);
+  },
+  mempalaceCompanies: (company?: string) =>
+    request<{ insights: MemPalaceInsight[] }>(`/api/mempalace/companies${company ? `?company=${encodeURIComponent(company)}` : ''}`),
+  mempalacePatterns: (type?: string) =>
+    request<{ patterns: MemPalacePattern[] }>(`/api/mempalace/patterns${type ? `?type=${encodeURIComponent(type)}` : ''}`),
+  mempalaceSearch: (q: string) =>
+    request<{ facts: MemPalaceFact[]; patterns: MemPalacePattern[]; insights: MemPalaceInsight[] }>(`/api/mempalace/search?q=${encodeURIComponent(q)}`),
 
   // ── Health ────────────────────────────────────────────────
   health: () =>

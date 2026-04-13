@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ActivityId = 'dashboard' | 'terminal' | 'sessions' | 'git' | 'notes' | 'brain' | 'chat' | 'studio' | 'documents' | 'settings';
+export type ActivityId = 'dashboard' | 'terminal' | 'sessions' | 'explorer' | 'git' | 'notes' | 'tasks' | 'brain' | 'mempalace' | 'chat' | 'studio' | 'documents' | 'settings' | 'shadow' | 'browser';
 
 interface NavigationStore {
   activeActivity: ActivityId;

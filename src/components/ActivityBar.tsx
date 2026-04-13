@@ -6,9 +6,14 @@ import {
   Brain,
   MessageSquare,
   Settings,
-  Video,
   FolderOpen,
   Zap,
+  FolderTree,
+  Sparkles,
+  Activity,
+  Globe,
+  Clapperboard,
+  ListTodo,
 } from 'lucide-react';
 import { useNavigationStore, type ActivityId } from '@/stores/navigation-store';
 import { useState } from 'react';
@@ -23,15 +28,20 @@ const topActivities: ActivityItem[] = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard (Ctrl+1)' },
   { id: 'terminal', icon: Terminal, label: 'Terminal (Ctrl+2)' },
   { id: 'sessions', icon: Zap, label: 'Sessions (Ctrl+3)' },
-  { id: 'git', icon: GitBranch, label: 'Git (Ctrl+4)' },
-  { id: 'notes', icon: FileText, label: 'Notes (Ctrl+5)' },
-  { id: 'brain', icon: Brain, label: 'Intelligence (Ctrl+6)' },
-  { id: 'chat', icon: MessageSquare, label: 'AI Chat (Ctrl+7)' },
-  { id: 'documents', icon: FolderOpen, label: 'Documents (Ctrl+8)' },
-  { id: 'studio', icon: Video, label: 'Remotion Studio (Ctrl+9)' },
+  { id: 'explorer', icon: FolderTree, label: 'Explorer (Ctrl+4)' },
+  { id: 'git', icon: GitBranch, label: 'Git (Ctrl+5)' },
+  { id: 'notes', icon: FileText, label: 'Notes (Ctrl+6)' },
+  { id: 'tasks', icon: ListTodo, label: 'Tasks' },
+  { id: 'brain', icon: Brain, label: 'Intelligence (Ctrl+7)' },
+  { id: 'chat', icon: MessageSquare, label: 'AI Chat (Ctrl+8)' },
+  { id: 'documents', icon: FolderOpen, label: 'Documents (Ctrl+9)' },
+  { id: 'shadow', icon: Activity, label: 'Shadow Terminal' },
+  { id: 'browser', icon: Globe, label: 'Browser' },
+  { id: 'studio', icon: Clapperboard, label: 'Remotion Studio' },
 ];
 
 const bottomActivities: ActivityItem[] = [
+  { id: 'mempalace', icon: Sparkles, label: 'Central MemPalace' },
   { id: 'settings', icon: Settings, label: 'Settings (Ctrl+,)' },
 ];
 
@@ -119,7 +129,7 @@ export function ActivityBar() {
             width: 36,
             height: 36,
             objectFit: 'contain',
-            filter: 'drop-shadow(0 0 6px rgba(0, 180, 100, 0.3))',
+            filter: 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.4))',
           }}
         />
       </div>

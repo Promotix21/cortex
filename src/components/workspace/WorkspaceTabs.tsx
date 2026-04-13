@@ -14,6 +14,10 @@ import { SessionTerminal } from '@/components/sessions/SessionTerminal';
 import { SessionGridPanel } from '@/components/sessions/SessionGridPanel';
 import { RemotionStudio } from '@/components/remotion/RemotionStudio';
 import { DocumentsPanel } from './DocumentsPanel';
+import { ExplorerPanel } from '@/components/explorer/ExplorerPanel';
+import { MemPalacePanel } from '@/components/mempalace/MemPalacePanel';
+import { ShadowTerminalPanel } from '@/components/shadow/ShadowTerminalPanel';
+import { BrowserPanel } from '@/components/browser/BrowserPanel';
 import {
   LayoutDashboard, Terminal, GitBranch,
   MessageSquare, Brain, FolderOpen, Pencil, RefreshCw,
@@ -31,13 +35,32 @@ export function WorkspaceTabs() {
   const setActivity = useNavigationStore((s) => s.setActivity);
   const activeProject = useProjectStore((s) => s.activeProject());
 
-  // Settings doesn't need a project
+  // Settings and MemPalace don't need a project
   if (activeActivity === 'settings') {
     return (
       <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
         <div className="flex-1 overflow-auto p-6">
           <SettingsPanel />
         </div>
+      </div>
+    );
+  }
+
+  if (activeActivity === 'mempalace') {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+        <div className="flex-1 overflow-auto" style={{ padding: '28px 32px' }}>
+          <MemPalacePanel />
+        </div>
+      </div>
+    );
+  }
+
+  // Browser panel works without a selected project
+  if (activeActivity === 'browser') {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+        <BrowserPanel />
       </div>
     );
   }
@@ -63,7 +86,7 @@ export function WorkspaceTabs() {
     );
   }
 
-  const fullHeightActivities = ['terminal', 'sessions', 'chat'];
+  const fullHeightActivities = ['terminal', 'sessions', 'chat', 'explorer', 'shadow', 'browser'];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
@@ -73,10 +96,11 @@ export function WorkspaceTabs() {
       >
         <ErrorBoundary fallbackLabel={`Error in ${activeActivity} panel`} key={activeActivity}>
           {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
-          {activeActivity === 'sessions' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <SessionGridPanel />)}
+          {activeActivity === 'sessions' && <SessionGridPanel />}
           {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
           {activeActivity === 'git' && <GitPanel />}
-          {activeActivity === 'notes' && <NotesAndTasksPanel />}
+          {activeActivity === 'notes' && <NotesPanel />}
+          {activeActivity === 'tasks' && <TasksPanel />}
           {activeActivity === 'brain' && (
             <div className="space-y-6">
               <IntelligencePanel />
@@ -85,8 +109,10 @@ export function WorkspaceTabs() {
             </div>
           )}
           {activeActivity === 'chat' && <ChatPanel />}
+          {activeActivity === 'explorer' && <ExplorerPanel />}
           {activeActivity === 'documents' && <DocumentsPanel />}
           {activeActivity === 'studio' && <RemotionStudio />}
+          {activeActivity === 'shadow' && <ShadowTerminalPanel />}
         </ErrorBoundary>
       </div>
     </div>
@@ -122,8 +148,8 @@ function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: 
           style={{
             width: 56,
             height: 56,
-            background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
-            border: '1px solid rgba(137,180,250,0.15)',
+            background: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(167,139,250,0.08))',
+            border: '1px solid rgba(34,211,238,0.15)',
           }}
         >
           {hasIcon ? (
@@ -506,7 +532,7 @@ function ProjectIntelligenceCard({ projectId, onNavigate, completionEstimate, co
                 return (
                   <span key={f} className="flex items-center rounded-md" style={{
                     gap: 6, padding: '5px 12px', fontSize: 13, fontWeight: 600,
-                    background: 'var(--bg-surface)', color: 'var(--green)', border: '1px solid rgba(166,227,161,0.2)',
+                    background: 'var(--bg-surface)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.2)',
                   }}>
                     <FeatureIcon size={14} />
                     {f}
@@ -548,7 +574,7 @@ function ProjectIntelligenceCard({ projectId, onNavigate, completionEstimate, co
               return (
                 <span key={i} className="flex items-center rounded-md" style={{
                   gap: 4, padding: '3px 10px', fontSize: 11, fontWeight: 500,
-                  background: isPositive ? 'rgba(166,227,161,0.08)' : 'rgba(250,179,135,0.08)',
+                  background: isPositive ? 'rgba(52,211,153,0.08)' : 'rgba(250,179,135,0.08)',
                   color: isPositive ? 'var(--green)' : 'var(--peach)',
                 }}>
                   {isPositive ? <CheckCircle size={11} /> : <AlertTriangle size={11} />}
@@ -610,11 +636,3 @@ function ActionChip({ label, icon: Icon, onClick }: { label: string; icon: React
   );
 }
 
-function NotesAndTasksPanel() {
-  return (
-    <div className="grid grid-cols-2 gap-6 h-full">
-      <NotesPanel />
-      <TasksPanel />
-    </div>
-  );
-}

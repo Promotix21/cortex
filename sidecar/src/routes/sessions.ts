@@ -7,8 +7,10 @@ import { injectContext, assembleContext } from '../intelligence/context-injector
 import { importClaudeSessions, importAllClaudeSessions } from '../intelligence/claude-session-importer.js';
 import { generateHandoff, getHandoff } from '../intelligence/handoff-generator.js';
 import { canSpawnSession } from '../intelligence/budget-guard.js';
+import { resolveClaudeSessionId, projectPathToSlug, listClaudeSessionFiles } from '../sessions/claude-session-resolver.js';
 import { v4 as uuid } from 'uuid';
 import fs from 'fs';
+import os from 'os';
 
 export const sessionsRouter: ReturnType<typeof Router> = Router();
 
@@ -43,19 +45,100 @@ sessionsRouter.get('/active', (_req, res) => {
   res.json({ sessions: mgr.getActiveSessions() });
 });
 
-// GET /api/sessions/recent — recent sessions across all projects (for sidebar)
+// GET /api/sessions/live — unified view of ALL live work across projects:
+// running claude sessions + standalone terminals not linked to a session.
+// Used by the global Sessions dashboard and the active-project tab strip.
+sessionsRouter.get('/live', (_req, res) => {
+  const mgr = getSessionManager();
+  const tmgr = getTerminalManager();
+  const db = getDb();
+
+  const activeSessions = mgr.getActiveSessions();
+  const sessionTerminalIds = new Set(activeSessions.map(s => s.terminalId).filter(Boolean) as string[]);
+
+  const allTerminals = tmgr.getAllTerminals();
+  const standaloneTerminals = allTerminals.filter(t => t.status === 'running' && !sessionTerminalIds.has(t.id));
+
+  const projectIds = new Set<string>([
+    ...activeSessions.map(s => s.projectId),
+    ...standaloneTerminals.map(t => t.projectId),
+  ]);
+  const projectNames = new Map<string, string>();
+  if (projectIds.size > 0) {
+    const placeholders = Array.from(projectIds).map(() => '?').join(',');
+    const rows = db.prepare(`SELECT id, name FROM projects WHERE id IN (${placeholders})`).all(...projectIds) as any[];
+    for (const r of rows) projectNames.set(r.id, r.name);
+  }
+
+  const items = [
+    ...activeSessions.map(s => ({
+      kind: 'session' as const,
+      id: s.id,
+      projectId: s.projectId,
+      projectName: projectNames.get(s.projectId) ?? 'Unknown',
+      name: s.name,
+      status: s.status,
+      startedAt: s.startedAt,
+      lastActive: s.lastActive,
+      terminalId: s.terminalId,
+      promptCount: s.promptCount,
+    })),
+    ...standaloneTerminals.map(t => ({
+      kind: 'terminal' as const,
+      id: t.id,
+      projectId: t.projectId,
+      projectName: projectNames.get(t.projectId) ?? 'Unknown',
+      name: t.name,
+      status: t.status,
+      startedAt: t.createdAt,
+      lastActive: t.createdAt,
+      terminalId: t.id,
+      type: t.type,
+    })),
+  ];
+
+  // Group by project for the tab strip (preserve order: most recent lastActive first)
+  items.sort((a, b) => (b.lastActive || '').localeCompare(a.lastActive || ''));
+  const byProject = new Map<string, typeof items>();
+  for (const it of items) {
+    const arr = byProject.get(it.projectId) ?? [];
+    arr.push(it);
+    byProject.set(it.projectId, arr);
+  }
+  const projects = Array.from(byProject.entries()).map(([projectId, liveItems]) => ({
+    projectId,
+    projectName: projectNames.get(projectId) ?? 'Unknown',
+    items: liveItems,
+    count: liveItems.length,
+  }));
+
+  res.json({ items, projects });
+});
+
+// GET /api/sessions/recent — recent sessions (optionally filtered by project)
 sessionsRouter.get('/recent', (req, res) => {
   const db = getDb();
   const limit = parseInt(req.query.limit as string) || 10;
-  const rows = db.prepare(`
+  const projectId = req.query.project_id as string | undefined;
+
+  let query = `
     SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output,
            p.name as project_name
     FROM claude_sessions cs
     LEFT JOIN session_metrics sm ON sm.session_id = cs.id
     LEFT JOIN projects p ON p.id = cs.project_id
-    ORDER BY cs.last_active DESC
-    LIMIT ?
-  `).all(limit) as any[];
+  `;
+  const params: (string | number)[] = [];
+
+  if (projectId) {
+    query += ' WHERE cs.project_id = ?';
+    params.push(projectId);
+  }
+
+  query += ' ORDER BY cs.last_active DESC LIMIT ?';
+  params.push(limit);
+
+  const rows = db.prepare(query).all(...params) as any[];
 
   const sessions = rows.map(r => ({
     id: r.id,
@@ -103,6 +186,73 @@ sessionsRouter.get('/usage/export', (req, res) => {
   }
 
   res.json({ usage: rows });
+});
+
+// GET /api/sessions/claude-files?projectId=... — list Claude .jsonl session files scoped to a project's cwd
+// (diagnostic — not the global picker). Returns { slug, files: [{ uuid, mtimeMs, sizeBytes }] }
+// MUST be declared before `/:id` parameterized routes (Express 5 matches param routes eagerly).
+sessionsRouter.get('/claude-files', (req, res) => {
+  const projectId = req.query.projectId as string | undefined;
+  if (!projectId) {
+    res.status(400).json({ error: 'projectId is required' });
+    return;
+  }
+  const db = getDb();
+  const project = db.prepare('SELECT path FROM projects WHERE id = ?').get(projectId) as any;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+  const slug = projectPathToSlug(project.path);
+  const files = listClaudeSessionFiles(project.path);
+  res.json({ slug, projectPath: project.path, files });
+});
+
+// GET /api/sessions/:id/todos — parse live TodoWrite task list from session output buffer
+// Must be before plain /:id (Express 5 routing)
+sessionsRouter.get('/:id/todos', (req, res) => {
+  const mgr = getSessionManager();
+  const session = mgr.getSessionInfo(req.params.id);
+
+  let buffer = '';
+  if (session && session.status === 'running') {
+    // Get the live output buffer for running sessions
+    buffer = mgr.getSessionOutput(req.params.id, 102400);
+  } else {
+    // Fall back to DB output for completed sessions
+    const db = getDb();
+    const row = db.prepare('SELECT session_output FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
+    buffer = row?.session_output || '';
+  }
+
+  if (!buffer) {
+    res.json({ todos: [] });
+    return;
+  }
+
+  // Strip ANSI escape codes
+  const clean = buffer
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+    .replace(/\x1b\].*?\x07/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+
+  // Find all TodoWrite/TodoRead JSON blobs in the output.
+  // Claude Code emits tool calls as JSON: {"type":"tool_use","name":"TodoWrite","input":{"todos":[...]}}
+  const todos: any[] = [];
+  const todoPattern = /"name"\s*:\s*"Todo(?:Write|Read)"[\s\S]*?"todos"\s*:\s*(\[[\s\S]*?\])/g;
+  let match: RegExpExecArray | null;
+  while ((match = todoPattern.exec(clean)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (Array.isArray(parsed)) {
+        todos.splice(0, todos.length, ...parsed);
+      }
+    } catch {
+      // malformed JSON, skip
+    }
+  }
+
+  res.json({ todos });
 });
 
 // GET /api/sessions/:id — single session
@@ -161,20 +311,40 @@ sessionsRouter.post('/:id/resume', async (req, res) => {
   // Inject fresh context file (CLAUDE.md etc.) — Claude --resume reads it automatically
   try { injectContext(oldSession.project_id, project.path); } catch { /* */ }
 
-  // Spawn terminal + session — use specific Claude session ID if we captured one
-  // claude --resume handles context restoration natively, no need to inject text
+  // Spawn terminal + session — always resolve to a SPECIFIC Claude session ID.
+  // Never fall back to bare `claude --resume` — that opens Claude's interactive
+  // picker which lists sessions from ALL projects globally (Claude CLI behavior,
+  // not scoped by cwd). We scan ~/.claude/projects/<slug>/ to find a match.
   const tmgr = getTerminalManager();
-  const claudeSessionId = oldSession.claude_session_id;
+  let claudeSessionId: string | null = oldSession.claude_session_id;
+  if (!claudeSessionId) {
+    claudeSessionId = resolveClaudeSessionId({
+      projectPath: project.path,
+      startedAt: oldSession.started_at,
+      lastActive: oldSession.last_active,
+    });
+    if (claudeSessionId) {
+      // Persist for future resumes so we don't re-scan every time
+      db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeSessionId, oldSession.id);
+      console.log(`[sessions] Resolved missing claude_session_id via disk scan: ${claudeSessionId}`);
+    }
+  }
+  if (!claudeSessionId) {
+    res.status(409).json({
+      error: 'Could not resolve Claude session ID',
+      detail: `No matching .jsonl found in ~/.claude/projects/${projectPathToSlug(project.path)}/ for session "${oldSession.name}". The Claude session files may have been deleted, or this session predates Claude\'s on-disk history.`,
+    });
+    return;
+  }
   const colorEnv = 'FORCE_COLOR=3 COLORTERM=truecolor TERM=xterm-256color';
-  const resumeCmd = claudeSessionId
-    ? `${colorEnv} claude --resume ${claudeSessionId}`
-    : `${colorEnv} claude --resume`;
-  const terminal = tmgr.spawn(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, 'ai_session', 120, 40, resumeCmd);
+  const resumeCmd = `${colorEnv} claude --resume ${claudeSessionId}`;
+  const baseName = oldSession.name.replace(/\s*\(resumed\)\s*$/i, '').trim();
+  const resumedName = `${baseName} (resumed)`;
+  const terminal = tmgr.spawn(oldSession.project_id, resumedName, project.path, 'ai_session', 120, 40, resumeCmd);
 
   const mgr = getSessionManager();
-  const session = mgr.spawnSession(oldSession.project_id, `${oldSession.name} (resumed)`, project.path, true);
+  const session = mgr.spawnSession(oldSession.project_id, resumedName, project.path, true);
 
-  try { db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL'); } catch { /* */ }
   db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
   mgr.setTerminalId(session.id, terminal.id);
 
@@ -263,8 +433,6 @@ sessionsRouter.post('/', async (req, res) => {
   const session = mgr.spawnSession(project_id, name, project.path, true);
 
   // Link the terminal to the session (DB + in-memory)
-  try { db.exec('ALTER TABLE claude_sessions ADD COLUMN terminal_id TEXT DEFAULT NULL'); } catch { /* */ }
-  try { db.exec('ALTER TABLE claude_sessions ADD COLUMN claude_session_id TEXT DEFAULT NULL'); } catch { /* */ }
   db.prepare('UPDATE claude_sessions SET terminal_id = ? WHERE id = ?').run(terminal.id, session.id);
   mgr.setTerminalId(session.id, terminal.id);
 
@@ -300,23 +468,35 @@ sessionsRouter.post('/', async (req, res) => {
     }
   });
 
-  // Fallback: after Claude boots, try to read the session ID from Claude's project dir
+  // Fallback: after Claude boots, read the session ID from Claude's project dir.
+  // Claude encodes the cwd as dir name: /home/x/proj -> -home-x-proj (leading dash kept),
+  // and stores sessions as <uuid>.jsonl files. Snapshot existing IDs before the wait so we
+  // pick up only the session created by *this* spawn, not a pre-existing one.
+  const home = process.env.HOME || os.homedir();
+  const claudeProjectDir = `${home}/.claude/projects/${project.path.replace(/\//g, '-')}`;
+  const preExisting = new Set<string>();
+  try {
+    if (fs.existsSync(claudeProjectDir)) {
+      for (const f of fs.readdirSync(claudeProjectDir)) {
+        if (f.endsWith('.jsonl')) preExisting.add(f.replace(/\.jsonl$/, ''));
+      }
+    }
+  } catch { /* */ }
+
   setTimeout(() => {
     if (claudeIdCaptured) return;
     try {
-      const projectDir = project.path.replace(/\//g, '-').replace(/^-/, '');
-      const claudeProjectDir = `${process.env.HOME}/.claude/projects/${projectDir}`;
-      if (fs.existsSync(claudeProjectDir)) {
-        const sessions = fs.readdirSync(claudeProjectDir)
-          .filter((f: string) => f.endsWith('.json'))
-          .map((f: string) => ({ name: f, mtime: fs.statSync(`${claudeProjectDir}/${f}`).mtimeMs }))
-          .sort((a: { mtime: number }, b: { mtime: number }) => b.mtime - a.mtime);
-        if (sessions.length > 0) {
-          const claudeId = sessions[0].name.replace('.json', '');
-          db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeId, session.id);
-          claudeIdCaptured = true;
-          console.log(`[sessions] Captured Claude session ID from filesystem: ${claudeId} for ${session.id}`);
-        }
+      if (!fs.existsSync(claudeProjectDir)) return;
+      const fresh = fs.readdirSync(claudeProjectDir)
+        .filter((f: string) => f.endsWith('.jsonl'))
+        .map((f: string) => ({ id: f.replace(/\.jsonl$/, ''), mtime: fs.statSync(`${claudeProjectDir}/${f}`).mtimeMs }))
+        .filter(s => !preExisting.has(s.id))
+        .sort((a, b) => b.mtime - a.mtime);
+      if (fresh.length > 0) {
+        const claudeId = fresh[0].id;
+        db.prepare('UPDATE claude_sessions SET claude_session_id = ? WHERE id = ?').run(claudeId, session.id);
+        claudeIdCaptured = true;
+        console.log(`[sessions] Captured Claude session ID from filesystem: ${claudeId} for ${session.id}`);
       }
     } catch (err) {
       console.warn('[sessions] Failed to capture Claude session ID from filesystem:', err);
