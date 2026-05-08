@@ -149,7 +149,7 @@ Check out [CLAUDE.md](CLAUDE.md) for our coding standards.
 <p align="center">
   <strong>Cortex — Ship faster with the AI command center that remembers.</strong>
   <br/><br/>
-  Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a> at <a href="https://hiraya.digital">Hiraya Digital</a>
+  Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a>, Founder of <a href="https://webxexpert.com">WebXExpert</a>
   <br/>
   <sub>Developed primarily with Claude Code + Claude Max. Star the repo to support open-source AI infrastructure.</sub>
 </p>
