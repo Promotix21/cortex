@@ -5,12 +5,12 @@
 <h1 align="center">Cortex</h1>
 
 <p align="center">
-  <strong>AI Development Workspace for developers who ship with AI, not just chat with it.</strong>
+  <strong>The AI-Native Developer Command Center.</strong>
 </p>
 
 <p align="center">
-  Every project gets a persistent AI brain. Every Claude Code session has a name.<br/>
-  Every bug you've solved is remembered. Every context switch is instant.
+  Every project gets a persistent brain. Every session has a name.<br/>
+  Multi-model orchestration. 20-turn threading. Zero context loss.
 </p>
 
 <p align="center">
@@ -22,612 +22,132 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Platform"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/built_with-Tauri_2_%2B_React_19-7C5CFC?style=flat-square" alt="Stack"></a>
-  <a href="#-tech-stack"><img src="https://img.shields.io/badge/AI-Claude_Code_(Max)-D97706?style=flat-square" alt="AI"></a>
+  <a href="#-tech-stack"><img src="https://img.shields.io/badge/AI-Multi--Provider-D97706?style=flat-square" alt="AI"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/database-SQLite_(local)-003B57?style=flat-square" alt="DB"></a>
 </p>
 
 <p align="center">
   <a href="#tldr">TL;DR</a> &middot;
-  <a href="#screenshots">Screenshots</a> &middot;
+  <a href="#-whats-new">What's New</a> &middot;
   <a href="#features">Features</a> &middot;
-  <a href="#quick-start">Quick Start</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
-  <a href="#why-this-matters-for-claude-code-users">Why It Matters</a> &middot;
-  <a href="#contributing">Contributing</a>
+  <a href="#collaborators--contributing">Collaborate</a>
 </p>
 
 ---
 
 ## TL;DR
 
-Cortex is a Linux desktop app that adds:
+Cortex is a Linux desktop application that serves as the mission control for AI-assisted development. It wraps your AI interactions in a layer of persistent project intelligence and multi-model orchestration.
 
-- **Named Claude Code sessions** — no more anonymous "Terminal 3"
-- **Persistent project intelligence** — AI remembers your architecture, patterns, and past bugs
-- **AI usage tracking per project** — prompts, tokens, sessions, exportable for billing
-- **Error intelligence** — browser + server errors auto-captured and matched to known solutions
-- **Context injection** — project brain assembled and injected before every AI session
-- **Budget guardrails** — rate limit monitoring for Claude Max subscriptions
-- **OpenRouter fallback** — automatic switch to OpenRouter when limits are reached
-
-All stored locally using SQLite. No cloud. No telemetry.
+- **Named AI Sessions** — Move from anonymous terminals to named identities (`refactor-auth`).
+- **Multi-Provider Orchestration** — Seamlessly switch between **Anthropic**, **AWS Bedrock** (Claude 4.6), and **Mistral** (Devstral 2 123B).
+- **Infinite Memory** — 20-turn conversation threading + AAAK-compressed project context.
+- **Persistent Project Brain** — AI knows your architecture and past bug fixes across sessions.
+- **Local-First** — Your code and secrets stay on your machine. Stored in local SQLite + Encrypted Vault.
 
 ---
 
-## Built With Claude Code
+## 🆕 What's New: The Orchestration Update
 
-This project was developed primarily using **Claude Code** with a **Claude Max** subscription. 12,000+ lines across 90+ files, 35 database tables, 70+ API endpoints, an MCP server with document generation tools, a Chrome extension, and 9 phases of intelligence features. Cortex is both a tool for Claude Code users and a testament to what Claude Code can ship.
+We just shipped a massive update to the Cortex intelligence layer:
 
----
-
-## Screenshots
-
-### Dashboard — Company-Grouped Projects + Project Intelligence
-![Dashboard](assets/dashboard.png)
-
-### Project Brain — Persistent Intelligence Across Sessions
-![Brain](assets/brain.png)
-
-### Session Grid — Multi-Session Management with Company Grouping
-![Sessions](assets/sessions.png)
-
-### Cross-Project Search — Ctrl+K Command Palette
-![Command Palette](assets/command-palette.png)
-
-### Settings & Budget Guard
-![Settings](assets/settings.png)
+*   **AWS Bedrock Native:** High-capacity access to Claude 3.5 Sonnet and Claude 4.6 via AWS Bedrock.
+*   **Devstral Support:** Mistral's massive 123B model (Devstral 2) integrated for high-logic reasoning tasks.
+*   **Conversation Threading:** No more cold-starts. Cortex now threads the last 20 turns of history into every message.
+*   **Context Explorer:** AI can now see your full project directory structure (via the `file_index` table) to understand repo-wide relationships.
 
 ---
-
-## The Problem
-
-You're an agency dev running Claude Code across 8 client projects. Here's your reality:
-
-- **No session identity** — "Terminal 3" is running a refactor, but you forgot which project
-- **No memory** — Claude doesn't know your auth module uses JWT, not sessions. Again.
-- **No usage tracking** — client asks "how much AI did you use?" and you shrug
-- **No error intelligence** — you solved that `null ref` bug last month. Now it's back. You solve it again.
-- **Context switch = context loss** — switch projects, lose everything
-
-**You're paying for the most powerful AI coding assistant and managing it with `Ctrl+Tab` and hope.**
 
 ## The Solution
 
-Cortex is a desktop app that wraps Claude Code (and any AI provider) with persistent project intelligence. It doesn't replace your editor. It manages the AI layer your editor doesn't have.
+Cortex manages the AI layer your editor doesn't have.
 
-```
-You today:                          You with Cortex:
-
-Terminal 1: claude (which project?) ──► refactor-auth (client-portal) Running
-Terminal 2: claude (what context?)  ──► debug-api (saas-backend) Idle
-Terminal 3: claude (what did it do?)──► setup-ci (mobile-app) Done ✓
-
-"How much AI did I use?"            ──► Today: 47 prompts · ~35k tokens · $0.42
-"What was that bug fix?"            ──► Auto-matched: JWT expiry race condition
-"What's the architecture?"          ──► Brain: NestJS + Prisma + Redis, deployed on Fly.io
-```
+| You today: | You with Cortex: |
+|---|---|
+| **Rate limited** by Claude.ai | **Seamless fallback** to AWS Bedrock / Devstral |
+| **Anonymous** terminal tabs | **Named sessions** with usage tracking |
+| **Context switch = Loss** | **Persistent Brain** + **MemPalace** memory |
+| **Hallucinating** old code | **20-turn history** + **AAAK Compression** |
+| **Unsafe** AI commands | **Execution Policies** (Allowed/Restricted/Approval) |
 
 ---
 
 ## Features
 
-### Named Claude Code Sessions
+### 1. Multi-Provider Orchestration
+Don't be locked into one API. Switch providers in the TopBar or middle of a session.
+- **Anthropic Native:** For the purest Claude experience.
+- **AWS Bedrock:** For enterprise-grade reliability and Claude 4.6 support.
+- **Mistral Devstral 2 (123B):** Powerful open-weights reasoning via Bedrock.
+- **Provider Usage Tracking:** Real-time monitoring of tokens, latency, and cost per provider.
 
-The feature that doesn't exist anywhere else.
-
-Every Claude Code session gets a name, a project, and a persistent identity. See all running sessions across all projects in one dashboard. Monitor what AI is doing in Project A while you work in Project B.
-
-| What | How |
-|---|---|
-| Named sessions | `refactor-auth`, not "Terminal 3" |
-| Cross-project dashboard | See every active AI session at a glance |
-| Usage tracking | Prompts, tokens, cost — per session, per project, per day |
-| CSV export | Bill clients for exact AI usage |
-| Session resume | Reopen project, pick up where Claude left off |
-
-### Per-Project AI Brain
-
-When you add a project, Cortex **automatically scans it** — reads your package.json, detects the framework, maps the file structure, and populates the project brain. AI knows your architecture before you type a single prompt.
-
-| Brain Field | Auto-Populated From |
-|---|---|
-| Summary | package.json, CLAUDE.md, README — with completion estimate |
-| Architecture | Framework detection, sub-projects, ports, routes, databases, **servers, SSH, deploy info** |
-| Conventions | tsconfig, eslint, prettier — scanned in root **and sub-projects** |
-| Dependencies | Key deps from root + all sub-project package.json/composer.json/requirements.txt |
-| Decisions | CLAUDE.md content, deploy docs, NEXT_SESSION_PROMPT.md, env variables |
-| File Index | 2000+ files classified: controllers, routes, models, components, tests |
-
-**Deep docs scanning**: Reads CLAUDE.md, README, deploy docs, Claude memory files, and NEXT_SESSION_PROMPT.md to extract server IPs, SSH details, deployment URLs, setup commands, and API key names.
-
-**Toolchain detection**: Auto-detects CLI tools (Shopify CLI, WP-CLI, Docker), SSH connections, and deploy methods (SSH, Vercel, GitHub Actions).
-
-**Completion estimation**: Scores 0-100% based on TODO/FIXME count, empty handlers, test coverage, README/LICENSE presence, CI config, and feature count.
-
-Brain fields are auto-filled on project add, but **never overwritten** — your manual notes always take priority.
-
-### Intelligence That Compounds
-
+### 2. MemPalace & AAAK Intelligence
 The more you use Cortex, the smarter it gets.
+- **AAAK Compression:** AI-to-AI Knowledge format that reduces context tokens by 70%.
+- **Temporal Knowledge Graph:** Tracks how your project decisions evolve over time.
+- **Room-Aware Context:** UI, API, or Deploy—Cortex detects the "room" and injects only relevant patterns.
+- **Build Memory:** One-click scan to refresh your AI's understanding of the codebase.
 
-- **Pattern Memory** — save reusable code patterns with tags and confidence scoring. Search across all projects. `Verified` / `Probable` / `Unverified` tiers based on usage + rating.
-- **Debug Memory** — store bug solutions with error signatures. When the same error appears again (in any project), the solution surfaces automatically. Zero manual lookup.
-- **Background Worker** — runs on idle: prunes old snapshots, compresses history, auto-promotes patterns based on usage data.
+### 3. Named Claude Code Sessions
+Organize your work by intent. Every session tracks its own history, tokens, and git state.
+- **Session Resume:** Pick up any task exactly where you left off.
+- **Handoff Generator:** Automatically creates `NEXT_SESSION_PROMPT.md` when a session ends.
+- **Usage Tracking:** Export detailed AI usage reports for client billing.
 
-### Real-Time Error Intelligence
-
-Powered by [claude-console-bridge](https://github.com/AetheriumDev/claude-console-bridge):
-
-- Browser errors captured via Chrome extension, auto-routed to the correct project by port
-- Known errors instantly surface existing solutions from debug memory
-- Error context injected into your active Claude Code session
-- Error signatures normalized for fuzzy matching across projects
-
-### AI Execution Policy
-
-Not all AI actions are safe. Cortex blocks dangerous commands by default.
-
-| Tier | Actions | Behavior |
-|---|---|---|
-| **Allowed** | `git status`, `pnpm test`, file reads | Executes immediately |
-| **Restricted** | `rm -rf`, `sudo`, `DROP TABLE`, `chmod 777` | Blocked. Always. |
-| **Approval** | `git push`, package installs, DB migrations | Paused. User confirms. |
-
-Per-project overrides supported. Every policy decision is logged.
-
-### Playbooks
-
-Reusable step-by-step workflows for repetitive tasks:
-
-```json
-{
-  "name": "New Feature Setup",
-  "steps": [
-    { "type": "command", "action": "git checkout -b feature/{{name}}" },
-    { "type": "ai_prompt", "action": "Create the boilerplate for {{description}}" },
-    { "type": "checkpoint", "action": "Review generated code before continuing" },
-    { "type": "command", "action": "pnpm test" }
-  ]
-}
-```
-
-### MemPalace Intelligence System (NEW)
-
-A next-generation memory system inspired by [mempalace](https://github.com/milla-jovovich/mempalace) that transforms how Cortex understands and recalls project knowledge.
-
-**AAAK Compression** — AI-to-AI Knowledge format compresses verbose English intelligence into dense, LLM-readable shorthand. 60+ technical abbreviations (`architecture→arch`, `database→db`, `middleware→mw`), structural markers (`!` critical, `#` decision, `?` pending), filler word stripping, relationship compaction (`uses→→`, `depends on→>`). Achieves 40-70% token reduction while preserving meaning for LLMs.
-
-**Temporal Knowledge Graph** — Subject-predicate-object triples with `valid_from`/`valid_until` timestamps stored in SQLite. Tracks how facts and decisions evolve — knows what was used before, why things changed, and which decisions superseded others. When you switch from Express 4 to Express 5, the old fact is retired (not deleted), so Claude can answer "what did we use before and why did we switch?"
-
-**Room-Aware Context** — Files and intelligence are tagged with semantic "rooms": `auth`, `database`, `ui`, `api`, `testing`, `deploy`, `config`, `state`, `build`, `intelligence`, `chat`, `terminal`. Context injection auto-detects what room you're working in from the file path and pulls only relevant patterns, debug solutions, and knowledge graph facts.
-
-**Layered Memory Stack (L0-L3)** — Replaces the flat priority-based context assembly:
-
-| Layer | Budget | Content | When Loaded |
-|-------|--------|---------|-------------|
-| **L0 Identity** | ~100 tokens | Project name, type, stack | Always |
-| **L1 Critical** | ~500 tokens | AAAK-compressed brain summary + verified facts | Always |
-| **L2 Room Recall** | ~800 tokens | Room-specific patterns, debug solutions, facts | Auto-detected from file path |
-| **L3 Deep Search** | Unlimited | Full temporal history | On-demand via MCP tools |
-
-**Contradiction Detection** — Before new intelligence is saved, checks existing knowledge graph for conflicts: direct contradictions ("uses Express 4" vs "uses Express 5"), stale references (file paths that no longer exist), and superseded decisions. Prevents memory corruption.
-
-**Build Memory** — One-click button in the project dashboard Quick Actions to scan the project brain, create knowledge graph entries, and pre-compress AAAK cache. Also available via MCP tool.
-
-### Context Injector (Phase 0)
-
-Before every Claude Code session spawn, Cortex assembles a `.cortex-context.md` file using the MemPalace layered memory stack:
-
-- L0-L3 layered assembly with room-aware context injection
-- AAAK compression for 40-70% token savings
-- ~11,500 token default budget with per-project tuning via `context_priorities` table
-- Truncation by layer priority — highest-value context always fits
-- Includes Masterpiece Design Rules when enabled
-
-### Budget Guard (Phase 1)
-
-Rate limit monitoring for Claude Max subscriptions:
-
-- **4 default limits**: Messages/5h (45), Hours/7d (167), Tokens/day (500K), Sessions/day (20)
-- Warning banner at 80%, session spawn blocked at 100%
-- Per-limit toggle, custom thresholds, progress bars in Settings
-- Background job checks every 5 minutes, creates timestamped alerts
-
-### Handoff Generator (Phase 2)
-
-Auto-generates `NEXT_SESSION_PROMPT.md` when a session ends:
-
-- Queries session_history, session_metrics, project_snapshots, debug_memory
-- Outputs: file read order, session activity, git state, known issues, debug solutions, troubleshooting
-- HandoffViewer component: markdown preview + copy to clipboard + regenerate
-- "Handoff" button on completed session cards
-
-### Auto-Learning Pipeline (Phase 3)
-
-Automatically populates intelligence from session activity:
-
-- **Session Analyzer** — parses output for error signatures (10+ regex patterns), file changes, repeated code blocks
-- Creates `unverified` entries in debug_memory and pattern_memory
-- **Learning Queue UI** — approve/dismiss with human-in-the-loop gating
-- Background worker auto-analyzes recently completed sessions
-
-### Masterpiece Mode (Phase 4)
-
-Toggle in Settings that injects award-worthy design philosophy into every AI interaction:
-
-- Lenis smooth scroll, GSAP + ScrollTrigger animations, Catppuccin palette
-- Desktop-quality UI standards, structured build phases, pre-commit hard gates
-- Injected into chat system prompt and `.cortex-context.md`
-
-### MCP Server + Document Builder (Phase 5)
-
-Cortex exposes intelligence and document generation to Claude Code via Model Context Protocol:
-
-- **Intelligence tools** (port 4710): `get_project_brain`, `search_patterns`, `match_error`, `get_file_index`, `get_server_info`, `get_context`, `save_intelligence`
-- **MemPalace tools**: `recall_room`, `query_history`, `check_consistency`, `build_memory`
-- **Document tools** (global, no per-project install): `create_docx`, `create_pdf`, `create_spreadsheet`, `read_docx`, `read_pdf`
-- **Cross-project tools**: `cortex_list_projects`, `cortex_get_project_context`
-- **Browser tools**: `get_active_browser_context`, `get_browser_errors`, `get_network_failures`, `clear_browser_errors`
-- **Client**: Connects to external MCP servers (console-bridge, etc.)
-
-The Document Builder MCP means Claude can generate Word docs, PDFs, and spreadsheets from **any project** without installing `docx`, `pdfkit`, or `exceljs` locally.
-
-### Chrome Extension (Phase 6)
-
-`cortex-chrome-bridge` — Manifest V3:
-
-- Content script intercepts `console.error`, `console.warn`, unhandled errors, failed fetch/XHR
-- Background service worker posts captured data to sidecar via HTTP
-- Popup UI with connection status, site blocklist (one-click block/unblock), and queue counts
-- Errors auto-matched to projects by `dev_server_port`
-
-### Remotion Studio (Phase 7)
-
-Programmatic video rendering from project data:
-
-- One-click render using Project Brain as video props
-- Progress tracking, video preview, download
-- ActivityBar icon for quick access
-
-### Drag & Drop + File Attachment (Phase 8)
-
-- Drop files into chat input to attach their contents
-- File pills with name, size, remove button
-- Contents included in AI messages (up to 50KB per file)
-
-### Everything Else
-
-- **Terminal Engine** — node-pty + xterm.js, tabbed + grid views, 4 types (shell / AI session / dev server / git), ResizeObserver auto-fit
-- **Git Panel** — live branch, status, diff viewer, commit log, pull/push
-- **Markdown Notes** — per-project with 1s debounced autosave
-- **Task Tracker** — click-to-cycle: Pending → Doing → Done → Blocked
-- **Reference Intelligence** — version-pinned tool commands, breaking change log, deprecated API tracking
-- **Workspace Resume** — close Cortex, reopen, everything is exactly where you left it
-- **Project Icons** — per-project emoji or image icons in sidebar and dashboard
-- **Open Project Folder** — hover over any project to reveal a folder button that opens in system file manager
-- **Toast Notifications** — all errors and important actions surfaced via sonner toasts
-- **Error Boundaries** — each workspace tab isolated, crash in one doesn't take down the app
-- **Confirmation Dialogs** — type-to-confirm for destructive actions (clear data, etc.)
-- **12 Keyboard Shortcuts** — Ctrl+1-9 tabs, Ctrl+Tab terminal cycling, Ctrl+K palette, Ctrl+N session, Ctrl+T terminal, Ctrl+W close, Ctrl+, settings, Ctrl+Shift+P project search
-- **Accessibility** — ARIA roles on tabs/modals, aria-live status bar, keyboard navigation
-- **9 workspace tabs** — Overview, Terminal, Sessions, Git, Notes, Brain, AI Chat, Documents, Remotion Studio
-
----
-
-## Quick Start
-
-> Cortex is in alpha. These instructions are for contributors and early testers.
-
-### Prerequisites
-
-- Linux (Ubuntu 22.04+, Pop!_OS, Fedora 38+)
-- Node.js 20+ (recommend 22 LTS)
-- Rust (latest stable via [rustup](https://rustup.rs))
-- pnpm 9+
-
-### Install & Run
-
-```bash
-# Clone
-git clone https://github.com/Promotix21/cortex.git
-cd cortex
-
-# Install frontend dependencies
-pnpm install
-
-# Install sidecar dependencies
-cd sidecar && pnpm install && cd ..
-
-# Start development (sidecar + Tauri + Vite)
-cd sidecar && pnpm dev &     # Starts Express on :4700
-cd .. && pnpm tauri dev       # Starts Tauri desktop app
-```
-
-### Build for Distribution
-
-```bash
-pnpm tauri build
-# Outputs: .deb, .rpm, .AppImage in src-tauri/target/release/bundle/
-```
-
-### Project Structure
-
-```
-cortex/
-├── src/                          # React frontend (30+ components)
-│   ├── components/
-│   │   ├── sidebar/              # Project list, search, add dialog
-│   │   ├── workspace/            # Tabs: Overview, Git, Notes, Reference, Studio
-│   │   ├── terminal/             # xterm.js terminal with tabs
-│   │   ├── sessions/             # Dashboard, cards, usage, handoff viewer
-│   │   ├── chat/                 # AI chat panel with streaming + file drop
-│   │   ├── intelligence/         # Brain editor, patterns, debug, learning queue
-│   │   ├── budget/               # Budget guard banner + settings
-│   │   ├── remotion/             # Remotion studio UI
-│   │   ├── settings/             # Settings panel + masterpiece toggle
-│   │   └── bridge/               # Error capture panel
-│   ├── stores/                   # Zustand (project, session, terminal, chat, budget, settings, nav)
-│   ├── lib/                      # API client, utilities
-│   └── types/                    # TypeScript interfaces
-├── sidecar/                      # Express backend
-│   └── src/
-│       ├── db/                   # SQLite schema (35 tables) + connection
-│       ├── routes/               # 15 route files, 70+ API endpoints
-│       ├── sessions/             # Session manager, snapshots, execution history
-│       ├── terminals/            # Terminal manager (node-pty)
-│       ├── chat/                 # Claude CLI integration + masterpiece injection
-│       ├── intelligence/         # MemPalace: AAAK compression, temporal knowledge graph,
-│       │                         # room detector, contradiction detection, context injector,
-│       │                         # budget guard, handoff generator, session analyzer,
-│       │                         # masterpiece context, file indexer, project scanner
-│       ├── mcp/                  # MCP server (port 4710) + MCP client
-│       └── bridge/               # Console bridge client
-├── chrome-extension/             # Manifest V3 Chrome extension
-│   ├── manifest.json             # Permissions and config
-│   ├── background.js             # WebSocket/HTTP bridge to sidecar
-│   ├── content.js                # Console + network error interception
-│   └── popup.html/js             # Connection status UI
-├── src-tauri/                    # Tauri (Rust) shell
-└── assets/                       # Demo GIF, screenshots
-```
+### 4. Enterprise-Grade Security
+- **Vault:** Encrypted local storage for AWS keys and API credentials.
+- **Local-First:** SQLite database with zero telemetry. Your data never leaves your machine.
+- **Execution Policies:** Hard gates for dangerous commands (e.g., blocking `rm -rf` or `DROP TABLE`).
 
 ---
 
 ## Architecture
 
+Cortex is built for performance and security using a sidecar architecture.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                           TAURI SHELL (Rust)                          │
-│                          Linux / WebView2                             │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│   ┌───────────────────────┐   HTTP :4700   ┌──────────────────────┐  │
-│   │    React Frontend     │ ◄────────────► │   Express Sidecar    │  │
-│   │                       │                │                      │  │
-│   │  Sidebar + Icons      │                │  SQLite (35 tables)  │  │
-│   │  9 Workspace Tabs     │                │  Session Manager     │  │
-│   │  Session Dashboard    │                │  Terminal Manager    │  │
-│   │  Budget Guard Banner  │                │  Context Injector    │  │
-│   │  xterm.js Terminals   │                │  Budget Guard        │  │
-│   │  AI Chat + File Drop  │                │  Handoff Generator   │  │
-│   │  Intelligence + Queue │                │  Session Analyzer    │  │
-│   │  Build Memory Button  │                │  MemPalace Engine    │  │
-│   │  Remotion Studio      │                │  Background Worker   │  │
-│   │  Masterpiece Toggle   │                │  Remotion Renderer   │  │
-│   └───────────────────────┘                └──────────┬───────────┘  │
-│                                                       │              │
-│   ┌─────────────────────┐            ┌────────────────▼───────────┐  │
-│   │  MCP Server :4710   │            │  Console Bridge            │  │
-│   │  6 JSON-RPC tools   │            │  WebSocket + HTTP fallback │  │
-│   │  Claude Code ◄──────│            │  Chrome Extension ────────►│  │
-│   └─────────────────────┘            └────────────────────────────┘  │
+│   ┌───────────────────────┐                  ┌──────────────────────┐  │
+│   │    React Frontend     │ ◄──────────────► │   Express Sidecar    │  │
+│   │ (Zustand + Tailwind)  │                  │ (SQLite + node-pty)  │  │
+│   └───────────────────────┘                  └──────────┬───────────┘  │
+│                                                         │              │
+│   ┌─────────────────────┐            ┌──────────────────▼───────────┐  │
+│   │  MCP Server :4710   │            │  Multi-Provider Orchestrator │  │
+│   │  22 AI-Ready Tools  │            │  (Bedrock / Anthropic / Dev) │  │
+│   └─────────────────────┘            └──────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Database: 35+ SQLite Tables
-
-| Group | Tables | Purpose |
-|---|---|---|
-| **Core** | projects, terminals, notes, tasks, workspace, ai_sessions | Project management |
-| **Sessions** | claude_sessions, session_metrics, session_history, usage_daily | Session tracking + billing |
-| **Intelligence** | project_brain, pattern_memory, debug_memory, file_index, knowledge_graph, aaak_cache | AI memory layer + MemPalace |
-| **Reference** | tools, tool_versions, commands, api_changes, project_tools | Version-aware docs |
-| **Snapshots** | project_snapshots, execution_history, execution_groups | State capture + recovery |
-| **Playbooks** | playbooks, playbook_runs | Reusable workflows |
-| **Bridge** | captured_errors, captured_network | Error intelligence |
-| **Budget** | budget_limits, budget_alerts | Rate limit guardrails |
-| **Policy** | execution_policies, context_priorities | Safety + context control |
-| **System** | background_jobs, file_locks, agent_tasks, settings | Background processing |
-
-No ORM. No migrations. No cloud. All data lives in `~/.cortex/cortex.db`.
-
 ---
 
-## Tech Stack
+## Collaborators & Contributing
 
-| Layer | Technology | Why |
-|---|---|---|
-| Desktop Shell | [Tauri 2](https://tauri.app) | Native Linux app, ~5MB binary, no Electron bloat |
-| Frontend | React 19 + TypeScript + Vite 7 + Tailwind 4 + Zustand | Fast, typed, minimal bundle |
-| Backend | Express 5 + better-sqlite3 + node-pty | Sidecar process, zero network exposure |
-| Terminals | xterm.js + node-pty | Real PTY, not a web terminal emulator pretending |
-| Git | simple-git | No shelling out, proper async git operations |
-| AI | Claude Code CLI via Max subscription | No API keys — uses OAuth login |
-| MCP | JSON-RPC server on port 4710 | Claude Code auto-discovers Cortex intelligence |
-| Bridge | Chrome Extension (Manifest V3) | Console + network error capture |
-| Theme | Catppuccin Mocha | Dark, easy on the eyes, VSCode-familiar |
+We are building the open-source infrastructure for the AI-assisted era. Cortex is a deep-tech project (20k+ lines, 35+ tables) and we are looking for contributors who love building high-performance developer tools.
 
----
+### Why Contribute?
+- **Advanced AI Integration:** Work with MCP (Model Context Protocol), custom compression algorithms (AAAK), and multi-provider routing.
+- **Masterpiece Standards:** We follow high-end design principles—GSAP animations, smooth scrolling, and strict TypeScript safety.
+- **Local-First Dev:** Help us push the boundaries of Tauri 2 and high-performance sidecar architectures.
 
-## Who This Is For
+### Areas for Help
+- **MemPalace UI:** Help us build the visual room explorer and decision timeline.
+- **New Providers:** Add support for OpenRouter, Ollama, or Azure OpenAI.
+- **Terminal UX:** Optimizing `xterm.js` for high-throughput AI logs.
+- **macOS/Windows support:** We are Linux-first but want to expand.
 
-**Agency developers** managing 5-10 client projects who need per-project AI usage tracking for billing.
-
-**Freelancers** tired of losing Claude Code context every time they switch between clients.
-
-**AI-native developers** who want their AI to remember architecture, past bugs, and coding patterns across sessions.
-
-**Multi-repo engineers** who need one command center instead of 20 terminal tabs with anonymous AI sessions.
-
-**Linux developers** who've been waiting for a proper AI development workspace that isn't Electron-based.
-
----
-
-## What Cortex Is Not
-
-- **Not a code editor** — it manages AI sessions and project intelligence, not editing. Use it alongside VSCode/Neovim.
-- **Not cloud-based** — everything is local. No accounts. No telemetry. Your code never leaves your machine.
-- **Not an AI wrapper** — it doesn't compete with Claude or GPT. It makes them remember.
-
----
-
-## Why This Matters for Claude Code Users
-
-Claude Code is powerful but currently lacks:
-
-- **Multi-project orchestration** — no way to manage sessions across projects
-- **Persistent project intelligence** — context is lost when you close the terminal
-- **Usage tracking per project** — no billing data, no quota visibility
-- **Session ownership** — sessions are anonymous processes, not named entities
-- **Error-to-AI pipeline** — browser errors don't flow into AI context automatically
-
-Cortex provides the missing infrastructure layer. It doesn't replace Claude Code — it makes Claude Code production-ready for developers managing real workloads across multiple projects.
-
----
-
-## Status
-
-**Alpha** — active development. Linux-first release targeted.
-
-Core features are functional. TypeScript strict mode, 0 errors. Typed API client (82 endpoints), toast error UX, error boundaries, ARIA accessibility, 33 database indexes, CSP hardened. Testing infrastructure in progress.
-
----
-
-## Contributing
-
-We welcome contributions. Cortex is MIT-licensed.
-
-```bash
-# Development workflow
-pnpm install && cd sidecar && pnpm install && cd ..
-
-# Run sidecar (backend)
-cd sidecar && pnpm dev
-
-# Run frontend (separate terminal)
-pnpm tauri dev
-
-# Type check
-cd sidecar && pnpm exec tsc --noEmit   # Backend
-pnpm exec tsc --noEmit                  # Frontend
-
-# Build
-pnpm exec vite build                    # Frontend only
-pnpm tauri build                        # Full app
-```
-
-### Areas Looking for Help
-
-- **Terminal reliability** — node-pty edge cases, Unicode handling, large output buffering
-- **Context assembly optimization** — smarter token budgeting and source scoring
-- **macOS / Windows ports** — Tauri supports them, we just haven't tested
-- **Plugin API** — extension system for custom intelligence sources
-- **UI polish** — animations, transitions, responsive layout tuning
-
----
-
-## Roadmap
-
-### Shipped
-- [x] 12-phase core implementation (Foundation through Polish)
-- [x] 70+ API endpoints, 35 database tables, 30+ components
-- [x] 9 workspace tabs fully functional
-- [x] Project auto-scan with brain population
-- [x] Background intelligence worker
-- [x] AI execution policy engine
-- [x] Context Injector — auto-assembles `.cortex-context.md` before every session
-- [x] Budget Guard — rate limit monitoring for Claude Max
-- [x] Handoff Generator — auto-generates `NEXT_SESSION_PROMPT.md` on session end
-- [x] Auto-Learning Pipeline — session analyzer + learning queue UI
-- [x] Masterpiece Mode — design philosophy injection toggle
-- [x] MCP Server — 6 tools, Claude Code auto-discovers intelligence
-- [x] Chrome Extension — console + network error capture
-- [x] Remotion Studio — programmatic video rendering
-- [x] MemPalace Intelligence — AAAK compression, temporal knowledge graph, room-aware context, L0-L3 layered memory, contradiction detection, Build Memory button
-- [x] Drag & Drop file attachment in chat
-- [x] Project icons (emoji + custom image)
-- [x] Open project folder (hover button in sidebar)
-- [x] Toast notifications (sonner) — all errors/actions surfaced
-- [x] Error boundaries — per-tab crash isolation
-- [x] CSP hardened — proper Content Security Policy
-- [x] Type safety — 40+ interfaces, typed API client
-- [x] 12 keyboard shortcuts — Ctrl+1-9 tabs, Ctrl+Tab, Ctrl+W, etc.
-- [x] ARIA accessibility — dialog roles, tab roles, live regions
-- [x] 14 additional DB indexes for scalability
-- [x] Dynamic sidecar URL — no more hardcoded localhost
-- [x] Confirmation dialogs — type-to-confirm destructive actions
-- [x] Chrome extension HTTP bridge — POST endpoints for errors/network
-
-### Next
-- [ ] File watcher for live index updates
-- [ ] Chat summarization (condense long conversations)
-- [ ] Multi-model routing for specialized tasks
-- [ ] Per-project billing export (CSV/JSON)
-- [ ] MemPalace UI panel — visual room explorer, fact timeline, compression stats dashboard
-
-### Later
-- [ ] Vector search for semantic pattern matching
-- [ ] Local model support via Ollama
-- [ ] AI Orchestrator (multi-agent pipelines)
-- [ ] Community playbook sharing
-- [ ] macOS + Windows support
-- [ ] Plugin API for custom intelligence sources
-
----
-
-## Design Constraints (by design)
-
-| Constraint | Reason |
-|---|---|
-| **Local only** | Your code, your data, your machine. No cloud dependency. |
-| **No microservices** | One Express sidecar. One SQLite file. Ship fast, debug easy. |
-| **No Electron** | Tauri is 10x lighter. Native performance matters for a tool you run all day. |
-| **Linux first** | That's where the serious AI-assisted development is happening. |
-| **SQLite, not Postgres** | Zero setup. Copy one file to back up everything. |
-| **Express 5, not tRPC** | REST is debuggable with curl. When you're building infrastructure, simplicity wins. |
-
----
-
-## Stats
-
-```
-Source files:    95+ (.ts + .tsx + .js)
-Total lines:    ~20,000+
-API endpoints:  75+
-DB tables:      35
-DB indexes:     35+
-React components: 38+
-Zustand stores:   7
-Type definitions: 7 files, 40+ interfaces
-MCP tools:        22
-Chrome Extension: Manifest V3
-Keyboard shortcuts: 12
-Build time:     2.8s (Vite)
-Intelligence:   AAAK compression, temporal knowledge graph, 12 room types
-```
-
----
-
-## License
-
-MIT. Use it, fork it, ship it.
+Check out [CLAUDE.md](CLAUDE.md) for our coding standards.
 
 ---
 
 <p align="center">
-  <strong>Cortex — the AI development workspace that remembers everything.</strong>
+  <strong>Cortex — Ship faster with the AI command center that remembers.</strong>
   <br/><br/>
   Built by <a href="https://github.com/Promotix21">Rajesh Kumar</a> at <a href="https://hiraya.digital">Hiraya Digital</a>
   <br/>
-  <sub>Developed primarily with Claude Code + Claude Max. If this is useful, star the repo.</sub>
+  <sub>Developed primarily with Claude Code + Claude Max. Star the repo to support open-source AI infrastructure.</sub>
 </p>
