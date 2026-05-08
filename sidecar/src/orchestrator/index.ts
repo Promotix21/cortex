@@ -145,15 +145,22 @@ export class AIOrchestrator {
       return;
     }
 
-    // 4. System Prompt Construction
+    // 4. System Prompt + Route selection
     const brain = getProjectBrain(options.projectId);
-    const systemPrompt = this.buildSystemPrompt(brain, contextContent, options.fileContext);
 
     // 5. Budget + Route selection
     const budget = canSpawnSession();
     const isClaudeLimited = !budget.allowed;
     const route = this.pickRoute(isClaudeLimited, !!options.useCLI);
     shadowBus.emitEvent({ ...baseEvent, type: 'tool', payload: { name: 'route', status: 'ok', route } });
+
+    // Mistral (devstral) and Claude CLI underweight system prompts — inject files into
+    // the user turn instead. Bedrock Claude handles system prompts correctly.
+    const fileInSystemPrompt = route === 'bedrock' || route === 'anthropic';
+    const systemPrompt = this.buildSystemPrompt(brain, contextContent, fileInSystemPrompt ? options.fileContext : undefined);
+    const userPrompt = !fileInSystemPrompt && options.fileContext
+      ? `${options.fileContext}\n\n---\n${prompt}`
+      : prompt;
 
     // 6. Execute + capture metrics for Reflection phase
     let chunkCount = 0;
@@ -163,7 +170,7 @@ export class AIOrchestrator {
 
     try {
       const router = this.getRouter(route);
-      for await (const event of router.call(this, prompt, systemPrompt, options)) {
+      for await (const event of router.call(this, userPrompt, systemPrompt, options)) {
         if (event.type === 'chunk') {
           chunkCount++;
           totalChars += event.content.length;

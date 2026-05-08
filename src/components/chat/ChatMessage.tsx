@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { User, Bot, Copy, Check, Bookmark } from 'lucide-react';
+import { User, Bot, Copy, Check, BookmarkPlus } from 'lucide-react';
+import { api } from '@/lib/api';
+import { toast } from 'sonner';
 import type { ChatMessage as ChatMessageType } from '@/stores/chat-store';
 
 interface ChatMessageProps {
@@ -9,14 +11,26 @@ interface ChatMessageProps {
   providerLabel?: string;
 }
 
-export function ChatMessage({ message, projectId: _projectId, isStreaming, providerLabel }: ChatMessageProps) {
+export function ChatMessage({ message, projectId, isStreaming, providerLabel }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
   const isUser = message.role === 'user';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveBrief = async () => {
+    try {
+      await api.saveBrief(projectId, message.content);
+      setSaved(true);
+      toast.success('Saved to session brief', { description: 'Claude will read this at the start of the next session.' });
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      toast.error('Failed to save brief');
+    }
   };
 
   return (
@@ -76,12 +90,13 @@ export function ChatMessage({ message, projectId: _projectId, isStreaming, provi
               {copied ? 'Copied' : 'Copy'}
             </button>
             <button
+              onClick={handleSaveBrief}
               className="flex items-center rounded hover:bg-[var(--bg-hover)] transition-colors"
-              style={{ gap: 4, padding: '4px 10px', fontSize: 12, color: 'var(--text-tertiary)' }}
-              title="Save as pattern (Phase 6)"
+              style={{ gap: 4, padding: '4px 10px', fontSize: 12, color: saved ? 'var(--accent)' : 'var(--text-tertiary)' }}
+              title="Save to NEXT_SESSION_PROMPT.md — Claude reads this at session start"
             >
-              <Bookmark size={14} />
-              Save
+              {saved ? <Check size={14} /> : <BookmarkPlus size={14} />}
+              {saved ? 'Saved to brief' : 'Save to brief'}
             </button>
           </div>
         )}

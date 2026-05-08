@@ -4,19 +4,28 @@ import { useProjectStore } from '@/stores/project-store';
 import { getSidecarUrl, api } from '@/lib/api';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
-import { Brain, Download, AlertCircle, Plus } from 'lucide-react';
+import { Brain, Download, AlertCircle, Plus, FileText, Trash2 } from 'lucide-react';
 
 export function ChatPanel() {
   const project = useProjectStore(s => s.activeProject());
   const { messages, streaming, streamingContent, error, fetchHistory, clearHistory } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [providerLabel, setProviderLabel] = useState('AI');
+  const [briefExists, setBriefExists] = useState(false);
 
   useEffect(() => {
     if (project) {
       fetchHistory(project.id);
     }
   }, [project?.id, fetchHistory]);
+
+  useEffect(() => {
+    if (!project) return;
+    const check = () => api.getBriefStatus(project.id).then(s => setBriefExists(s.exists)).catch(() => {});
+    check();
+    const interval = setInterval(check, 8000);
+    return () => clearInterval(interval);
+  }, [project?.id]);
 
   useEffect(() => {
     const load = () => api.getProviderStatus().then(s => {
@@ -58,6 +67,19 @@ export function ChatPanel() {
         <span className="font-medium flex-1" style={{ fontSize: 14, color: 'var(--text-primary)' }}>
           AI Chat — {project.name}
         </span>
+        {briefExists && (
+          <div className="flex items-center rounded" style={{ gap: 6, padding: '4px 10px', fontSize: 12, background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)', color: 'var(--accent)' }}>
+            <FileText size={13} />
+            <span>Brief active</span>
+            <button
+              onClick={() => api.clearBrief(project.id).then(() => setBriefExists(false))}
+              style={{ marginLeft: 2, color: 'var(--text-tertiary)', lineHeight: 1 }}
+              title="Delete NEXT_SESSION_PROMPT.md"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
         <button
           onClick={() => window.open(`${getSidecarUrl()}/api/chat/${project.id}/export`, '_blank')}
           className="flex items-center rounded hover:bg-[var(--bg-hover)] transition-colors"

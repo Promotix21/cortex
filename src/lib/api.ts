@@ -328,6 +328,15 @@ export const api = {
     request<{ history: ChatMessage[] }>(`/api/chat/${projectId}`),
   clearChat: (projectId: string) =>
     request<{ success: boolean }>(`/api/chat/${projectId}`, { method: 'DELETE' }),
+  getBriefStatus: (projectId: string) =>
+    request<{ exists: boolean; size: number; path?: string }>(`/api/chat/${projectId}/brief`),
+  saveBrief: (projectId: string, content: string) =>
+    request<{ success: boolean; path: string }>(`/api/chat/${projectId}/brief`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+  clearBrief: (projectId: string) =>
+    request<{ success: boolean }>(`/api/chat/${projectId}/brief`, { method: 'DELETE' }),
   getProjectBrain: (projectId: string) =>
     request<{ brain: BrainData }>(`/api/chat/brain/${projectId}`),
   updateProjectBrain: (projectId: string, fields: Partial<BrainData>) =>
