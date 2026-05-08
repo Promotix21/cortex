@@ -14,20 +14,21 @@ export function RecentSessions() {
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const viewSession = useNavigationStore(s => s.viewSession);
+  const activeProject = useProjectStore(s => s.activeProject());
   const setActiveProject = useProjectStore(s => s.setActiveProject);
   const fetchSessions = useSessionStore(s => s.fetchSessions);
 
   const loadRecent = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.getRecentSessions(8);
+      const data = await api.getRecentSessions(8, activeProject?.id);
       setSessions(data.sessions);
     } catch {
       // silent — sidecar may not be ready
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeProject?.id]);
 
   useEffect(() => {
     loadRecent();
@@ -45,7 +46,7 @@ export function RecentSessions() {
     try {
       const data = await api.resumeSession(session.id);
       setActiveProject(session.projectId);
-      fetchSessions();
+      fetchSessions(session.projectId);
       viewSession(data.session.id);
     } catch {
       // Fallback: spawn fresh session

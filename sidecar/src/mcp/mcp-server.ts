@@ -7,6 +7,8 @@ import { getRoomContext, listProjectRooms, detectRoomFromContent } from '../inte
 import { getActiveFacts, getFactHistory, addFact, parseDecisionToTriples, buildMemory } from '../intelligence/temporal-service.js';
 import { checkConsistency } from '../intelligence/contradiction-service.js';
 import { invalidateCache, getCompressionStats } from '../intelligence/aaak-service.js';
+import { listCredentials, revealCredential, createCredential, type CredentialKind } from '../vault/vault-service.js';
+import { getSessionManager } from '../sessions/session-manager.js';
 
 const MCP_PORT = 4710;
 
@@ -36,220 +38,125 @@ interface MCPResponse {
   error?: { code: number; message: string };
 }
 
+/**
+ * Single gateway tool — replaces 22 individual tool schemas.
+ * Claude reads the description to know what action to use and what params to pass.
+ * Reduces per-session MCP token overhead by ~92%.
+ */
 const TOOLS_LIST: any[] = [
-  // Document tools (global — no per-project install needed)
-  ...DOCUMENT_TOOLS,
-  // Intelligence capture tool
   {
-    name: 'save_intelligence',
-    description: 'Save a piece of intelligence to the Cortex project brain. Use this to capture decisions, known issues, server info, patterns, or debug solutions discovered during a session.',
+    name: 'cortex',
+    description: `Cortex workspace intelligence. Pass action + relevant params.
+Actions (call action="action_help" with name="<action>" for full docs/params):
+  context: get_context, get_project_brain, get_project_context, list_projects
+  memory: recall_room, query_history, search_patterns, match_error
+  capture: save_intelligence, check_consistency, build_memory
+  vault: list_credentials, get_credential, save_credential
+  browser: get_active_browser_context, get_browser_errors, get_network_failures, clear_browser_errors
+  files: get_file_index, get_server_info
+  docs: create_pdf, create_docx, create_spreadsheet, read_pdf, read_docx
+  testing: shadow_run_test
+  meta: action_help(name)
+Use vault BEFORE asking user for any password. Use save_intelligence (NOT Claude memory) for project facts.`,
     inputSchema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-        type: { type: 'string', enum: ['decision', 'known_issue', 'pattern', 'debug', 'server', 'convention'], description: 'Type of intelligence to save' },
-        content: { type: 'string', description: 'The intelligence content to save' },
-        title: { type: 'string', description: 'Title (for patterns)' },
-        problem: { type: 'string', description: 'Problem description (for debug)' },
-        root_cause: { type: 'string', description: 'Root cause (for debug)' },
+        action: { type: 'string', description: 'The action to perform (see tool description)' },
+        project_id: { type: 'string' },
+        project_name: { type: 'string' },
+        search: { type: 'string' },
+        room_name: { type: 'string' },
+        subject: { type: 'string' },
+        room_tag: { type: 'string' },
+        active_only: { type: 'boolean' },
+        query: { type: 'string' },
+        error_message: { type: 'string' },
+        error_signature: { type: 'string' },
+        file_type: { type: 'string' },
+        type: { type: 'string' },
+        content: { type: 'string' },
+        fact: { type: 'string' },
+        title: { type: 'string' },
+        problem: { type: 'string' },
+        root_cause: { type: 'string' },
+        limit: { type: 'number' },
+        start_date: { type: 'string' },
+        end_date: { type: 'string' },
+        file_path: { type: 'string' },
+        output_path: { type: 'string' },
+        sheets: { type: 'array' },
+        name: { type: 'string', description: 'Credential name for vault tools' },
+        reason: { type: 'string', description: 'Reason for credential reveal (audited)' },
+        kind: { type: 'string', description: 'Credential kind for save_credential' },
+        fields: { type: 'object', description: 'Credential field map for save_credential, e.g. {host, user, password}' },
+        description: { type: 'string', description: 'Optional human-readable note for save_credential' },
+        command: { type: 'string', description: 'Shell command for shadow_run_test, e.g. "npm test", "pnpm vitest run"' },
+        cwd: { type: 'string', description: 'Working directory for shadow_run_test (defaults to project path)' },
+        timeout_ms: { type: 'number', description: 'Timeout in ms for shadow_run_test (default 120000)' },
       },
-      required: ['project_id', 'type', 'content'],
-    },
-  },
-  // Intelligence tools
-  {
-    name: 'get_project_brain',
-    description: 'Get the project brain (summary, architecture, conventions, known issues, decisions, dependencies) for a Cortex-managed project.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-      },
-      required: ['project_id'],
-    },
-  },
-  {
-    name: 'search_patterns',
-    description: 'Search verified code patterns in Cortex intelligence.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Search term' },
-        project_id: { type: 'string', description: 'Optional project filter' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'match_error',
-    description: 'Match an error against the Cortex debug memory to find known solutions.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        error_signature: { type: 'string', description: 'Error type:message signature' },
-        error_message: { type: 'string', description: 'Full error message text' },
-      },
-      required: ['error_message'],
-    },
-  },
-  {
-    name: 'get_file_index',
-    description: 'Get the file index structure for a project.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-        file_type: { type: 'string', description: 'Optional filter by file type (component, service, etc.)' },
-      },
-      required: ['project_id'],
-    },
-  },
-  {
-    name: 'get_server_info',
-    description: 'Get deployment and server information for a project.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-      },
-      required: ['project_id'],
-    },
-  },
-  {
-    name: 'get_context',
-    description: 'Get the full assembled intelligence context for a project (respects token budget).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-      },
-      required: ['project_id'],
-    },
-  },
-  // Chrome Console Bridge tools
-  {
-    name: 'get_active_browser_context',
-    description: 'Get the currently active browser tab (what page the user has open right now) and its recent errors. Call this FIRST before get_browser_errors — it tells you exactly which page and project the user is looking at so you fetch the right errors.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_browser_errors',
-    description: 'Get browser console errors captured by the Cortex Chrome Console Bridge. If project_id is omitted, returns the most recent errors across all pages grouped by source URL — useful when you are not sure which project to look at.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'Project ID to filter by. Omit to get all recent errors across all pages.' },
-        limit: { type: 'number', description: 'Max errors to return (default 20)' },
-      },
-    },
-  },
-  {
-    name: 'get_network_failures',
-    description: 'Get failed network requests captured by the Cortex Chrome Console Bridge. If project_id is omitted, returns recent failures across all pages.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'Project ID to filter by. Omit to get all recent failures.' },
-        limit: { type: 'number', description: 'Max requests to return (default 20)' },
-      },
-    },
-  },
-  {
-    name: 'clear_browser_errors',
-    description: 'Clear captured browser errors for a project from the Cortex Console Bridge buffer.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-      },
-      required: ['project_id'],
-    },
-  },
-  // Cross-project discovery tools
-  {
-    name: 'cortex_list_projects',
-    description: 'List all projects registered in Cortex. Returns name, path, type, company, and project ID for each. Use this to discover other projects when the user references a project by name.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        search: { type: 'string', description: 'Optional search term to filter projects by name, path, or company' },
-      },
-    },
-  },
-  {
-    name: 'cortex_get_project_context',
-    description: 'Get the brain and context for ANY Cortex-managed project by name or ID. Use this when the user asks about another project — retrieves its summary, architecture, conventions, known issues, decisions, and dependencies.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID (use cortex_list_projects to find it)' },
-        project_name: { type: 'string', description: 'The project name (fuzzy matched if project_id not provided)' },
-      },
-    },
-  },
-  // MemPalace tools
-  {
-    name: 'recall_room',
-    description: 'Get deep context for a specific technical domain (room) in a project. Returns all patterns, debug solutions, and knowledge graph facts tagged with that room. Rooms: auth, database, ui, api, testing, deploy, config, state, build, intelligence, chat, terminal. Use this when working on a specific area to get targeted context.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-        room_name: { type: 'string', description: 'Room name (e.g. auth, database, ui, api, testing, deploy, config, state, build)' },
-      },
-      required: ['project_id', 'room_name'],
-    },
-  },
-  {
-    name: 'query_history',
-    description: 'Access the temporal knowledge graph to see how facts and decisions evolved over time. Shows what was used before, why things changed, and which decisions superseded others. Use this to understand project evolution.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-        subject: { type: 'string', description: 'Filter by subject (e.g. "framework", "database", "auth")' },
-        room_tag: { type: 'string', description: 'Filter by room tag' },
-        start_date: { type: 'string', description: 'Start date (ISO format)' },
-        end_date: { type: 'string', description: 'End date (ISO format)' },
-        active_only: { type: 'boolean', description: 'Only show active facts (default false)' },
-      },
-      required: ['project_id'],
-    },
-  },
-  {
-    name: 'check_consistency',
-    description: 'Validate a new finding against existing memory before committing it. Checks for contradictions, stale references, and superseded decisions. Use this BEFORE save_intelligence to prevent memory corruption.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-        fact: { type: 'string', description: 'The new fact or decision to validate' },
-        room_tag: { type: 'string', description: 'Optional room tag for scoped checking' },
-      },
-      required: ['project_id', 'fact'],
-    },
-  },
-  {
-    name: 'build_memory',
-    description: 'Build the MemPalace memory for a project. Scans the project brain and creates knowledge graph entries, AAAK compression cache, and room tags. Use this to initialize or rebuild memory for a project.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'The project ID' },
-      },
-      required: ['project_id'],
+      required: ['action'],
     },
   },
 ];
 
+/**
+ * Per-action help — fetched on demand via action_help(name) so the tool's top-level
+ * description can stay short. Each entry is the params + a one-liner.
+ */
+const ACTION_DOCS: Record<string, string> = {
+  get_context: 'get_context(project_id) — assembled project context respecting token budget.',
+  get_project_brain: 'get_project_brain(project_id) — raw brain fields: summary, architecture, conventions, decisions, issues, deps.',
+  get_project_context: 'get_project_context(project_id|project_name) — brain+context resolved by ID or fuzzy name.',
+  list_projects: 'list_projects([search]) — list every Cortex project with IDs and paths.',
+  recall_room: 'recall_room(project_id, room_name) — deep room context. room_name ∈ {auth,database,ui,api,testing,deploy,config,state,build,intelligence}.',
+  query_history: 'query_history(project_id, [subject], [room_tag], [active_only]) — how facts evolved over time.',
+  search_patterns: 'search_patterns(query, [project_id]) — find code patterns from pattern_memory.',
+  match_error: 'match_error(error_message, [error_signature]) — find a known solution for an error.',
+  save_intelligence: 'save_intelligence(project_id, type, content) — type ∈ {decision,known_issue,pattern,debug,server,convention}. USE INSTEAD OF Claude memory.',
+  check_consistency: 'check_consistency(project_id, fact, [room_tag]) — validate a fact before saving to prevent contradiction.',
+  build_memory: 'build_memory(project_id) — rebuild the temporal knowledge graph from brain.',
+  list_credentials: 'list_credentials([project_id]) — names + kinds only, no secret values.',
+  get_credential: 'get_credential(name, reason, [project_id]) — decrypt and return fields. Reason is REQUIRED (audited). Use BEFORE asking the user for any password.',
+  save_credential: 'save_credential(kind, name, fields, [project_id], [description]) — encrypt + store. kind ∈ {ssh,wordpress,shopify,smtp,backend_panel,api_key,db,app_user,github,other}. fields is an object e.g. {host, user, password}. After save, Cortex aggressively redacts the field values from all live PTY buffers + saved session_output. Caveat: terminal emulator scrollback already rendered cannot be scrubbed.',
+  get_active_browser_context: 'get_active_browser_context() — active tab + recent errors (Chrome extension).',
+  get_browser_errors: 'get_browser_errors([project_id], [limit]) — console errors.',
+  get_network_failures: 'get_network_failures([project_id], [limit]) — failed HTTP requests.',
+  clear_browser_errors: 'clear_browser_errors(project_id) — wipe the buffer.',
+  shadow_run_test: 'shadow_run_test(project_id, command, [cwd], [timeout_ms=120000]) — run a shell command (test suite, build, lint) in the shadow terminal. Returns {stdout, stderr, exitCode, passed, durationMs}. Use instead of Playwright for project testing.',
+  get_file_index: 'get_file_index(project_id, [file_type]) — indexed file structure.',
+  get_server_info: 'get_server_info(project_id) — deployment and server info.',
+  create_pdf: 'create_pdf(title, content, [output_path]).',
+  create_docx: 'create_docx(title, content, [output_path]).',
+  create_spreadsheet: 'create_spreadsheet(title, sheets, [output_path]).',
+  read_pdf: 'read_pdf(file_path).',
+  read_docx: 'read_docx(file_path).',
+};
+
 async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
-  // Document tools (create_docx, create_pdf, create_spreadsheet, read_docx, read_pdf)
-  if (['create_docx', 'create_pdf', 'create_spreadsheet', 'read_docx', 'read_pdf'].includes(name)) {
-    return handleDocumentTool(name, args);
+  // Single gateway — all calls come in as name='cortex' with args.action
+  const action = (name === 'cortex' ? args.action as string : name) || '';
+
+  // Meta: per-action docs on demand. Keeps the tool's top-level description compact
+  // while still letting Claude pull the full param signature when it needs to.
+  if (action === 'action_help') {
+    const target = (args.name as string) || '';
+    if (!target) {
+      return {
+        actions: Object.keys(ACTION_DOCS),
+        usage: 'Call action_help with name="<action>" to see params for that action.',
+      };
+    }
+    const doc = ACTION_DOCS[target];
+    return doc ? { action: target, doc } : { error: `Unknown action: ${target}` };
+  }
+
+  // Document tools
+  if (['create_docx', 'create_pdf', 'create_spreadsheet', 'read_docx', 'read_pdf'].includes(action)) {
+    return handleDocumentTool(action, args);
   }
 
   // Intelligence capture (MemPalace-enhanced)
-  if (name === 'save_intelligence') {
+  if (action === 'save_intelligence') {
     const db = getDb();
     const { project_id, type, content } = args as { project_id: string; type: string; content: string };
     const now = new Date().toISOString();
@@ -295,7 +202,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 
   const db = getDb();
 
-  switch (name) {
+  switch (action) {
     case 'get_project_brain': {
       const brain = getProjectBrain(args.project_id as string);
       return brain || { error: 'No brain found for this project' };
@@ -469,6 +376,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       return { success: true, message: 'Browser errors cleared.' };
     }
 
+    case 'list_projects':
     case 'cortex_list_projects': {
       const search = args.search as string | undefined;
       let sql = 'SELECT id, name, path, type, company, git_enabled, last_opened FROM projects ORDER BY last_opened DESC';
@@ -497,6 +405,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
       };
     }
 
+    case 'get_project_context':
     case 'cortex_get_project_context': {
       let projectId = args.project_id as string | undefined;
 
@@ -562,14 +471,154 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
     }
 
     case 'build_memory': {
-      const result = buildMemory(args.project_id as string);
+      const result = await buildMemory(args.project_id as string);
       // Also get compression stats
       const stats = getCompressionStats(args.project_id as string);
       return { ...result, compressionStats: stats };
     }
 
+    // Vault tools
+    case 'list_credentials': {
+      const projectId = (args.project_id as string | undefined) ?? undefined;
+      const items = listCredentials(projectId ?? undefined);
+      return {
+        total: items.length,
+        credentials: items.map(c => ({
+          id: c.id,
+          name: c.name,
+          kind: c.kind,
+          description: c.description,
+          projectId: c.projectId,
+          lastUsed: c.lastUsed,
+        })),
+        note: 'Call get_credential(name, reason) to decrypt — reason is logged for audit.',
+      };
+    }
+
+    case 'get_credential': {
+      const name = args.name as string | undefined;
+      const reason = args.reason as string | undefined;
+      const projectId = args.project_id as string | undefined;
+      if (!name) return { error: 'name is required' };
+      if (!reason || reason.length < 4) {
+        return { error: 'reason (≥4 chars) is required — explain why you need this credential' };
+      }
+      try {
+        const result = revealCredential({
+          name,
+          projectId: projectId ?? undefined,
+          reason,
+          caller: 'mcp',
+        });
+        if (!result) return { error: `No credential found with name "${name}"` };
+        return {
+          name: result.summary.name,
+          kind: result.summary.kind,
+          fields: result.fields,
+          warning:
+            'Use these fields directly in tool calls; do NOT echo the password back to the user or store it elsewhere.',
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { error: message };
+      }
+    }
+
+    case 'save_credential': {
+      const validKinds: CredentialKind[] = [
+        'ssh', 'wordpress', 'shopify', 'smtp', 'backend_panel',
+        'api_key', 'db', 'app_user', 'github', 'other',
+      ];
+      const kind = args.kind as string | undefined;
+      const credName = args.name as string | undefined;
+      const fields = args.fields as Record<string, unknown> | undefined;
+      const projectIdArg = args.project_id as string | undefined;
+      const description = args.description as string | undefined;
+
+      if (!kind || !validKinds.includes(kind as CredentialKind)) {
+        return { error: `kind must be one of: ${validKinds.join(', ')}` };
+      }
+      if (!credName || typeof credName !== 'string') {
+        return { error: 'name is required (short identifier, e.g. "digitaldadi-admin")' };
+      }
+      if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+        return { error: 'fields must be an object, e.g. {host, user, password}' };
+      }
+
+      try {
+        const summary = createCredential({
+          projectId: projectIdArg ?? null,
+          kind: kind as CredentialKind,
+          name: credName,
+          description,
+          fields,
+        });
+
+        // Aggressive redaction pass on all live PTY buffers + persisted session_output.
+        const stringValues = Object.values(fields)
+          .filter((v): v is string => typeof v === 'string' && v.length >= 4);
+        let redactedCount = 0;
+        try {
+          redactedCount = getSessionManager().redactStringsEverywhere(stringValues);
+        } catch (err: unknown) {
+          console.warn('[save_credential] redact failed:', err instanceof Error ? err.message : err);
+        }
+
+        return {
+          saved: true,
+          credential: {
+            id: summary.id,
+            name: summary.name,
+            kind: summary.kind,
+            projectId: summary.projectId,
+          },
+          redactedReplacements: redactedCount,
+          warning:
+            'Field values were scrubbed from live PTY buffers and session_output. Terminal emulator scrollback already rendered cannot be retroactively scrubbed — clear it manually if needed (Ctrl+L in most shells).',
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        // Most common: UNIQUE constraint when name already exists for this scope.
+        if (message.includes('UNIQUE')) {
+          return { error: `A credential named "${credName}" already exists in this scope. Pick a different name or update the existing one via Settings → Vault.` };
+        }
+        return { error: message };
+      }
+    }
+
+    case 'shadow_run_test': {
+      const { project_id, command, cwd, timeout_ms } = args as {
+        project_id: string;
+        command: string;
+        cwd?: string;
+        timeout_ms?: number;
+      };
+      if (!project_id || !command) {
+        return { error: 'project_id and command are required for shadow_run_test' };
+      }
+
+      // Resolve cwd from project path if not provided
+      let workdir = cwd;
+      if (!workdir) {
+        const project = db.prepare('SELECT path FROM projects WHERE id = ?').get(project_id) as any;
+        workdir = project?.path || process.cwd();
+      }
+
+      const body = JSON.stringify({ projectId: project_id, command, cwd: workdir, timeoutMs: timeout_ms ?? 120_000 });
+      const response = await fetch('http://127.0.0.1:4700/api/shadow/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: response.statusText }));
+        return { error: (err as any).error || response.statusText };
+      }
+      return response.json();
+    }
+
     default:
-      return { error: `Unknown tool: ${name}` };
+      return { error: `Unknown action: ${action}. See tool description for available actions.` };
   }
 }
 
@@ -594,9 +643,9 @@ async function handleRequest(req: MCPRequest): Promise<MCPResponse> {
       };
 
     case 'tools/call': {
-      const { name, arguments: toolArgs } = req.params as { name: string; arguments: Record<string, unknown> };
+      const { name: toolName, arguments: toolArgs } = req.params as { name: string; arguments: Record<string, unknown> };
       try {
-        const result = await handleToolCall(name, toolArgs || {});
+        const result = await handleToolCall(toolName, toolArgs || {});
         return {
           jsonrpc: '2.0',
           id: req.id,

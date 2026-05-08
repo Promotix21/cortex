@@ -88,7 +88,7 @@ export function ErrorPanel() {
           </div>
           <p style={{ fontSize: 14, marginBottom: 6, color: 'var(--text-primary)' }}>{err.message}</p>
           {err.matched_solution && (
-            <div className="rounded-xl" style={{ fontSize: 13, padding: '10px 14px', marginTop: 8, background: 'rgba(166,227,161,0.08)', color: 'var(--success)' }}>
+            <div className="rounded-xl" style={{ fontSize: 13, padding: '10px 14px', marginTop: 8, background: 'rgba(52,211,153,0.08)', color: 'var(--success)' }}>
               <strong>Fix:</strong> {err.matched_solution}
             </div>
           )}

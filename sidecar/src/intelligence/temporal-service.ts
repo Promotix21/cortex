@@ -1,6 +1,7 @@
 import { getDb } from '../db/index.js';
 import { v4 as uuid } from 'uuid';
 import { detectRoomFromContent } from './room-detector.js';
+import { claudeAnalyze } from '../utils/binaries.js';
 
 /**
  * Temporal Knowledge Graph Service
@@ -231,64 +232,179 @@ export function parseDecisionToTriples(content: string): FactInput[] {
 }
 
 /**
- * Build the full memory for a project: scan brain fields and create knowledge graph entries.
+ * Build the full memory for a project using Claude AI analysis.
+ * Sends project brain data to Claude to extract meaningful, validated knowledge graph facts.
+ * Falls back to basic extraction if Claude is unavailable.
  */
-export function buildMemory(projectId: string): { factsCreated: number; factsRetired: number; errors: string[] } {
+export async function buildMemory(projectId: string): Promise<{ factsCreated: number; factsRetired: number; errors: string[] }> {
   const db = getDb();
   const errors: string[] = [];
   let factsCreated = 0;
   let factsRetired = 0;
 
-  // Get the project brain
   const brain = db.prepare(`
     SELECT summary, architecture_notes, known_issues, decisions, conventions, dependencies_notes
     FROM project_brain WHERE project_id = ?
   `).get(projectId) as any;
 
+  const project = db.prepare(`SELECT name, path, type, company FROM projects WHERE id = ?`).get(projectId) as any;
+
   if (!brain) {
-    return { factsCreated: 0, factsRetired: 0, errors: ['No project brain found'] };
+    return { factsCreated: 0, factsRetired: 0, errors: ['No project brain found — run Scan & Build Brain first'] };
   }
 
-  // Parse each brain field into knowledge graph triples
-  const fieldParsers: Array<{ field: string; text: string; defaultSubject: string }> = [
-    { field: 'summary', text: brain.summary || '', defaultSubject: 'project' },
-    { field: 'architecture', text: brain.architecture_notes || '', defaultSubject: 'architecture' },
-    { field: 'decisions', text: brain.decisions || '', defaultSubject: 'project' },
-    { field: 'conventions', text: brain.conventions || '', defaultSubject: 'convention' },
-    { field: 'dependencies', text: brain.dependencies_notes || '', defaultSubject: 'dependency' },
-  ];
-
-  for (const { field, text, defaultSubject } of fieldParsers) {
-    if (!text.trim()) continue;
+  function emit(input: FactInput): void {
+    const obj = input.object || '';
+    if (!obj || obj.length > 300 || /^[^a-zA-Z]*$/.test(obj)) return;
 
     try {
-      // Split into individual statements (by newline, bullet, or sentence)
-      const statements = text
-        .split(/(?:\n[-*]\s|\n\d+\.\s|\n{2,}|\.\s+)/)
-        .map(s => s.trim())
-        .filter(s => s.length > 10);
-
-      for (const statement of statements) {
-        const triples = parseDecisionToTriples(statement);
-        for (const triple of triples) {
-          if (!triple.subject) triple.subject = defaultSubject;
-          triple.roomTag = triple.roomTag || detectRoomFromContent(statement) || undefined;
-          triple.source = 'scan';
-
-          try {
-            addFact(projectId, triple);
-            factsCreated++;
-          } catch (err: any) {
-            errors.push(`Failed to add fact from ${field}: ${err.message}`);
-          }
-        }
-      }
+      input.source = 'auto';
+      addFact(projectId, input);
+      factsCreated++;
     } catch (err: any) {
-      errors.push(`Failed to parse ${field}: ${err.message}`);
+      errors.push(`Failed to add fact: ${err.message}`);
+    }
+  }
+
+  // ── Try Claude AI extraction first ──
+  const aiFacts = await extractFactsWithClaude(brain, project);
+
+  if (aiFacts && aiFacts.length > 0) {
+    console.log(`[buildMemory] Claude extracted ${aiFacts.length} facts for ${project?.name || projectId}`);
+    for (const fact of aiFacts) {
+      emit(fact);
+    }
+  } else {
+    // ── Fallback: basic extraction without AI ──
+    console.log(`[buildMemory] Claude unavailable, using basic extraction for ${project?.name || projectId}`);
+    const basicFacts = extractFactsBasic(brain, project);
+    for (const fact of basicFacts) {
+      emit(fact);
     }
   }
 
   return { factsCreated, factsRetired, errors };
+}
+
+/**
+ * Use Claude to intelligently extract knowledge graph facts from project brain data.
+ */
+async function extractFactsWithClaude(brain: any, project: any): Promise<FactInput[] | null> {
+  const brainContent = [
+    brain.summary && `SUMMARY:\n${brain.summary}`,
+    brain.architecture_notes && `ARCHITECTURE:\n${brain.architecture_notes}`,
+    brain.conventions && `CONVENTIONS:\n${brain.conventions}`,
+    brain.dependencies_notes && `DEPENDENCIES:\n${brain.dependencies_notes}`,
+    brain.known_issues && `KNOWN ISSUES:\n${brain.known_issues}`,
+    brain.decisions && `DECISIONS:\n${brain.decisions.slice(0, 2000)}`,
+  ].filter(Boolean).join('\n\n');
+
+  if (!brainContent.trim()) return null;
+
+  const prompt = `You are a knowledge graph builder for a developer workspace called Cortex. Analyze this project intelligence data and extract structured facts.
+
+PROJECT: ${project?.name || 'unknown'} (type: ${project?.type || 'unknown'})
+
+=== PROJECT BRAIN DATA ===
+${brainContent}
+
+=== YOUR TASK ===
+
+Extract meaningful facts as a JSON array. Each fact is a triple: { subject, predicate, object, roomTag, confidence }.
+
+Rules:
+- subject: what the fact is about (e.g., "project", "database", "framework", "auth", "api", "deployment", "testing", "dependency")
+- predicate: the relationship (e.g., "uses", "deployed_at", "runs_on_port", "requires", "configured_with", "has_issue", "follows_convention")
+- object: the value (keep under 150 chars, be specific)
+- roomTag: categorize into one of: "build", "api", "database", "auth", "config", "deploy", "testing", "intelligence"
+- confidence: "verified" (directly from config files/code), "probable" (inferred from patterns), "speculative" (educated guess)
+
+Focus on facts that would help a developer understand:
+1. What technologies/frameworks are used and WHY
+2. How the project is deployed (ports, servers, SSH, URLs)
+3. Database and storage setup
+4. Authentication approach
+5. Key dependencies and their roles
+6. Known issues and risks
+7. Development conventions and rules
+8. API structure
+
+Do NOT extract:
+- Generic/obvious facts ("project uses JavaScript" for a Node project)
+- Raw dependency version numbers without context
+- Duplicate facts
+- Speculative facts with no supporting evidence
+
+Return ONLY a JSON array. No markdown fences, no explanation. Aim for 15-40 high-quality facts.`;
+
+  try {
+    const response = await claudeAnalyze(prompt, { timeoutMs: 90_000 });
+    if (!response) return null;
+
+    let jsonStr = response.trim();
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+    const parsed = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed)) return null;
+
+    // Validate and clean each fact
+    return parsed
+      .filter((f: any) => f.subject && f.predicate && f.object)
+      .map((f: any) => ({
+        subject: String(f.subject).slice(0, 100),
+        predicate: String(f.predicate).slice(0, 100),
+        object: String(f.object).slice(0, 300),
+        roomTag: f.roomTag || undefined,
+        confidence: ['verified', 'probable', 'speculative'].includes(f.confidence) ? f.confidence : 'probable',
+      }));
+  } catch (err: any) {
+    console.warn('[extractFactsWithClaude] Failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Basic fact extraction without AI — fallback when Claude CLI is unavailable.
+ * Extracts obvious facts from structured brain fields using simple parsing.
+ */
+function extractFactsBasic(brain: any, project: any): FactInput[] {
+  const facts: FactInput[] = [];
+
+  // Project type
+  if (project?.type && project.type !== 'unknown') {
+    facts.push({ subject: 'project', predicate: 'type', object: project.type, confidence: 'verified' });
+  }
+
+  // Stack from summary
+  const stackMatch = (brain.summary || '').match(/Stack:\s*(\S+)\s*\(([^)]+)\)/);
+  if (stackMatch) {
+    facts.push({ subject: 'framework', predicate: 'uses', object: stackMatch[1], roomTag: 'build' });
+  }
+
+  // Conventions
+  for (const line of (brain.conventions || '').split('\n')) {
+    const kv = line.trim().match(/^([^:]+):\s*(.+)/);
+    if (kv && kv[2].length > 2 && kv[2].length < 100) {
+      facts.push({ subject: 'convention', predicate: 'follows', object: `${kv[1].trim()}: ${kv[2].trim()}`, roomTag: 'config', confidence: 'verified' });
+    }
+  }
+
+  // Ports
+  const portMatch = (brain.architecture_notes || '').match(/Ports?:\s*(.+)/);
+  if (portMatch) {
+    facts.push({ subject: 'infrastructure', predicate: 'ports', object: portMatch[1].trim(), roomTag: 'deploy' });
+  }
+
+  // Databases
+  const dbMatch = (brain.architecture_notes || '').match(/Databases?:\s*(.+)/);
+  if (dbMatch) {
+    for (const d of dbMatch[1].split(',')) {
+      if (d.trim()) facts.push({ subject: 'database', predicate: 'uses', object: d.trim(), roomTag: 'database', confidence: 'verified' });
+    }
+  }
+
+  return facts;
 }
 
 // ---- Helpers ----

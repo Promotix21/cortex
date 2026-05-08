@@ -1,6 +1,27 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
+import { getSessionManager } from '../sessions/session-manager.js';
 import { v4 as uuid } from 'uuid';
+
+type LiveTodo = { id?: string; content: string; status: string; priority?: string };
+
+function parseTodosFromBuffer(buffer: string): LiveTodo[] {
+  if (!buffer) return [];
+  const clean = buffer
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+    .replace(/\x1b\].*?\x07/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+  const todoPattern = /"name"\s*:\s*"Todo(?:Write|Read)"[\s\S]*?"todos"\s*:\s*(\[[\s\S]*?\])/g;
+  let lastParsed: LiveTodo[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = todoPattern.exec(clean)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (Array.isArray(parsed)) lastParsed = parsed;
+    } catch { /* skip malformed */ }
+  }
+  return lastParsed;
+}
 
 export const notesRouter: ReturnType<typeof Router> = Router();
 
@@ -47,6 +68,39 @@ notesRouter.put('/:projectId', (req, res) => {
 // --- Tasks ---
 
 export const tasksRouter: ReturnType<typeof Router> = Router();
+
+// GET /api/tasks/:projectId/live — aggregate live TodoWrite output from every session of this project.
+// Returns a flat list of live todos plus a per-session breakdown so the UI can group them.
+// MUST be declared before `/:projectId` (Express 5 matches param routes eagerly).
+tasksRouter.get('/:projectId/live', (req, res) => {
+  const db = getDb();
+  const sessions = db.prepare(
+    'SELECT id, name, status, last_active FROM claude_sessions WHERE project_id = ? ORDER BY last_active DESC'
+  ).all(req.params.projectId) as Array<{ id: string; name: string; status: string; last_active: string }>;
+
+  const mgr = getSessionManager();
+  const groups: Array<{ sessionId: string; sessionName: string; sessionStatus: string; lastActive: string; todos: LiveTodo[] }> = [];
+  const flat: Array<LiveTodo & { sessionId: string; sessionName: string; sessionStatus: string }> = [];
+
+  for (const s of sessions) {
+    let buffer = '';
+    const live = mgr.getSessionInfo(s.id);
+    if (live && live.status === 'running') {
+      buffer = mgr.getSessionOutput(s.id, 102400);
+    } else {
+      const row = db.prepare('SELECT session_output FROM claude_sessions WHERE id = ?').get(s.id) as any;
+      buffer = row?.session_output || '';
+    }
+    const todos = parseTodosFromBuffer(buffer);
+    if (todos.length === 0) continue;
+    groups.push({ sessionId: s.id, sessionName: s.name, sessionStatus: s.status, lastActive: s.last_active, todos });
+    for (const t of todos) {
+      flat.push({ ...t, sessionId: s.id, sessionName: s.name, sessionStatus: s.status });
+    }
+  }
+
+  res.json({ groups, todos: flat });
+});
 
 // GET /api/tasks/:projectId — list tasks
 tasksRouter.get('/:projectId', (req, res) => {

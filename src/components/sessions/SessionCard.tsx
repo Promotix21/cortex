@@ -139,7 +139,7 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
               fontWeight: 700,
               background: 'var(--accent-dim)',
               color: 'var(--accent)',
-              border: '1px solid rgba(137,180,250,0.25)',
+              border: '1px solid rgba(34,211,238,0.25)',
             }}
           >
             <ExternalLink size={13} />
@@ -160,7 +160,7 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
                 fontWeight: 700,
                 background: 'var(--accent-dim)',
                 color: 'var(--accent)',
-                border: '1px solid rgba(137,180,250,0.25)',
+                border: '1px solid rgba(34,211,238,0.25)',
               }}
             >
               <FileText size={13} />
@@ -177,7 +177,8 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
                   viewSession(newSession.id);
                 } catch {
                   // Fallback to regular spawn
-                  spawnSession(session.projectId, `${session.name} (resumed)`).then(s => viewSession(s.id));
+                  const baseName = session.name.replace(/\s*\(resumed\)\s*$/i, '').trim();
+                  spawnSession(session.projectId, `${baseName} (resumed)`).then(s => viewSession(s.id));
                 }
               }}
               className="flex items-center rounded-lg transition-all"
@@ -188,7 +189,7 @@ export function SessionCard({ session, projectName }: SessionCardProps) {
                 fontWeight: 700,
                 background: 'var(--success-dim)',
                 color: 'var(--success)',
-                border: '1px solid rgba(166,227,161,0.25)',
+                border: '1px solid rgba(52,211,153,0.25)',
               }}
             >
               <Play size={13} />

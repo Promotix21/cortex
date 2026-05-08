@@ -18,7 +18,10 @@ import { api } from '@/lib/api';
 export default function App() {
   const { claudeStatus, checkClaudeStatus } = useSettingsStore();
   const fetchSessions = useSessionStore(s => s.fetchSessions);
+  const fetchActiveSessions = useSessionStore(s => s.fetchActiveSessions);
   const fetchProjects = useProjectStore(s => s.fetchProjects);
+  // Use activeProjectId (stable string) not activeProject() (new reference every render)
+  const activeProjectId = useProjectStore(s => s.activeProjectId);
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [sidecarReady, setSidecarReady] = useState(false);
@@ -27,10 +30,10 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Wait for sidecar to be available (retries on connection refused)
-  // After reboot, the sidecar can take 10-20s to start — be patient
+  // After reboot, the sidecar can take 10-30s to start — be patient
   const waitForSidecar = useCallback(async () => {
     setSidecarFailed(false);
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 120; i++) {
       try {
         await api.health();
         setSidecarReady(true);
@@ -39,7 +42,7 @@ export default function App() {
         await new Promise(r => setTimeout(r, 500));
       }
     }
-    // After 30s, show a retry screen instead of a broken app
+    // After 60s, show a retry screen instead of a broken app
     setSidecarFailed(true);
   }, []);
 
@@ -54,19 +57,31 @@ export default function App() {
     if (!sidecarReady) return;
     setSidecarFailed(false);
     checkClaudeStatus().finally(() => setChecking(false));
-    fetchSessions();
+    fetchActiveSessions();
     fetchProjects();
-  }, [sidecarReady, checkClaudeStatus, fetchSessions, fetchProjects]);
+  }, [sidecarReady, checkClaudeStatus, fetchActiveSessions, fetchProjects]);
 
+  // Poll sessions — uses stable activeProjectId (string) so this never spuriously re-fires
   useEffect(() => {
     if (!sidecarReady) return;
-    const interval = setInterval(() => fetchSessions(), 5000);
+    if (activeProjectId) {
+      fetchSessions(activeProjectId);
+    } else {
+      fetchActiveSessions();
+    }
+    const interval = setInterval(() => {
+      if (activeProjectId) {
+        fetchSessions(activeProjectId);
+      } else {
+        fetchActiveSessions();
+      }
+    }, 5000);
     return () => clearInterval(interval);
-  }, [sidecarReady, fetchSessions]);
+  }, [sidecarReady, activeProjectId, fetchSessions, fetchActiveSessions]);
 
   // Tab index → activity mapping for Ctrl+1-9
   const tabActivities: import('@/stores/navigation-store').ActivityId[] = [
-    'dashboard', 'terminal', 'sessions', 'git', 'notes', 'brain', 'chat', 'documents', 'studio',
+    'dashboard', 'terminal', 'sessions', 'explorer', 'git', 'notes', 'brain', 'chat', 'documents',
   ];
 
   // Global keyboard shortcuts
@@ -209,10 +224,10 @@ export default function App() {
         {sidecarFailed ? (
           <>
             <div style={{ fontSize: 14, color: 'var(--error)', marginBottom: 20, textAlign: 'center', maxWidth: 400 }}>
-              Could not connect to sidecar (port 4700).
+              Could not connect to Cortex Brain.
               <br />
               <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
-                The sidecar may still be starting after a system reboot.
+                The brain may still be starting up — try clicking Retry.
               </span>
             </div>
             <button
@@ -237,7 +252,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ fontSize: 14, color: 'var(--text-tertiary)', marginBottom: 20 }}>
-              Connecting to sidecar…
+              Connecting to Cortex Brain…
             </div>
             <div style={{
               width: 28, height: 28, border: '3px solid var(--border)',

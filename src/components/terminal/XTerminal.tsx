@@ -7,6 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { api } from '@/lib/api';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 interface XTerminalProps {
   terminalId: string;
@@ -22,6 +23,7 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
   const initialLoadDone = useRef(false);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const fitTimeoutRef = useRef<number | null>(null);
+  const activeRef = useRef(active);
   const [dragOver, setDragOver] = useState(false);
 
   /** Fallback clipboard copy for Tauri webview where navigator.clipboard may fail */
@@ -36,13 +38,20 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
     document.body.removeChild(ta);
   }, []);
 
+  /** Keep activeRef current so ResizeObserver closure never reads stale active */
+  useEffect(() => { activeRef.current = active; }, [active]);
+
   /** Debounced fit — coalesces rapid resize events, syncs PTY size */
   const debouncedFit = useCallback(() => {
     if (fitTimeoutRef.current) cancelAnimationFrame(fitTimeoutRef.current);
     fitTimeoutRef.current = requestAnimationFrame(() => {
       const fit = fitRef.current;
       const term = termRef.current;
-      if (!fit || !term) return;
+      const container = containerRef.current;
+      if (!fit || !term || !container) return;
+      // Guard: don't fit a hidden (display:none) container — it has 0 dimensions
+      // which would resize the PTY to ~9 cols and squish all output on re-show.
+      if (container.offsetWidth === 0 || container.offsetHeight === 0) return;
       try {
         fit.fit();
         api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
@@ -86,32 +95,36 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
       lineHeight: 1.3,
       theme: {
-        background: '#1e1e2e',
-        foreground: '#cdd6f4',
-        cursor: '#f5e0dc',
-        selectionBackground: '#585b7066',
-        black: '#45475a',
-        red: '#f38ba8',
-        green: '#a6e3a1',
-        yellow: '#f9e2af',
-        blue: '#89b4fa',
-        magenta: '#f5c2e7',
-        cyan: '#94e2d5',
-        white: '#bac2de',
-        brightBlack: '#585b70',
-        brightRed: '#f38ba8',
-        brightGreen: '#a6e3a1',
-        brightYellow: '#f9e2af',
-        brightBlue: '#89b4fa',
-        brightMagenta: '#f5c2e7',
-        brightCyan: '#94e2d5',
-        brightWhite: '#a6adc8',
+        background: '#141420',
+        foreground: '#e2e8f0',
+        cursor: '#22d3ee',
+        selectionBackground: '#4a4a6a66',
+        black: '#3a3a52',
+        red: '#f87171',
+        green: '#34d399',
+        yellow: '#fbbf24',
+        blue: '#22d3ee',
+        magenta: '#a78bfa',
+        cyan: '#22d3ee',
+        white: '#cbd5e1',
+        brightBlack: '#4a4a6a',
+        brightRed: '#f87171',
+        brightGreen: '#34d399',
+        brightYellow: '#fbbf24',
+        brightBlue: '#67e8f9',
+        brightMagenta: '#c4b5fd',
+        brightCyan: '#67e8f9',
+        brightWhite: '#e2e8f0',
       },
       allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
+    // Tauri's webview blocks window.open — route link clicks through the opener plugin
+    // so alt+click (xterm's default modifier) actually opens in the system browser.
+    const webLinksAddon = new WebLinksAddon((_event, uri) => {
+      openUrl(uri).catch((err) => console.warn('[terminal] openUrl failed:', err));
+    });
     const unicode11Addon = new Unicode11Addon();
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
@@ -140,9 +153,10 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
       api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
     });
 
-    // ResizeObserver — the real fix for tab switches, sidebar collapse, panel resize
+    // ResizeObserver — use activeRef so the callback always sees current active state,
+    // not the stale value captured when the effect first ran.
     const observer = new ResizeObserver(() => {
-      if (active) debouncedFit();
+      if (activeRef.current) debouncedFit();
     });
     observer.observe(containerRef.current);
     resizeObserverRef.current = observer;
@@ -272,10 +286,11 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
     };
   }, [terminalId, startPolling, stopPolling, debouncedFit]);
 
-  // Re-fit on tab activation — use double rAF to wait for display:block layout
+  // Re-fit + re-focus on tab activation — use double rAF to wait for display:block layout.
+  // term.focus() is required: WebKitGTK drops wheel-event routing to the canvas after
+  // visibility or focus changes, so without it the user can't scroll until they click.
   useEffect(() => {
     if (!active || !fitRef.current || !termRef.current) return;
-    // Double requestAnimationFrame ensures the browser has painted after display:block
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const fit = fitRef.current;
@@ -284,6 +299,7 @@ export function XTerminal({ terminalId, active }: XTerminalProps) {
         try {
           fit.fit();
           api.resizeTerminal(terminalId, term.cols, term.rows).catch(() => {});
+          term.focus();
         } catch { /* disposed */ }
       });
     });

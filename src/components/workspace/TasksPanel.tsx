@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
+import { useNavigationStore } from '@/stores/navigation-store';
 import { api } from '@/lib/api';
-import { ListTodo, Plus, Trash2, Check, Circle, Loader, AlertTriangle } from 'lucide-react';
+import { ListTodo, Plus, Trash2, Check, Circle, Loader, AlertTriangle, Zap, Radio } from 'lucide-react';
 
 type TaskStatus = 'pending' | 'doing' | 'done' | 'blocked';
 
@@ -10,6 +11,15 @@ interface Task {
   title: string;
   status: TaskStatus;
   created_at: string;
+}
+
+interface LiveTodo { id?: string; content: string; status: string; priority?: string }
+interface LiveGroup {
+  sessionId: string;
+  sessionName: string;
+  sessionStatus: string;
+  lastActive: string;
+  todos: LiveTodo[];
 }
 
 const statusConfig: Record<TaskStatus, { icon: React.ElementType; color: string; label: string }> = {
@@ -23,7 +33,9 @@ const statusCycle: TaskStatus[] = ['pending', 'doing', 'done', 'blocked'];
 
 export function TasksPanel() {
   const project = useProjectStore(s => s.activeProject());
+  const viewSession = useNavigationStore(s => s.viewSession);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [liveGroups, setLiveGroups] = useState<LiveGroup[]>([]);
   const [newTitle, setNewTitle] = useState('');
 
   const fetchTasks = async () => {
@@ -34,7 +46,22 @@ export function TasksPanel() {
     } catch { /* silent */ }
   };
 
-  useEffect(() => { fetchTasks(); }, [project?.id]);
+  const fetchLive = async () => {
+    if (!project) return;
+    try {
+      const { groups } = await api.getLiveTasks(project.id);
+      setLiveGroups(groups);
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    if (!project) { setTasks([]); setLiveGroups([]); return; }
+    fetchTasks();
+    fetchLive();
+    const interval = setInterval(fetchLive, 3000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   const addTask = async () => {
     if (!project || !newTitle.trim()) return;
@@ -65,6 +92,8 @@ export function TasksPanel() {
 
   const active = tasks.filter(t => t.status !== 'done');
   const done = tasks.filter(t => t.status === 'done');
+  const hasLive = liveGroups.some(g => g.todos.length > 0);
+  const totalAnything = tasks.length + liveGroups.reduce((n, g) => n + g.todos.length, 0);
 
   return (
     <div className="max-w-2xl">
@@ -95,6 +124,90 @@ export function TasksPanel() {
           <Plus size={16} />
         </button>
       </div>
+
+      {/* Live Session Todos (from Claude Code TodoWrite) */}
+      {hasLive && (
+        <div style={{ marginBottom: 32 }}>
+          <div className="flex items-center" style={{ gap: 8, marginBottom: 12 }}>
+            <Radio size={14} style={{ color: 'var(--accent)' }} />
+            <p className="uppercase tracking-wider font-semibold" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              Live from Claude Sessions
+            </p>
+          </div>
+          {liveGroups.map(group => (
+            <div
+              key={group.sessionId}
+              style={{
+                marginBottom: 14,
+                padding: '12px 14px',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}
+            >
+              <button
+                onClick={() => viewSession(group.sessionId)}
+                className="flex items-center w-full"
+                style={{ gap: 8, marginBottom: 10 }}
+                title="Open this session"
+              >
+                <Zap
+                  size={13}
+                  style={{
+                    color: group.sessionStatus === 'running' ? 'var(--success)' : 'var(--text-tertiary)',
+                  }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {group.sessionName}
+                </span>
+                <span
+                  className="rounded-full"
+                  style={{
+                    padding: '1px 8px',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    background: group.sessionStatus === 'running' ? 'var(--success-dim)' : 'var(--bg-hover)',
+                    color: group.sessionStatus === 'running' ? 'var(--success)' : 'var(--text-tertiary)',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {group.sessionStatus}
+                </span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  {group.todos.length} task{group.todos.length === 1 ? '' : 's'}
+                </span>
+              </button>
+              {group.todos.map((t, i) => {
+                const normalized =
+                  t.status === 'completed' ? 'done'
+                  : t.status === 'in_progress' ? 'doing'
+                  : 'pending';
+                const cfg = statusConfig[normalized as TaskStatus];
+                const Icon = cfg.icon;
+                return (
+                  <div
+                    key={t.id ?? `${group.sessionId}-${i}`}
+                    className="flex items-center"
+                    style={{ gap: 10, padding: '6px 0' }}
+                  >
+                    <Icon size={14} style={{ color: cfg.color, flexShrink: 0 }} />
+                    <span
+                      className="flex-1"
+                      style={{
+                        fontSize: 13,
+                        color: normalized === 'done' ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                        textDecoration: normalized === 'done' ? 'line-through' : 'none',
+                      }}
+                    >
+                      {t.content}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Active Tasks */}
       {active.map(task => {
@@ -157,9 +270,9 @@ export function TasksPanel() {
         </div>
       )}
 
-      {tasks.length === 0 && (
+      {totalAnything === 0 && (
         <p className="text-center" style={{ fontSize: 14, padding: '32px 0', color: 'var(--text-tertiary)' }}>
-          No tasks yet. Add one above.
+          No tasks yet. Add one above, or start a Claude session — its TodoWrite tasks will appear here live.
         </p>
       )}
     </div>

@@ -52,6 +52,11 @@ export function initDb(): Database.Database {
     "ALTER TABLE pattern_memory ADD COLUMN room_tag TEXT",
     "ALTER TABLE debug_memory ADD COLUMN room_tag TEXT",
     "ALTER TABLE notes ADD COLUMN room_tag TEXT",
+    // Token tracking: actual parsed counts from Claude Code output
+    "ALTER TABLE session_metrics ADD COLUMN tokens_actual INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE session_metrics ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0",
+    // Backfill marker — set when historical data has been compressed into observations
+    "ALTER TABLE claude_sessions ADD COLUMN backfilled_at TEXT DEFAULT NULL",
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* column already exists */ }

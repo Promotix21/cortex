@@ -1,34 +1,46 @@
 import { useEffect } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useProjectStore } from '@/stores/project-store';
-import { SessionCard } from './SessionCard';
+import { useNavigationStore } from '@/stores/navigation-store';
 import { UsageBanner } from './UsageBanner';
-import { X, RefreshCw, Zap } from 'lucide-react';
+import { X, RefreshCw, Zap, Terminal as TerminalIcon, Sparkles } from 'lucide-react';
 
 export function SessionDashboard() {
-  const { sessions, usage, dashboardOpen, setDashboardOpen, fetchSessions, fetchUsage } =
-    useSessionStore();
+  const {
+    liveProjects,
+    usage,
+    dashboardOpen,
+    setDashboardOpen,
+    fetchLiveWork,
+    fetchUsage,
+  } = useSessionStore();
   const projects = useProjectStore(s => s.projects);
+  const setActiveProject = useProjectStore(s => s.setActiveProject);
+  const setActivity = useNavigationStore(s => s.setActivity);
 
   useEffect(() => {
-    if (dashboardOpen) {
-      fetchSessions();
+    if (!dashboardOpen) return;
+    fetchLiveWork();
+    fetchUsage();
+    const interval = setInterval(() => {
+      fetchLiveWork();
       fetchUsage();
-      const interval = setInterval(() => {
-        fetchSessions();
-        fetchUsage();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [dashboardOpen, fetchSessions, fetchUsage]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [dashboardOpen, fetchLiveWork, fetchUsage]);
 
   if (!dashboardOpen) return null;
 
   const getProjectName = (projectId: string) =>
     projects.find(p => p.id === projectId)?.name ?? 'Unknown';
 
-  const running = sessions.filter(s => s.status === 'running' || s.status === 'idle');
-  const completed = sessions.filter(s => s.status === 'completed' || s.status === 'error');
+  const totalLive = liveProjects.reduce((sum, p) => sum + p.count, 0);
+
+  const jumpTo = (projectId: string) => {
+    setActiveProject(projectId);
+    setActivity('terminal');
+    setDashboardOpen(false);
+  };
 
   return (
     <div
@@ -41,7 +53,7 @@ export function SessionDashboard() {
     >
       <div
         className="rounded-xl flex flex-col"
-        style={{ width: 700, maxHeight: '80vh', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+        style={{ width: 760, maxHeight: '80vh', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
       >
         {/* Header */}
         <div
@@ -50,10 +62,21 @@ export function SessionDashboard() {
         >
           <Zap size={20} style={{ color: 'var(--accent)' }} />
           <h2 className="font-semibold flex-1" style={{ fontSize: 16, color: 'var(--text-primary)' }}>
-            Claude Code Sessions
+            Live Work — All Projects
           </h2>
+          <span
+            style={{
+              fontSize: 12,
+              padding: '3px 10px',
+              borderRadius: 10,
+              background: totalLive > 0 ? 'var(--success-dim)' : 'var(--bg-surface)',
+              color: totalLive > 0 ? 'var(--success)' : 'var(--text-tertiary)',
+            }}
+          >
+            {totalLive} live
+          </span>
           <button
-            onClick={() => { fetchSessions(); fetchUsage(); }}
+            onClick={() => { fetchLiveWork(); fetchUsage(); }}
             className="rounded hover:bg-[var(--bg-hover)] transition-colors"
             style={{ padding: 8 }}
             title="Refresh"
@@ -71,61 +94,96 @@ export function SessionDashboard() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '20px 24px' }}>
-          {/* Usage Banner */}
           {usage && <UsageBanner usage={usage} getProjectName={getProjectName} />}
 
-          {/* Running Sessions */}
-          {running.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
-              <h3
-                className="uppercase tracking-wider font-medium"
-                style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-tertiary)' }}
-              >
-                Active ({running.length})
-              </h3>
-              <div className="flex flex-col" style={{ gap: 12 }}>
-                {running.map(session => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    projectName={getProjectName(session.projectId)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Completed Sessions */}
-          {completed.length > 0 && (
-            <div>
-              <h3
-                className="uppercase tracking-wider font-medium"
-                style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-tertiary)' }}
-              >
-                Recent ({completed.length})
-              </h3>
-              <div className="flex flex-col" style={{ gap: 12 }}>
-                {completed.slice(0, 10).map(session => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    projectName={getProjectName(session.projectId)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {sessions.length === 0 && (
+          {liveProjects.length === 0 ? (
             <div className="text-center" style={{ padding: '48px 0' }}>
               <Zap size={36} className="mx-auto" style={{ marginBottom: 14, color: 'var(--text-tertiary)' }} />
               <p style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
-                No Claude Code sessions yet
+                No live sessions or terminals
               </p>
               <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text-tertiary)' }}>
-                Select a project and start a session
+                Start a session from a project dashboard or open a terminal
               </p>
+            </div>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 24, marginTop: 16 }}>
+              {liveProjects.map(group => (
+                <div key={group.projectId}>
+                  <div className="flex items-center" style={{ gap: 8, marginBottom: 10 }}>
+                    <h3
+                      className="uppercase tracking-wider font-medium"
+                      style={{ fontSize: 12, color: 'var(--text-tertiary)' }}
+                    >
+                      {group.projectName}
+                    </h3>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: '1px 7px',
+                        borderRadius: 8,
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text-tertiary)',
+                      }}
+                    >
+                      {group.count}
+                    </span>
+                  </div>
+                  <div className="flex flex-col" style={{ gap: 8 }}>
+                    {group.items.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => jumpTo(item.projectId)}
+                        className="flex items-center rounded-lg transition-colors text-left"
+                        style={{
+                          gap: 12,
+                          padding: '12px 16px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {item.kind === 'session' ? (
+                          <Sparkles size={16} style={{ color: 'var(--accent)' }} />
+                        ) : (
+                          <TerminalIcon size={16} style={{ color: 'var(--text-secondary)' }} />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div
+                            style={{
+                              fontSize: 14,
+                              fontWeight: 500,
+                              color: 'var(--text-primary)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {item.name}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            {item.kind === 'session' ? 'Claude session' : `${item.type ?? 'shell'} terminal`}
+                            {item.kind === 'session' && typeof item.promptCount === 'number' && item.promptCount > 0
+                              ? ` · ${item.promptCount} prompt${item.promptCount > 1 ? 's' : ''}`
+                              : ''}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            padding: '2px 8px',
+                            borderRadius: 8,
+                            background: 'var(--success-dim)',
+                            color: 'var(--success)',
+                          }}
+                        >
+                          {item.status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

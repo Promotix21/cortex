@@ -3,28 +3,32 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-primary: #1e1e2e;
-  --bg-secondary: #181825;
-  --bg-tertiary: #11111b;
-  --bg-surface: #242438;
-  --bg-hover: #2a2a3e;
-  --bg-elevated: #303050;
-  --border: #313148;
-  --border-active: #585878;
-  --text-primary: #cdd6f4;
-  --text-secondary: #a6adc8;
-  --text-tertiary: #6c7086;
-  --accent: #89b4fa;
-  --accent-hover: #74c7ec;
-  --accent-dim: rgba(137, 180, 250, 0.12);
-  --success: #a6e3a1;
-  --success-dim: rgba(166, 227, 161, 0.12);
-  --warning: #f9e2af;
-  --warning-dim: rgba(249, 226, 175, 0.12);
-  --error: #f38ba8;
-  --error-dim: rgba(243, 139, 168, 0.12);
-  --running: #a6e3a1;
-  --idle: #f9e2af;
+  --bg-primary: #141420;
+  --bg-secondary: #101018;
+  --bg-tertiary: #0c0c14;
+  --bg-surface: #1a1a2e;
+  --bg-hover: #222238;
+  --bg-elevated: #2a2a44;
+  --border: #2a2a42;
+  --border-active: #4a4a6a;
+  --text-primary: #e2e8f0;
+  --text-secondary: #a0aec0;
+  --text-tertiary: #636b7f;
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-dim: rgba(34, 211, 238, 0.12);
+  --accent-purple: #a78bfa;
+  --accent-purple-hover: #c4b5fd;
+  --accent-purple-dim: rgba(167, 139, 250, 0.12);
+  --accent-gradient: linear-gradient(135deg, #22d3ee, #a78bfa);
+  --success: #34d399;
+  --success-dim: rgba(52, 211, 153, 0.12);
+  --warning: #fbbf24;
+  --warning-dim: rgba(251, 191, 36, 0.12);
+  --error: #f87171;
+  --error-dim: rgba(248, 113, 113, 0.12);
+  --running: #34d399;
+  --idle: #fbbf24;
 
   --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
@@ -153,8 +157,8 @@ input:focus, textarea:focus {
 
 /* Pulse animation for active session dots */
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 4px rgba(166, 227, 161, 0.3); }
-  50% { box-shadow: 0 0 10px rgba(166, 227, 161, 0.6); }
+  0%, 100% { box-shadow: 0 0 4px rgba(52, 211, 153, 0.3); }
+  50% { box-shadow: 0 0 10px rgba(52, 211, 153, 0.6); }
 }
 
 .pulse-dot {

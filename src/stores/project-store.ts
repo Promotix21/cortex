@@ -53,9 +53,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setActiveProject: (id) => {
     if (id) localStorage.setItem(ACTIVE_PROJECT_KEY, id);
     else localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    const prev = get().activeProjectId;
     set({ activeProjectId: id });
-    // Clear any open session view when switching projects
-    useNavigationStore.getState().clearSessionView();
+    // Only reset the open session view when actually switching to a different project.
+    // Clearing to null (All Projects) must NOT wipe the session being viewed.
+    if (id && id !== prev) {
+      useNavigationStore.getState().clearSessionView();
+    }
   },
 
   fetchProjects: async () => {
@@ -63,13 +67,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     try {
       const data = await api.getProjects();
       const { activeProjectId } = get();
-      // Auto-select first project if saved active doesn't exist in list
-      const activeExists = data.projects.some(p => p.id === activeProjectId);
-      const newActiveId = activeExists ? activeProjectId
-        : data.projects.length > 0 ? data.projects[0].id : null;
+      // Preserve user's selection. Only clear if the saved project no longer exists.
+      // Never auto-pick the first project — that caused the multisession view to snap back.
+      const activeExists = activeProjectId && data.projects.some(p => p.id === activeProjectId);
+      const newActiveId = activeExists ? activeProjectId : null;
 
-      if (newActiveId && newActiveId !== activeProjectId) {
-        localStorage.setItem(ACTIVE_PROJECT_KEY, newActiveId);
+      if (!newActiveId && activeProjectId) {
+        localStorage.removeItem(ACTIVE_PROJECT_KEY);
       }
 
       set({ projects: data.projects, loading: false, activeProjectId: newActiveId });

@@ -69,7 +69,7 @@ export function HandoffViewer({ sessionId }: HandoffViewerProps) {
             fontSize: 14,
             background: 'var(--accent-dim)',
             color: 'var(--accent)',
-            border: '1px solid rgba(137,180,250,0.25)',
+            border: '1px solid rgba(34,211,238,0.25)',
           }}
         >
           Generate Handoff

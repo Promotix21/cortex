@@ -6,6 +6,7 @@ import {
 import { api } from '@/lib/api';
 import { useProjectStore } from '@/stores/project-store';
 import { useNavigationStore } from '@/stores/navigation-store';
+import { useSessionStore } from '@/stores/session-store';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -46,6 +47,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const setActiveProject = useProjectStore(s => s.setActiveProject);
   const setActivity = useNavigationStore(s => s.setActivity);
   const viewSession = useNavigationStore(s => s.viewSession);
+  const spawnSession = useSessionStore(s => s.spawnSession);
 
   // Define quick actions
   const quickActions = useMemo<QuickAction[]>(() => {
@@ -60,11 +62,25 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     ];
 
     if (activeProject) {
-      actions.unshift({ id: 'act-new-sess', title: `New Session: ${activeProject.name}`, subtitle: 'Start a named Claude Code session', icon: Play, color: 'var(--green)', handler: () => setActivity('terminal') });
+      actions.unshift({
+        id: 'act-new-sess',
+        title: `New Session: ${activeProject.name}`,
+        subtitle: 'Start a named Claude Code session',
+        icon: Play,
+        color: 'var(--green)',
+        handler: async () => {
+          const name = `Session ${new Date().toLocaleTimeString()}`;
+          try {
+            const session = await spawnSession(activeProject.id, name);
+            viewSession(session.id);
+            setActivity('terminal');
+          } catch { /* toast handles it */ }
+        }
+      });
     }
 
     return actions;
-  }, [activeProject, setActivity]);
+  }, [activeProject, setActivity, spawnSession, viewSession]);
 
   // Focus input when opened
   useEffect(() => {

@@ -1,21 +1,38 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 import { useProjectStore } from '@/stores/project-store';
-import { getSidecarUrl } from '@/lib/api';
+import { getSidecarUrl, api } from '@/lib/api';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
-import { Brain, Trash2, Download, AlertCircle } from 'lucide-react';
+import { Brain, Download, AlertCircle, Plus } from 'lucide-react';
 
 export function ChatPanel() {
   const project = useProjectStore(s => s.activeProject());
   const { messages, streaming, streamingContent, error, fetchHistory, clearHistory } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [providerLabel, setProviderLabel] = useState('AI');
 
   useEffect(() => {
     if (project) {
       fetchHistory(project.id);
     }
   }, [project?.id, fetchHistory]);
+
+  useEffect(() => {
+    const load = () => api.getProviderStatus().then(s => {
+      const isDevstral = s.activeProvider === 'devstral';
+      const isBedrock = s.activeProvider === 'bedrock';
+      const label = isDevstral
+        ? 'Devstral 2'
+        : isBedrock
+        ? (s.activeModel?.includes('opus') ? 'Claude Opus 4.7' : 'Claude Sonnet 4.6')
+        : 'Claude Pro';
+      setProviderLabel(label);
+    }).catch(() => {});
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -43,19 +60,21 @@ export function ChatPanel() {
         </span>
         <button
           onClick={() => window.open(`${getSidecarUrl()}/api/chat/${project.id}/export`, '_blank')}
-          className="rounded hover:bg-[var(--bg-hover)] transition-colors"
-          style={{ padding: 6 }}
+          className="flex items-center rounded hover:bg-[var(--bg-hover)] transition-colors"
+          style={{ gap: 5, padding: '5px 10px', fontSize: 12, color: 'var(--text-tertiary)' }}
           title="Export chat"
         >
-          <Download size={16} style={{ color: 'var(--text-tertiary)' }} />
+          <Download size={14} />
+          Export
         </button>
         <button
-          onClick={() => { if (confirm('Clear all chat history for this project?')) clearHistory(project.id); }}
-          className="rounded hover:bg-[var(--bg-hover)] transition-colors"
-          style={{ padding: 6 }}
-          title="Clear history"
+          onClick={() => clearHistory(project.id)}
+          className="flex items-center rounded hover:bg-[var(--bg-hover)] transition-colors"
+          style={{ gap: 5, padding: '5px 10px', fontSize: 12, color: 'var(--text-tertiary)' }}
+          title="Clear history and start a new conversation"
         >
-          <Trash2 size={16} style={{ color: 'var(--text-tertiary)' }} />
+          <Plus size={14} />
+          New Chat
         </button>
       </div>
 
@@ -74,7 +93,7 @@ export function ChatPanel() {
         )}
 
         {messages.map(msg => (
-          <ChatMessage key={msg.id} message={msg} projectId={project.id} />
+          <ChatMessage key={msg.id} message={msg} projectId={project.id} providerLabel={providerLabel} />
         ))}
 
         {/* Streaming response */}
@@ -88,6 +107,7 @@ export function ChatPanel() {
             }}
             projectId={project.id}
             isStreaming
+            providerLabel={providerLabel}
           />
         )}
 

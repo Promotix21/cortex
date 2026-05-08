@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
+import { indexFileImports } from './impact-graph.js';
 
 export interface FileEntry {
   filePath: string;
@@ -249,6 +250,15 @@ export function indexProject(projectId: string, projectPath: string): { indexed:
     }
   });
   insertAll();
+
+  // v2.5: also index imports for JS/TS files (Impact Graph)
+  // Clear old imports for this project, then re-index
+  db.prepare('DELETE FROM file_imports WHERE project_id = ?').run(projectId);
+  for (const entry of entries) {
+    if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(entry.filePath)) {
+      try { indexFileImports(projectId, projectPath, entry.filePath); } catch { /* ignore per-file errors */ }
+    }
+  }
 
   // Compute type counts
   const byType: Record<string, number> = {};

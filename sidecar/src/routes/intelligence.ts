@@ -6,6 +6,10 @@ import { listProjectRooms, getRoomContext } from '../intelligence/room-detector.
 import { getActiveFacts, getFactHistory, buildMemory } from '../intelligence/temporal-service.js';
 import { checkConsistency } from '../intelligence/contradiction-service.js';
 import { getCompressionStats, compressBrainField } from '../intelligence/aaak-service.js';
+import { handlePrime, handleHint, handleTodoWrite } from '../intelligence/hook-handlers.js';
+import { handleSessionEnd } from '../intelligence/session-end.js';
+import { installCortexHooks, uninstallCortexHooks, getHookStatus } from '../intelligence/hook-installer.js';
+import { runBackfill, getBackfillStatus } from '../intelligence/backfill.js';
 
 export const intelligenceRouter: ReturnType<typeof Router> = Router();
 
@@ -42,7 +46,7 @@ intelligenceRouter.get('/patterns', (req, res) => {
 
 // POST /api/intelligence/patterns — create pattern
 intelligenceRouter.post('/patterns', (req, res) => {
-  const { title, description, code, tags = [], source_project_id, scope = 'project' } = req.body;
+  const { title, description, code, tags = [], source_project_id, scope = 'project', room_tag } = req.body;
   if (!title) { res.status(400).json({ error: 'title is required' }); return; }
 
   const db = getDb();
@@ -50,9 +54,9 @@ intelligenceRouter.post('/patterns', (req, res) => {
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO pattern_memory (id, title, description, code, tags, source_project_id, scope, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, title, description || '', code || '', JSON.stringify(tags), source_project_id || null, scope, now, now);
+    INSERT INTO pattern_memory (id, title, description, code, tags, source_project_id, scope, room_tag, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, title, description || '', code || '', JSON.stringify(tags), source_project_id || null, scope, room_tag || null, now, now);
 
   const pattern = db.prepare('SELECT * FROM pattern_memory WHERE id = ?').get(id) as any;
   pattern.tags = JSON.parse(pattern.tags || '[]');
@@ -65,7 +69,7 @@ intelligenceRouter.put('/patterns/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM pattern_memory WHERE id = ?').get(req.params.id) as any;
   if (!existing) { res.status(404).json({ error: 'Pattern not found' }); return; }
 
-  const { title, description, code, tags, scope, confidence, user_rating } = req.body;
+  const { title, description, code, tags, scope, confidence, user_rating, room_tag } = req.body;
   const now = new Date().toISOString();
 
   db.prepare(`
@@ -73,12 +77,13 @@ intelligenceRouter.put('/patterns/:id', (req, res) => {
       title = COALESCE(?, title), description = COALESCE(?, description),
       code = COALESCE(?, code), tags = COALESCE(?, tags),
       scope = COALESCE(?, scope), confidence = COALESCE(?, confidence),
-      user_rating = COALESCE(?, user_rating), updated_at = ?
+      user_rating = COALESCE(?, user_rating), room_tag = COALESCE(?, room_tag),
+      updated_at = ?
     WHERE id = ?
   `).run(
     title ?? null, description ?? null, code ?? null,
     tags ? JSON.stringify(tags) : null, scope ?? null,
-    confidence ?? null, user_rating ?? null, now, req.params.id
+    confidence ?? null, user_rating ?? null, room_tag ?? null, now, req.params.id
   );
 
   const pattern = db.prepare('SELECT * FROM pattern_memory WHERE id = ?').get(req.params.id) as any;
@@ -125,7 +130,7 @@ intelligenceRouter.get('/debug', (req, res) => {
 
 // POST /api/intelligence/debug — create debug solution
 intelligenceRouter.post('/debug', (req, res) => {
-  const { problem, root_cause, solution, tags = [], source_project_id, scope = 'project', error_signature } = req.body;
+  const { problem, root_cause, solution, tags = [], source_project_id, scope = 'project', error_signature, room_tag } = req.body;
   if (!problem) { res.status(400).json({ error: 'problem is required' }); return; }
 
   const db = getDb();
@@ -133,9 +138,9 @@ intelligenceRouter.post('/debug', (req, res) => {
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO debug_memory (id, problem, root_cause, solution, tags, source_project_id, scope, error_signature, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, problem, root_cause || '', solution || '', JSON.stringify(tags), source_project_id || null, scope, error_signature || null, now, now);
+    INSERT INTO debug_memory (id, problem, root_cause, solution, tags, source_project_id, scope, error_signature, room_tag, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, problem, root_cause || '', solution || '', JSON.stringify(tags), source_project_id || null, scope, error_signature || null, room_tag || null, now, now);
 
   const item = db.prepare('SELECT * FROM debug_memory WHERE id = ?').get(id) as any;
   item.tags = JSON.parse(item.tags || '[]');
@@ -148,7 +153,7 @@ intelligenceRouter.put('/debug/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM debug_memory WHERE id = ?').get(req.params.id);
   if (!existing) { res.status(404).json({ error: 'Debug solution not found' }); return; }
 
-  const { problem, root_cause, solution, tags, scope, confidence, user_rating, error_signature } = req.body;
+  const { problem, root_cause, solution, tags, scope, confidence, user_rating, error_signature, room_tag } = req.body;
   const now = new Date().toISOString();
 
   db.prepare(`
@@ -157,13 +162,13 @@ intelligenceRouter.put('/debug/:id', (req, res) => {
       solution = COALESCE(?, solution), tags = COALESCE(?, tags),
       scope = COALESCE(?, scope), confidence = COALESCE(?, confidence),
       user_rating = COALESCE(?, user_rating), error_signature = COALESCE(?, error_signature),
-      updated_at = ?
+      room_tag = COALESCE(?, room_tag), updated_at = ?
     WHERE id = ?
   `).run(
     problem ?? null, root_cause ?? null, solution ?? null,
     tags ? JSON.stringify(tags) : null, scope ?? null,
     confidence ?? null, user_rating ?? null, error_signature ?? null,
-    now, req.params.id
+    room_tag ?? null, now, req.params.id
   );
 
   const item = db.prepare('SELECT * FROM debug_memory WHERE id = ?').get(req.params.id) as any;
@@ -477,7 +482,7 @@ intelligenceRouter.get('/compression-stats/:projectId', (req, res) => {
 // ==================== MEMPALACE: BUILD MEMORY ====================
 
 // POST /api/intelligence/build-memory/:projectId — build/rebuild memory for a project
-intelligenceRouter.post('/build-memory/:projectId', (req, res) => {
+intelligenceRouter.post('/build-memory/:projectId', async (req, res) => {
   const projectId = req.params.projectId;
   const db = getDb();
 
@@ -488,8 +493,8 @@ intelligenceRouter.post('/build-memory/:projectId', (req, res) => {
     return;
   }
 
-  // Build knowledge graph from brain
-  const result = buildMemory(projectId);
+  // Build knowledge graph from brain (now uses Claude AI)
+  const result = await buildMemory(projectId);
 
   // Pre-compress brain fields for AAAK cache
   const brain = db.prepare('SELECT summary, architecture_notes, conventions, decisions, dependencies_notes FROM project_brain WHERE project_id = ?')
@@ -510,5 +515,183 @@ intelligenceRouter.post('/build-memory/:projectId', (req, res) => {
     project: project.name,
     ...result,
     compressionStats,
+  });
+});
+
+// ==================== HOOK ENDPOINTS (called by Claude Code hooks) ====================
+// IMPORTANT: These return PLAIN TEXT (not JSON) because Claude Code hooks
+// inject stdout directly into the session context.
+
+// POST /api/intelligence/prime — UserPromptSubmit hook callback
+intelligenceRouter.post('/prime', (req, res) => {
+  const result = handlePrime(req.body || {});
+  res.type('text/plain').send(result.text);
+});
+
+// POST /api/intelligence/hint — PreToolUse hook callback (Glob|Grep|Read)
+intelligenceRouter.post('/hint', (req, res) => {
+  const result = handleHint(req.body || {});
+  res.type('text/plain').send(result.text);
+});
+
+// POST /api/intelligence/todo-write — PostToolUse hook callback (TodoWrite)
+intelligenceRouter.post('/todo-write', (req, res) => {
+  try {
+    const result = handleTodoWrite(req.body || {});
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/intelligence/session-end — Stop hook callback
+intelligenceRouter.post('/session-end', (req, res) => {
+  try {
+    const result = handleSessionEnd(req.body || {});
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[session-end] handler failed:', message);
+    res.status(500).json({ error: message });
+  }
+});
+
+// ==================== HOOK INSTALLER ====================
+
+// GET /api/intelligence/hooks/status — is the Claude Code hook installed?
+intelligenceRouter.get('/hooks/status', (_req, res) => {
+  res.json(getHookStatus());
+});
+
+// POST /api/intelligence/hooks/install — install the three Cortex hooks
+intelligenceRouter.post('/hooks/install', (_req, res) => {
+  try {
+    const result = installCortexHooks();
+    const db = getDb();
+    db.prepare(
+      "INSERT INTO settings (key, value) VALUES ('cortex_hooks_installed', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'",
+    ).run();
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/intelligence/hooks/uninstall — remove Cortex hooks
+intelligenceRouter.post('/hooks/uninstall', (_req, res) => {
+  try {
+    const result = uninstallCortexHooks();
+    const db = getDb();
+    db.prepare(
+      "INSERT INTO settings (key, value) VALUES ('cortex_hooks_installed', 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'",
+    ).run();
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// ==================== BACKFILL ====================
+
+// POST /api/intelligence/backfill/start — kick off the historical-session backfill worker
+intelligenceRouter.post('/backfill/start', (_req, res) => {
+  const status = runBackfill({ background: true });
+  res.json(status);
+});
+
+// GET /api/intelligence/backfill/status — current run status + counters
+intelligenceRouter.get('/backfill/status', (_req, res) => {
+  res.json(getBackfillStatus());
+});
+
+// ==================== BRAIN PANEL DATA ====================
+
+// GET /api/intelligence/brain-panel/:projectId — everything the read-only brain panel needs
+intelligenceRouter.get('/brain-panel/:projectId', (req, res) => {
+  const db = getDb();
+  const projectId = req.params.projectId;
+
+  const project = db.prepare('SELECT id, name, path FROM projects WHERE id = ?').get(projectId) as
+    | { id: string; name: string; path: string }
+    | undefined;
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+
+  const brain = db
+    .prepare(
+      `SELECT summary, architecture_notes, conventions, decisions, known_issues, updated_at
+       FROM project_brain WHERE project_id = ?`,
+    )
+    .get(projectId) as
+      | {
+          summary: string;
+          architecture_notes: string;
+          conventions: string;
+          decisions: string;
+          known_issues: string;
+          updated_at: string;
+        }
+      | undefined;
+
+  const observations = db
+    .prepare(
+      `SELECT id, kind, title, before_state, after_state, files_touched, room_tag, source, created_at
+       FROM session_observations
+       WHERE project_id = ? AND confidence != 'deprecated'
+       ORDER BY created_at DESC LIMIT 25`,
+    )
+    .all(projectId) as Array<{
+      id: string;
+      kind: string;
+      title: string;
+      before_state: string;
+      after_state: string;
+      files_touched: string;
+      room_tag: string | null;
+      source: string;
+      created_at: string;
+    }>;
+
+  const consultsTotal = db
+    .prepare('SELECT COUNT(*) as c FROM hook_consults WHERE project_id = ?')
+    .get(projectId) as { c: number };
+
+  const consultsByType = db
+    .prepare(
+      'SELECT hook_type, COUNT(*) as c FROM hook_consults WHERE project_id = ? GROUP BY hook_type',
+    )
+    .all(projectId) as Array<{ hook_type: string; c: number }>;
+
+  const recentConsults = db
+    .prepare(
+      `SELECT hook_type, tool_name, query, result_count, created_at
+       FROM hook_consults WHERE project_id = ?
+       ORDER BY created_at DESC LIMIT 12`,
+    )
+    .all(projectId) as Array<{
+      hook_type: string;
+      tool_name: string | null;
+      query: string | null;
+      result_count: number;
+      created_at: string;
+    }>;
+
+  const rooms = listProjectRooms(projectId);
+
+  res.json({
+    project,
+    brain: brain || null,
+    observations: observations.map(o => ({ ...o, files_touched: JSON.parse(o.files_touched || '[]') })),
+    rooms,
+    hookStats: {
+      total: consultsTotal.c,
+      byType: Object.fromEntries(consultsByType.map(r => [r.hook_type, r.c])),
+      recent: recentConsults,
+    },
   });
 });

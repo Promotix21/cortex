@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 import { FileDropZone, type DroppedFile } from './FileDropZone';
-import { Send } from 'lucide-react';
+import { Send, Terminal, Cloud, Code2 } from 'lucide-react';
+import { api } from '@/lib/api';
 
 interface ChatInputProps {
   projectId: string;
@@ -13,6 +14,19 @@ export function ChatInput({ projectId, disabled }: ChatInputProps) {
   const [attachedFiles, setAttachedFiles] = useState<DroppedFile[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { sendMessage } = useChatStore();
+
+  const [activeProvider, setActiveProvider] = useState<'claude-cli' | 'bedrock' | 'devstral'>('claude-cli');
+  const [activeModel, setActiveModel] = useState('');
+
+  useEffect(() => {
+    const load = () => api.getProviderStatus().then(s => {
+      setActiveProvider(s.activeProvider);
+      setActiveModel(s.activeModel);
+    });
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -202,11 +216,45 @@ export function ChatInput({ projectId, disabled }: ChatInputProps) {
         </button>
       </div>
       <div className="flex items-center justify-between" style={{ marginTop: 8, padding: '0 4px' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-          Claude Sonnet 4 · Project Brain injected as context
-          {attachedFiles.length > 0 && ` · ${attachedFiles.length} file(s) attached`}
+        <span className="flex items-center" style={{ gap: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
+          <ActiveProviderBadge provider={activeProvider} model={activeModel} />
+          <span>· Project Brain injected as context</span>
+          {attachedFiles.length > 0 && <span>· {attachedFiles.length} file(s) attached</span>}
         </span>
       </div>
     </div>
+  );
+}
+
+function ActiveProviderBadge({ provider, model }: { provider: string; model: string }) {
+  const isDevstral = provider === 'devstral';
+  const isBedrock = provider === 'bedrock';
+
+  const label = isDevstral
+    ? 'Devstral 2'
+    : isBedrock
+    ? (model?.includes('opus') ? 'Claude Opus 4.7' : 'Claude Sonnet 4.6')
+    : 'Claude Pro';
+
+  const color = isDevstral ? '#34d399' : isBedrock ? '#fbbf24' : '#a78bfa';
+  const icon = isDevstral ? <Code2 size={11} /> : isBedrock ? <Cloud size={11} /> : <Terminal size={11} />;
+
+  return (
+    <span
+      className="flex items-center"
+      style={{
+        gap: 4,
+        padding: '2px 7px',
+        borderRadius: 10,
+        background: `${color}18`,
+        border: `1px solid ${color}33`,
+        color,
+        fontWeight: 600,
+        fontSize: 11,
+      }}
+    >
+      {icon}
+      {label}
+    </span>
   );
 }

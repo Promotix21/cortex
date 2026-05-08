@@ -6,9 +6,10 @@ interface ChatMessageProps {
   message: ChatMessageType;
   projectId: string;
   isStreaming?: boolean;
+  providerLabel?: string;
 }
 
-export function ChatMessage({ message, projectId: _projectId, isStreaming }: ChatMessageProps) {
+export function ChatMessage({ message, projectId: _projectId, isStreaming, providerLabel }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
 
@@ -27,7 +28,7 @@ export function ChatMessage({ message, projectId: _projectId, isStreaming }: Cha
           width: 32,
           height: 32,
           marginTop: 2,
-          background: isUser ? 'var(--bg-surface)' : 'rgba(137, 180, 250, 0.15)',
+          background: isUser ? 'var(--bg-surface)' : 'rgba(34, 211, 238, 0.15)',
           border: '1px solid var(--border)',
         }}
       >
@@ -42,7 +43,7 @@ export function ChatMessage({ message, projectId: _projectId, isStreaming }: Cha
       <div className="flex-1 min-w-0">
         <div className="flex items-center" style={{ gap: 8, marginBottom: 4 }}>
           <span className="font-medium" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-            {isUser ? 'You' : 'Claude'}
+            {isUser ? 'You' : (providerLabel || 'AI')}
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

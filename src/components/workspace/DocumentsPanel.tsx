@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
-import { api, getSidecarUrl } from '@/lib/api';
+import { api } from '@/lib/api';
+import { openPath } from '@tauri-apps/plugin-opener';
 import {
   FileText, FileSpreadsheet, File, FileType, Download,
   ChevronRight, ArrowLeft, Search, FolderOpen,
@@ -35,8 +36,8 @@ const EXT_COLORS: Record<string, string> = {
   '.csv': 'var(--green)',
   '.xlsx': 'var(--green)',
   '.xls': 'var(--green)',
-  '.docx': 'var(--blue, #89b4fa)',
-  '.doc': 'var(--blue, #89b4fa)',
+  '.docx': 'var(--accent)',
+  '.doc': 'var(--accent)',
   '.pdf': 'var(--error)',
   '.pptx': 'var(--warning)',
 };
@@ -79,8 +80,13 @@ export function DocumentsPanel() {
         setViewingDoc(doc);
       }
     } else {
-      // Binary files — download
-      window.open(`${getSidecarUrl()}/api/projects/${project.id}/documents/read?path=${encodeURIComponent(doc.path)}`, '_blank');
+      // Binary files — open with system default app (LibreOffice, etc.)
+      try {
+        await openPath(doc.path);
+      } catch {
+        // Fallback for dev mode (no Tauri runtime)
+        window.open(`http://localhost:4700/api/projects/${project.id}/documents/read?path=${encodeURIComponent(doc.path)}`, '_blank');
+      }
     }
   };
 
@@ -150,8 +156,8 @@ export function DocumentsPanel() {
       <div className="flex items-center" style={{ gap: 16, marginBottom: 24 }}>
         <div className="flex items-center justify-center rounded-2xl" style={{
           width: 48, height: 48,
-          background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
-          border: '1px solid rgba(137,180,250,0.15)',
+          background: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(167,139,250,0.08))',
+          border: '1px solid rgba(34,211,238,0.15)',
         }}>
           <FolderOpen size={24} style={{ color: 'var(--accent)' }} />
         </div>

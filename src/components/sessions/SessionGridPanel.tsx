@@ -9,8 +9,8 @@ import type { Session } from '@/types/session';
 const GRID_PAGE_SIZE = 4;
 
 export function SessionGridPanel() {
-  const sessions = useSessionStore(s => s.sessions);
-  const { stopSession, spawnSession, fetchSessions } = useSessionStore();
+  const sessions = useSessionStore(s => s.activeSessions);
+  const { stopSession, spawnSession, fetchActiveSessions } = useSessionStore();
   const activeProject = useProjectStore(s => s.activeProject());
   const projects = useProjectStore(s => s.projects);
   const viewSession = useNavigationStore(s => s.viewSession);
@@ -19,14 +19,13 @@ export function SessionGridPanel() {
   const [gridPage, setGridPage] = useState(0);
 
   useEffect(() => {
-    fetchSessions();
-    const interval = setInterval(() => fetchSessions(), 3000);
+    fetchActiveSessions(); // show ALL running sessions
+    const interval = setInterval(() => fetchActiveSessions(), 3000);
     return () => clearInterval(interval);
-  }, [fetchSessions]);
+  }, [fetchActiveSessions]);
 
-  const activeSessions = sessions.filter(s => s.status === 'running' || s.status === 'idle');
-  const totalPages = Math.ceil(activeSessions.length / GRID_PAGE_SIZE);
-  const pageSessions = activeSessions.slice(gridPage * GRID_PAGE_SIZE, (gridPage + 1) * GRID_PAGE_SIZE);
+  const getProjectName = (projectId: string) =>
+    projects.find(p => p.id === projectId)?.name || 'Unknown';
 
   const getGridLayout = (count: number) => {
     if (count === 0) return { cols: 1, rows: 1 };
@@ -35,16 +34,26 @@ export function SessionGridPanel() {
     return { cols: 2, rows: 2 };
   };
 
+  const activeSessions = sessions;
+  const totalPages = Math.ceil(activeSessions.length / GRID_PAGE_SIZE);
+  const pageSessions = activeSessions.slice(gridPage * GRID_PAGE_SIZE, (gridPage + 1) * GRID_PAGE_SIZE);
   const gridLayout = getGridLayout(pageSessions.length);
 
-  const getProjectName = (projectId: string) => {
-    return projects.find(p => p.id === projectId)?.name || 'Unknown';
-  };
+  // Group all sessions by project for list view
+  const sessionsByProject = activeSessions.reduce<Record<string, { projectName: string; sessions: typeof activeSessions }>>((acc, s) => {
+    const name = getProjectName(s.projectId);
+    if (!acc[s.projectId]) acc[s.projectId] = { projectName: name, sessions: [] };
+    acc[s.projectId].sessions.push(s);
+    return acc;
+  }, {});
 
   const handleNewSession = async () => {
-    if (!activeProject) return;
+    // Grid view may have no active project selected — fall back to the most recently
+    // opened project so the "New Session" button still works in multi-project mode.
+    const project = activeProject ?? projects[0] ?? null;
+    if (!project) return;
     const name = `session-${Date.now().toString(36)}`;
-    const session = await spawnSession(activeProject.id, name);
+    const session = await spawnSession(project.id, name);
     viewSession(session.id);
   };
 
@@ -117,7 +126,7 @@ export function SessionGridPanel() {
 
           <button
             onClick={handleNewSession}
-            disabled={!activeProject}
+            disabled={!activeProject && projects.length === 0}
             className="flex items-center rounded-lg transition-colors disabled:opacity-40"
             style={{
               gap: 6,
@@ -135,7 +144,7 @@ export function SessionGridPanel() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 relative" style={{ background: '#1e1e2e' }}>
+      <div className="flex-1 min-h-0" style={{ background: '#1e1e2e', position: 'relative', overflow: 'hidden' }}>
         {activeSessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full" style={{ gap: 20 }}>
             <div
@@ -159,23 +168,39 @@ export function SessionGridPanel() {
             </div>
           </div>
         ) : viewMode === 'list' ? (
-          /* List view — click to expand */
-          <div className="overflow-y-auto h-full" style={{ padding: 16 }}>
-            {activeSessions.map(session => (
-              <SessionListItem
-                key={session.id}
-                session={session}
-                projectName={getProjectName(session.projectId)}
-                onFocus={() => viewSession(session.id)}
-                onStop={() => stopSession(session.id)}
-              />
+          /* List view — grouped by project */
+          <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 16 }}>
+            {Object.entries(sessionsByProject).map(([projectId, group]) => (
+              <div key={projectId} style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: 'var(--text-tertiary)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 8,
+                  paddingLeft: 4,
+                }}>
+                  {group.projectName} · {group.sessions.length} session{group.sessions.length > 1 ? 's' : ''}
+                </div>
+                {group.sessions.map(session => (
+                  <SessionListItem
+                    key={session.id}
+                    session={session}
+                    projectName={group.projectName}
+                    onFocus={() => viewSession(session.id)}
+                    onStop={() => stopSession(session.id)}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         ) : (
           /* Grid view */
           <div
-            className="h-full w-full"
             style={{
+              position: 'absolute',
+              inset: 0,
               display: 'grid',
               gridTemplateColumns: `repeat(${gridLayout.cols}, 1fr)`,
               gridTemplateRows: `repeat(${gridLayout.rows}, 1fr)`,
@@ -186,8 +211,8 @@ export function SessionGridPanel() {
             {pageSessions.map(session => (
               <div
                 key={session.id}
-                className="flex flex-col relative"
-                style={{ background: '#1e1e2e', overflow: 'hidden' }}
+                className="flex flex-col"
+                style={{ background: '#1e1e2e', overflow: 'hidden', minHeight: 0 }}
               >
                 {/* Grid session header */}
                 <div
@@ -225,7 +250,7 @@ export function SessionGridPanel() {
                   </button>
                 </div>
                 {/* Terminal */}
-                <div className="flex-1 relative">
+                <div className="flex-1" style={{ position: 'relative', minHeight: 0 }}>
                   {(session as any).terminalId ? (
                     <XTerminal
                       terminalId={(session as any).terminalId}
@@ -284,7 +309,7 @@ function SessionListItem({ session, projectName, onFocus, onStop }: {
           width: 9,
           height: 9,
           background: 'var(--success)',
-          boxShadow: '0 0 6px rgba(166, 227, 161, 0.5)',
+          boxShadow: '0 0 6px rgba(52, 211, 153, 0.5)',
         }}
       />
       <button

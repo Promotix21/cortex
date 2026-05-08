@@ -75,13 +75,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
           maxWidth: 560,
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border-active)',
-          boxShadow: '0 32px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(137, 180, 250, 0.1)',
+          boxShadow: '0 32px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 211, 238, 0.1)',
         }}
       >
         {/* Header */}
         <div
           className="px-10 pt-10 pb-8 text-center"
-          style={{ background: 'linear-gradient(180deg, rgba(137,180,250,0.08) 0%, transparent 100%)' }}
+          style={{ background: 'linear-gradient(180deg, rgba(34,211,238,0.08) 0%, transparent 100%)' }}
         >
           <div className="flex items-center justify-center mx-auto mb-6">
             <img
@@ -105,7 +105,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
             className="rounded-xl px-6 py-5 mb-4"
             style={{
               background: step1Done ? 'var(--success-dim)' : 'var(--bg-surface)',
-              border: `1px solid ${step1Done ? 'rgba(166,227,161,0.3)' : 'var(--border)'}`,
+              border: `1px solid ${step1Done ? 'rgba(52,211,153,0.3)' : 'var(--border)'}`,
             }}
           >
             <div className="flex items-center gap-4">
@@ -144,7 +144,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
             className="rounded-xl px-6 py-5 mb-4"
             style={{
               background: step2Done ? 'var(--success-dim)' : step1Done ? 'var(--bg-surface)' : 'var(--bg-surface)',
-              border: `1px solid ${step2Done ? 'rgba(166,227,161,0.3)' : 'var(--border)'}`,
+              border: `1px solid ${step2Done ? 'rgba(52,211,153,0.3)' : 'var(--border)'}`,
               opacity: step1Done ? 1 : 0.5,
             }}
           >
@@ -186,7 +186,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
             className="rounded-xl px-6 py-5 mb-4"
             style={{
               background: step3Done ? 'var(--accent-dim)' : 'var(--bg-surface)',
-              border: `1px solid ${step3Done ? 'rgba(137,180,250,0.3)' : 'var(--border)'}`,
+              border: `1px solid ${step3Done ? 'rgba(34,211,238,0.3)' : 'var(--border)'}`,
               opacity: canFinish ? 1 : 0.5,
             }}
           >
@@ -241,7 +241,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
             style={{
               background: canFinish ? 'var(--accent)' : 'var(--bg-surface)',
               color: canFinish ? 'var(--bg-primary)' : 'var(--text-tertiary)',
-              boxShadow: canFinish ? '0 4px 12px rgba(137,180,250,0.3)' : 'none',
+              boxShadow: canFinish ? '0 4px 12px rgba(34,211,238,0.3)' : 'none',
             }}
           >
             {adding ? 'Setting up...' : step3Done ? 'Launch Cortex' : 'Get Started'}

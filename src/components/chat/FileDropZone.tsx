@@ -159,7 +159,7 @@ export function FileDropZone({ onFilesAdded, files, onFileRemoved }: FileDropZon
                   fontWeight: 600,
                   background: 'var(--accent-dim)',
                   color: 'var(--accent)',
-                  border: '1px solid rgba(137,180,250,0.2)',
+                  border: '1px solid rgba(34,211,238,0.2)',
                 }}
               >
                 {file.isImage && file.imageDataUrl ? (

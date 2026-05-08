@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1043.0",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
@@ -21,7 +22,8 @@
     "node-pty": "^1.0.0",
     "pdfkit": "^0.18.0",
     "simple-git": "^3.27.0",
-    "uuid": "^11.0.0"
+    "uuid": "^11.0.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
@@ -31,6 +33,7 @@
     "@types/node": "^22.0.0",
     "@types/pdfkit": "^0.17.5",
     "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
     "tsup": "^8.0.0",
     "tsx": "^4.19.0",
     "typescript": "~5.8.3",

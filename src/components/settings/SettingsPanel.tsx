@@ -3,11 +3,12 @@ import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings-store';
 import { BudgetSettings } from '@/components/budget/BudgetSettings';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { VaultPanel } from './VaultPanel';
 import { api } from '@/lib/api';
 import {
   CheckCircle, XCircle, RefreshCw,
   Terminal, Shield, Database, Trash2, Loader2, Zap, Globe, Copy, Check, Sparkles,
-  Server, Chrome, Wrench, Radio,
+  Server, Chrome, Wrench, Radio, Brain, GitCommit, Cloud,
 } from 'lucide-react';
 
 export function SettingsPanel() {
@@ -85,7 +86,7 @@ export function SettingsPanel() {
                 </div>
               )}
               {claudeStatus.installed && claudeStatus.authenticated && (
-                <div className="flex items-center rounded-lg" style={{ gap: 10, padding: '10px 14px', background: 'var(--success-dim)', border: '1px solid rgba(166,227,161,0.3)' }}>
+                <div className="flex items-center rounded-lg" style={{ gap: 10, padding: '10px 14px', background: 'var(--success-dim)', border: '1px solid rgba(52,211,153,0.3)' }}>
                   <CheckCircle size={16} style={{ color: 'var(--success)' }} />
                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>Ready to go</span>
                 </div>
@@ -97,7 +98,7 @@ export function SettingsPanel() {
                 </div>
               )}
               {claudeStatus.installed && !claudeStatus.authenticated && (
-                <div className="rounded-lg" style={{ padding: '12px 16px', background: 'var(--accent-dim)', border: '1px solid rgba(137,180,250,0.3)' }}>
+                <div className="rounded-lg" style={{ padding: '12px 16px', background: 'var(--accent-dim)', border: '1px solid rgba(34,211,238,0.3)' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', marginBottom: 8 }}>Authenticate with Claude Max</div>
                   <CommandBlock command="claude login" onCopy={() => copyCommand('claude login')} copied={copied} />
                 </div>
@@ -127,6 +128,9 @@ export function SettingsPanel() {
             </div>
           </SectionCard>
 
+          {/* Cortex Hooks for Claude Code */}
+          <CortexHooksSection />
+
           {/* Data & Storage */}
           <SectionCard title="Data & Storage" icon={Database} description="All data stays on your machine">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -152,6 +156,9 @@ export function SettingsPanel() {
           <SectionCard title="Budget Guard" icon={Shield} description="Rate limit alerts for Claude Max">
             <BudgetSettings />
           </SectionCard>
+
+          {/* Vault */}
+          <VaultPanel />
         </div>
       </div>
 
@@ -173,6 +180,198 @@ export function SettingsPanel() {
           onCancel={() => setShowClearConfirm(false)}
         />
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Cortex Hooks for Claude Code                                        */
+/* ------------------------------------------------------------------ */
+
+function CortexHooksSection() {
+  const [status, setStatus] = useState<{ installed: boolean; events: string[] }>({ installed: false, events: [] });
+  const [busy, setBusy] = useState(false);
+  const [autoCommit, setAutoCommit] = useState(true);
+  const [autoPush, setAutoPush] = useState(false);
+  const [backfill, setBackfill] = useState<{
+    state: string;
+    sessionsProcessed: number;
+    sessionsTotal: number;
+    observationsCreated: number;
+  } | null>(null);
+
+  const refresh = async () => {
+    try {
+      const [hookStatus, settings, bf] = await Promise.all([
+        api.getHookStatus(),
+        api.getSettings(),
+        api.getBackfillStatus(),
+      ]);
+      setStatus({ installed: hookStatus.installed, events: hookStatus.events });
+      setAutoCommit(settings.settings.git_auto_commit !== 'false');
+      setAutoPush(settings.settings.git_auto_push === 'true');
+      setBackfill(bf);
+    } catch { /* sidecar offline */ }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const toggleHooks = async () => {
+    setBusy(true);
+    try {
+      if (status.installed) {
+        await api.uninstallHooks();
+        toast.success('Cortex hooks removed from Claude Code');
+      } else {
+        await api.installHooks();
+        toast.success('Cortex hooks installed', { description: 'Claude Code will now consult Cortex on prompts and tool calls.' });
+      }
+      await refresh();
+    } catch (err) {
+      toast.error('Hook update failed', { description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleAutoCommit = async () => {
+    const next = !autoCommit;
+    setAutoCommit(next);
+    await api.saveSetting('git_auto_commit', next ? 'true' : 'false');
+  };
+
+  const toggleAutoPush = async () => {
+    const next = !autoPush;
+    setAutoPush(next);
+    await api.saveSetting('git_auto_push', next ? 'true' : 'false');
+  };
+
+  const startBackfill = async () => {
+    try {
+      await api.startBackfill();
+      toast.success('Backfill started', { description: 'Processing historical sessions in the background.' });
+      await refresh();
+    } catch (err) {
+      toast.error('Backfill failed to start', { description: err instanceof Error ? err.message : 'Unknown error' });
+    }
+  };
+
+  return (
+    <SectionCard
+      title="Claude Code Hooks"
+      icon={Brain}
+      description="Force Claude to consult Cortex on every prompt + auto-save fixes"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex items-center justify-between rounded-lg" style={{ padding: '10px 14px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Hook installation</div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+              {status.installed
+                ? `Active on ${status.events.join(', ')}`
+                : 'Not installed — Claude is unaware of Cortex'}
+            </div>
+          </div>
+          <button
+            onClick={toggleHooks}
+            disabled={busy}
+            className="rounded-lg flex items-center"
+            style={{
+              gap: 8,
+              padding: '10px 20px',
+              fontSize: 13,
+              fontWeight: 700,
+              background: status.installed ? 'var(--bg-hover)' : 'var(--accent)',
+              color: status.installed ? 'var(--text-secondary)' : 'var(--bg-primary)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+            {status.installed ? 'Remove' : 'Install'}
+          </button>
+        </div>
+
+        <ToggleRow
+          icon={GitCommit}
+          label="Auto-commit on session end"
+          sub="Commit files Claude touched, with WebXExpert co-author"
+          checked={autoCommit}
+          onChange={toggleAutoCommit}
+        />
+
+        <ToggleRow
+          icon={Cloud}
+          label="Auto-push after commit"
+          sub="Push to remote after auto-commit (off by default — explicit opt-in)"
+          checked={autoPush}
+          onChange={toggleAutoPush}
+        />
+
+        {backfill && (
+          <div className="rounded-lg" style={{ padding: '10px 14px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>
+                Historical backfill
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                {backfill.state}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              {backfill.sessionsTotal === 0
+                ? 'No legacy sessions detected.'
+                : `${backfill.sessionsProcessed}/${backfill.sessionsTotal} sessions · ${backfill.observationsCreated} observations created`}
+            </div>
+            {backfill.state !== 'running' && (
+              <button
+                onClick={startBackfill}
+                className="rounded-lg"
+                style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+              >
+                {backfill.state === 'completed' ? 'Re-run' : 'Start backfill'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ToggleRow({ icon: Icon, label, sub, checked, onChange }: {
+  icon: React.ElementType; label: string; sub: string; checked: boolean; onChange: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between" style={{ padding: '6px 0' }}>
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <Icon size={16} style={{ color: 'var(--text-tertiary)' }} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{sub}</div>
+        </div>
+      </div>
+      <button
+        onClick={onChange}
+        className="rounded-full transition-colors"
+        style={{
+          width: 44,
+          height: 24,
+          padding: 3,
+          background: checked ? 'var(--accent)' : 'var(--bg-hover)',
+          border: '1px solid var(--border)',
+          flexShrink: 0,
+        }}
+      >
+        <div
+          className="rounded-full transition-all"
+          style={{
+            width: 16,
+            height: 16,
+            background: 'white',
+            transform: checked ? 'translateX(20px)' : 'translateX(0)',
+          }}
+        />
+      </button>
     </div>
   );
 }

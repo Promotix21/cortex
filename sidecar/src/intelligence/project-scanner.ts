@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
 import { indexProject, getProjectStructureSummary } from './file-indexer.js';
 import simpleGit from 'simple-git';
+import { claudeAnalyze } from '../utils/binaries.js';
 
 /** Check if a port is currently listening on localhost */
 function isPortListening(port: number): Promise<boolean> {
@@ -248,7 +249,7 @@ export async function scanProject(projectId: string, projectPath: string): Promi
   result.ports = codeIntel.ports;
   result.urls = codeIntel.urls;
 
-  // 4. Build brain from code scan
+  // 4. Build brain from code scan (raw data collection)
   const brain = buildBrainFromCode(projectPath, signatures, codeIntel, byType);
 
   // 5. Estimate project completion
@@ -264,6 +265,18 @@ export async function scanProject(projectId: string, projectPath: string): Promi
   // 6. Detect toolchain (CLI tools, SSH, deploy method)
   const toolchain = detectToolchain(projectPath, signatures, codeIntel);
   result.toolchain = toolchain;
+
+  // 6.5. AI Enhancement — send raw scan data to Claude for intelligent brain analysis
+  const aiBrain = await enhanceBrainWithClaude(brain, path.basename(projectPath), completion, toolchain);
+  if (aiBrain) {
+    brain.summary = aiBrain.summary;
+    brain.architecture = aiBrain.architecture;
+    brain.knownIssues = aiBrain.knownIssues;
+    brain.decisions = aiBrain.decisions;
+    console.log('[scanProject] Brain enhanced by Claude AI');
+  } else {
+    console.log('[scanProject] Using raw scan brain (Claude unavailable)');
+  }
 
   // 7. Write to DB — REPLACE existing brain (fresh scan = fresh intelligence)
   const db = getDb();
@@ -367,6 +380,91 @@ export async function scanProject(projectId: string, projectPath: string): Promi
   result.summary = `Scanned ${indexed} files. Stacks: ${result.detectedStacks.join(', ') || 'unknown'}. Ports: ${result.ports.join(', ') || 'none'}${livePorts.length ? ` (${livePorts.length} live)` : ''}. Sub-projects: ${result.subProjects.length}. Completion: ~${completion.score}%`;
 
   return result;
+}
+
+// ============================================================
+// AI BRAIN ENHANCEMENT — Send raw scan to Claude for analysis
+// ============================================================
+
+interface BrainFields {
+  summary: string;
+  architecture: string;
+  conventions: string;
+  dependencies: string;
+  knownIssues: string;
+  decisions: string;
+}
+
+async function enhanceBrainWithClaude(
+  rawBrain: BrainFields,
+  projectName: string,
+  completion: CompletionEstimate,
+  toolchain: ToolchainInfo,
+): Promise<{ summary: string; architecture: string; knownIssues: string; decisions: string } | null> {
+  const prompt = `You are Cortex, an AI development workspace intelligence engine. Analyze this raw project scan data and produce a clear, actionable project brain.
+
+PROJECT: ${projectName}
+
+=== RAW SCAN DATA ===
+
+SUMMARY:
+${rawBrain.summary}
+
+ARCHITECTURE:
+${rawBrain.architecture}
+
+CONVENTIONS:
+${rawBrain.conventions}
+
+DEPENDENCIES:
+${rawBrain.dependencies}
+
+KNOWN ISSUES:
+${rawBrain.knownIssues}
+
+DECISIONS/DOCS:
+${rawBrain.decisions.slice(0, 3000)}
+
+COMPLETION: ${completion.score}% — ${completion.indicators.join(', ')}
+TOOLCHAIN: CLI=${toolchain.cliTools.join(',')} SSH=${toolchain.sshConfigured} Deploy=${toolchain.deployMethod || 'unknown'}
+
+=== YOUR TASK ===
+
+Produce a JSON object with exactly these 4 fields. Be concise but insightful. Focus on what a developer needs to know to work on this project effectively.
+
+{
+  "summary": "A 3-5 sentence executive summary: what this project IS, what it does, its tech stack, current state, and key distinguishing characteristics. Not a list — write prose.",
+  "architecture": "Describe the actual architecture: how components connect, data flow, deployment topology, ports, APIs, databases. Include specific details from the scan (ports, routes, services). Organize with clear sections.",
+  "knownIssues": "List real issues, risks, and tech debt you can identify from the scan data. Include TODO/FIXME counts, empty handlers, missing tests, security concerns, dependency issues. Be specific — don't invent issues not supported by the data.",
+  "decisions": "Summarize key technical decisions visible in the codebase: framework choices, package manager, CI/CD setup, deployment strategy, env var patterns, CLAUDE.md rules. Explain WHY each matters for future development."
+}
+
+IMPORTANT: Return ONLY the JSON object. No markdown fences, no explanation. Keep each field under 2000 characters.`;
+
+  try {
+    const response = await claudeAnalyze(prompt, { timeoutMs: 90_000 });
+    if (!response) return null;
+
+    // Extract JSON from response (handle potential markdown fencing)
+    let jsonStr = response.trim();
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+    const parsed = JSON.parse(jsonStr);
+    if (parsed.summary && parsed.architecture) {
+      return {
+        summary: String(parsed.summary).slice(0, 3000),
+        architecture: String(parsed.architecture).slice(0, 4000),
+        knownIssues: String(parsed.knownIssues || '').slice(0, 2000),
+        decisions: String(parsed.decisions || rawBrain.decisions).slice(0, 4000),
+      };
+    }
+    console.warn('[enhanceBrainWithClaude] Invalid response structure');
+    return null;
+  } catch (err: any) {
+    console.warn('[enhanceBrainWithClaude] Failed:', err.message);
+    return null;
+  }
 }
 
 // ============================================================
@@ -797,7 +895,12 @@ function deepScanCode(projectPath: string): CodeIntel {
           }
           for (const re of CODE_PATTERNS.databases) {
             re.lastIndex = 0;
-            if (re.test(content)) dbSet.add(re.source.replace(/[\\|]/g, '').toLowerCase());
+            let m; while ((m = re.exec(content))) {
+              const matched = m[0].toLowerCase().trim();
+              // Normalize common aliases
+              const normalized = matched === 'postgresql' ? 'postgres' : matched;
+              if (normalized.length > 1) dbSet.add(normalized);
+            }
           }
           for (const re of CODE_PATTERNS.auth) {
             re.lastIndex = 0;
@@ -1397,31 +1500,6 @@ function estimateCompletion(projectPath: string, byType: Record<string, number>,
 
 function storeServerInfo(projectId: string, codeIntel: CodeIntel, signatures: ProjectSignature[]): void {
   const db = getDb();
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS servers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      provider TEXT,
-      host TEXT,
-      ssh_user TEXT,
-      ssh_port INTEGER DEFAULT 22,
-      deploy_url TEXT,
-      notes TEXT,
-      co_deployed_apps TEXT DEFAULT '[]',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS project_servers (
-      project_id TEXT NOT NULL,
-      server_id TEXT NOT NULL,
-      deploy_branch TEXT,
-      deploy_command TEXT,
-      env_file_path TEXT,
-      deploy_docs_content TEXT,
-      last_deployed TEXT,
-      PRIMARY KEY (project_id, server_id)
-    );
-  `);
 
   // Don't duplicate
   const existing = db.prepare(`

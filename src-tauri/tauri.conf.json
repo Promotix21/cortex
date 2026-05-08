@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:4700 http://localhost:4710 ws://localhost:4700; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:4700 http://localhost:4710 ws://localhost:4700; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: http://localhost:4700; media-src 'self' http://localhost:4700; script-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

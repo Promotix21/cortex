@@ -14,6 +14,7 @@ import { SessionTerminal } from '@/components/sessions/SessionTerminal';
 import { SessionGridPanel } from '@/components/sessions/SessionGridPanel';
 import { RemotionStudio } from '@/components/remotion/RemotionStudio';
 import { DocumentsPanel } from './DocumentsPanel';
+import { BrainPanel } from './BrainPanel';
 import { ExplorerPanel } from '@/components/explorer/ExplorerPanel';
 import { MemPalacePanel } from '@/components/mempalace/MemPalacePanel';
 import { ShadowTerminalPanel } from '@/components/shadow/ShadowTerminalPanel';
@@ -35,86 +36,92 @@ export function WorkspaceTabs() {
   const setActivity = useNavigationStore((s) => s.setActivity);
   const activeProject = useProjectStore((s) => s.activeProject());
 
-  // Settings and MemPalace don't need a project
-  if (activeActivity === 'settings') {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-        <div className="flex-1 overflow-auto p-6">
-          <SettingsPanel />
-        </div>
-      </div>
-    );
-  }
-
-  if (activeActivity === 'mempalace') {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-        <div className="flex-1 overflow-auto" style={{ padding: '28px 32px' }}>
-          <MemPalacePanel />
-        </div>
-      </div>
-    );
-  }
-
-  // Browser panel works without a selected project
-  if (activeActivity === 'browser') {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-        <BrowserPanel />
-      </div>
-    );
-  }
-
-  if (!activeProject) {
-    return (
-      <div className="flex-1 flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="text-center">
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5"
-            style={{ background: 'var(--bg-surface)' }}
-          >
-            <FolderOpen size={36} style={{ color: 'var(--text-tertiary)' }} />
-          </div>
-          <p className="text-xl font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
-            No project selected
-          </p>
-          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-            Select a project from the sidebar or add a new one
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const fullHeightActivities = ['terminal', 'sessions', 'chat', 'explorer', 'shadow', 'browser'];
+  const fullHeightActivities = ['terminal', 'chat', 'explorer', 'shadow', 'browser'];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      <div className={`flex-1 overflow-auto tab-content-enter`}
-        key={activeActivity}
-        style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
+      {/*
+       * SessionGridPanel is ALWAYS mounted — visibility controlled by CSS.
+       * This prevents all XTerminal connections from being destroyed every time
+       * the user navigates away from the sessions grid and back.
+       */}
+      <div
+        style={{
+          display: activeActivity === 'sessions' ? 'flex' : 'none',
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          minHeight: 0,
+        }}
       >
-        <ErrorBoundary fallbackLabel={`Error in ${activeActivity} panel`} key={activeActivity}>
-          {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
-          {activeActivity === 'sessions' && <SessionGridPanel />}
-          {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
-          {activeActivity === 'git' && <GitPanel />}
-          {activeActivity === 'notes' && <NotesPanel />}
-          {activeActivity === 'tasks' && <TasksPanel />}
-          {activeActivity === 'brain' && (
-            <div className="space-y-6">
-              <IntelligencePanel />
-              <ReferencePanel />
-              <ErrorPanel />
-            </div>
-          )}
-          {activeActivity === 'chat' && <ChatPanel />}
-          {activeActivity === 'explorer' && <ExplorerPanel />}
-          {activeActivity === 'documents' && <DocumentsPanel />}
-          {activeActivity === 'studio' && <RemotionStudio />}
-          {activeActivity === 'shadow' && <ShadowTerminalPanel />}
-        </ErrorBoundary>
+        <SessionGridPanel />
       </div>
+
+      {/* All non-sessions panels — only rendered when not in sessions mode */}
+      {activeActivity !== 'sessions' && (
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+
+          {/* Standalone panels — work without a project */}
+          {activeActivity === 'settings' && (
+            <div className="flex-1 overflow-auto p-6"><SettingsPanel /></div>
+          )}
+          {activeActivity === 'mempalace' && (
+            <div className="flex-1 overflow-auto" style={{ padding: '28px 32px' }}><MemPalacePanel /></div>
+          )}
+          {activeActivity === 'browser' && (
+            <div className="flex-1 overflow-hidden"><BrowserPanel /></div>
+          )}
+
+          {/* Project-dependent panels */}
+          {activeActivity !== 'settings' && activeActivity !== 'mempalace' && activeActivity !== 'browser' && (
+            !activeProject ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <div
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5"
+                    style={{ background: 'var(--bg-surface)' }}
+                  >
+                    <FolderOpen size={36} style={{ color: 'var(--text-tertiary)' }} />
+                  </div>
+                  <p className="text-xl font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                    No project selected
+                  </p>
+                  <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                    Select a project from the sidebar or add a new one
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="flex-1 overflow-auto tab-content-enter"
+                key={activeActivity}
+                style={{ padding: fullHeightActivities.includes(activeActivity) ? 0 : '28px 32px' }}
+              >
+                <ErrorBoundary fallbackLabel={`Error in ${activeActivity} panel`} key={activeActivity}>
+                  {activeActivity === 'dashboard' && <OverviewPanel project={activeProject} onNavigate={setActivity} />}
+                  {activeActivity === 'terminal' && (viewingSessionId ? <SessionTerminal sessionId={viewingSessionId} /> : <TerminalPanel />)}
+                  {activeActivity === 'git' && <GitPanel />}
+                  {activeActivity === 'notes' && <NotesPanel />}
+                  {activeActivity === 'tasks' && <TasksPanel />}
+                  {activeActivity === 'brain' && (
+                    <div className="space-y-6">
+                      <BrainPanel />
+                      <IntelligencePanel />
+                      <ReferencePanel />
+                      <ErrorPanel />
+                    </div>
+                  )}
+                  {activeActivity === 'chat' && <ChatPanel />}
+                  {activeActivity === 'explorer' && <ExplorerPanel />}
+                  {activeActivity === 'documents' && <DocumentsPanel />}
+                  {activeActivity === 'studio' && <RemotionStudio />}
+                  {activeActivity === 'shadow' && <ShadowTerminalPanel />}
+                </ErrorBoundary>
+              </div>
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -122,6 +129,9 @@ export function WorkspaceTabs() {
 function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: (id: 'terminal' | 'chat' | 'git' | 'brain') => void }) {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconInput, setIconInput] = useState(project.icon || '');
+  const [renaming, setRenaming] = useState(false);
+  const [nameInput, setNameInput] = useState(project.name);
+  const [savingName, setSavingName] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
   const [buildingMemory, setBuildingMemory] = useState(false);
@@ -132,6 +142,28 @@ function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: 
     await api.updateProjectIcon(project.id, iconInput);
     setShowIconPicker(false);
     fetchProjects();
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed === project.name) {
+      setRenaming(false);
+      setNameInput(project.name);
+      return;
+    }
+    setSavingName(true);
+    try {
+      await api.updateProject(project.id, { name: trimmed });
+      await fetchProjects();
+      setRenaming(false);
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleCancelRename = () => {
+    setRenaming(false);
+    setNameInput(project.name);
   };
 
   const EMOJI_PRESETS = ['🚀', '⚡', '🧠', '🎯', '💎', '🔥', '🌐', '📱', '🎨', '🛠️', '📦', '🏗️', '🎮', '🤖', '💻', '🔒', '📊', '🌟', '🎵', '🛒'];
@@ -168,10 +200,76 @@ function OverviewPanel({ project, onNavigate }: { project: Project; onNavigate: 
             <Pencil size={16} style={{ color: 'white' }} />
           </div>
         </div>
-        <div>
-          <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-            {project.name}
-          </h2>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {renaming ? (
+            <div className="flex items-center" style={{ gap: 8 }}>
+              <input
+                type="text"
+                value={nameInput}
+                autoFocus
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveName();
+                  if (e.key === 'Escape') handleCancelRename();
+                }}
+                disabled={savingName}
+                className="rounded-lg bg-transparent"
+                style={{
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: 'var(--text-primary)',
+                  padding: '6px 12px',
+                  border: '2px solid var(--accent)',
+                  outline: 'none',
+                  flex: 1,
+                  minWidth: 0,
+                }}
+              />
+              <button
+                onClick={handleSaveName}
+                disabled={savingName}
+                className="rounded-lg font-semibold"
+                style={{
+                  padding: '10px 20px',
+                  fontSize: 14,
+                  background: 'var(--accent)',
+                  color: 'var(--bg-primary)',
+                  opacity: savingName ? 0.5 : 1,
+                }}
+              >
+                {savingName ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={handleCancelRename}
+                disabled={savingName}
+                className="rounded-lg font-semibold"
+                style={{
+                  padding: '10px 16px',
+                  fontSize: 14,
+                  background: 'var(--bg-hover)',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setNameInput(project.name); setRenaming(true); }}
+              className="group inline-flex items-center text-left"
+              style={{ gap: 10, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+              title="Click to rename project"
+            >
+              <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                {project.name}
+              </h2>
+              <Pencil
+                size={16}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ color: 'var(--text-tertiary)' }}
+              />
+            </button>
+          )}
           <p style={{ fontSize: 14, marginTop: 4, color: 'var(--text-tertiary)' }}>
             {project.path}
           </p>

@@ -13,7 +13,19 @@ interface NavigationStore {
 export const useNavigationStore = create<NavigationStore>((set) => ({
   activeActivity: 'dashboard',
   viewingSessionId: null,
-  setActivity: (id) => set({ activeActivity: id, viewingSessionId: null }),
+  setActivity: (id) => {
+    set({ activeActivity: id, viewingSessionId: null });
+    // Sessions view is a cross-project grid — deselect any specific project so it
+    // doesn't try to "focus" back on one project and flip the view to single-session.
+    // Done async to avoid circular import with project-store.
+    if (id === 'sessions') {
+      import('./project-store').then(({ useProjectStore }) => {
+        if (useProjectStore.getState().activeProjectId) {
+          useProjectStore.getState().setActiveProject(null);
+        }
+      });
+    }
+  },
   viewSession: (sessionId) => set({ activeActivity: 'terminal', viewingSessionId: sessionId }),
   clearSessionView: () => set({ viewingSessionId: null }),
 }));

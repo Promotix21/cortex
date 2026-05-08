@@ -39,8 +39,8 @@ export function ProjectSessions({ projectId, projectName }: ProjectSessionsProps
             style={{
               width: 44,
               height: 44,
-              background: 'linear-gradient(135deg, rgba(137,180,250,0.2), rgba(137,180,250,0.05))',
-              border: '1px solid rgba(137,180,250,0.15)',
+              background: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(34,211,238,0.05))',
+              border: '1px solid rgba(34,211,238,0.15)',
             }}
           >
             <Zap size={22} style={{ color: 'var(--accent)' }} />

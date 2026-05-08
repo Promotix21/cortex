@@ -15,15 +15,23 @@ import { policiesRouter, playbooksRouter } from './routes/policies.js';
 import { checkPolicy } from './routes/policy-check.js';
 import { workspaceRouter, contextRouter } from './routes/workspace.js';
 import { settingsRouter } from './routes/settings.js';
+import { explorerRouter } from './routes/explorer.js';
+import { mempalaceRouter } from './routes/mempalace.js';
+import { shadowRouter } from './routes/shadow.js';
+import { browserRouter } from './routes/browser.js';
+import { vaultRouter } from './routes/vault.js';
+import { getBrowserSession } from './browser/browser-session.js';
 import { getBridgeClient } from './bridge/bridge-client.js';
 import { getBackgroundWorker } from './intelligence/background-worker.js';
 import { jobsRouter } from './routes/jobs.js';
 import { budgetRouter } from './routes/budget.js';
+import { providersRouter } from './routes/providers.js';
 import { remotionRouter } from './routes/remotion.js';
 import { getSessionManager } from './sessions/session-manager.js';
 import { getTerminalManager } from './terminals/terminal-manager.js';
 import { startMCPServer, stopMCPServer } from './mcp/mcp-server.js';
 import { watchProject } from './intelligence/file-indexer.js';
+import { maybeRunBackfillOnBoot } from './intelligence/backfill.js';
 
 const PORT = 4700;
 const app = express();
@@ -94,8 +102,14 @@ app.use('/api/workspace', workspaceRouter);
 app.use('/api/context', contextRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/budget', budgetRouter);
+app.use('/api/providers', providersRouter);
 app.use('/api/remotion', remotionRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/explorer', explorerRouter);
+app.use('/api/mempalace', mempalaceRouter);
+app.use('/api/shadow', shadowRouter);
+app.use('/api/browser', browserRouter);
+app.use('/api/vault', vaultRouter);
 
 // Start bridge client polling
 const bridgeClient = getBridgeClient();
@@ -130,8 +144,11 @@ function killZombiesOnPort(port: number): void {
 // On EADDRINUSE: kill zombies, wait for OS to release the port, retry up to 5 times.
 function startServerWithRetry(attempt = 0): Promise<ReturnType<typeof app.listen>> {
   return new Promise((resolve, reject) => {
-    const srv = app.listen(PORT, '127.0.0.1', () => {
-      console.log(`[cortex-sidecar] Running on http://127.0.0.1:${PORT}`);
+    // Listen on '::' (IPv6 wildcard) — Node enables dual-stack by default,
+    // so this also accepts IPv4 connections on 127.0.0.1. This fixes WebKitGTK
+    // which resolves 'localhost' to ::1 (IPv6) and refuses to fall back to IPv4.
+    const srv = app.listen(PORT, '::', () => {
+      console.log(`[cortex-sidecar] Running on http://localhost:${PORT} (dual-stack)`);
       console.log(`[cortex-sidecar] Session manager ready`);
       console.log(`[cortex-sidecar] Terminal manager ready`);
       resolve(srv);
@@ -168,6 +185,12 @@ setImmediate(() => {
   }
 });
 
+// Lazy boot-time backfill — kicks off only if there are unprocessed sessions.
+// Runs in the background; the API endpoint /intelligence/backfill/status reports progress.
+setTimeout(() => {
+  try { maybeRunBackfillOnBoot(); } catch (err) { console.warn('[backfill] boot run skipped:', err); }
+}, 5000);
+
 // Graceful shutdown
 function shutdown() {
   console.log('[cortex-sidecar] Shutting down...');
@@ -176,6 +199,7 @@ function shutdown() {
   bridgeClient.stop();
   bgWorker.stop();
   stopMCPServer();
+  getBrowserSession().close().catch(() => {});
   server.close();
   closeDb();
   process.exit(0);

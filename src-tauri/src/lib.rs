@@ -1,5 +1,7 @@
+use std::net::TcpStream;
 use std::process::{Command, Child};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::Manager;
 
 struct SidecarProcess(Mutex<Option<Child>>);
@@ -29,7 +31,22 @@ fn resolve_shell_env() -> std::collections::HashMap<String, String> {
     env_map
 }
 
+/// Kill any process currently holding port 4700 (orphaned sidecar from a previous session).
+/// Uses `fuser` which is available on all Linux systems.
+fn kill_orphan_sidecar() {
+    // Kill on both IPv4 and IPv6 (sidecar now listens dual-stack)
+    let _ = Command::new("fuser")
+        .args(["-k", "-TERM", "4700/tcp"])
+        .output();
+    // Give the OS a moment to release the port
+    std::thread::sleep(Duration::from_millis(500));
+}
+
 fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // Kill any orphaned sidecar from a previous session before spawning a new one.
+    // Without this, the new sidecar gets EADDRINUSE and silently fails.
+    kill_orphan_sidecar();
+
     let resource_dir = app.path().resource_dir()?;
     let sidecar_script = resource_dir.join("sidecar-bundle").join("dist").join("index.js");
 
@@ -78,6 +95,26 @@ fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .lock()
         .unwrap()
         .replace(child);
+
+    // Wait for the sidecar to bind port 4700 before returning — this
+    // prevents the WebView from starting its health-check loop before
+    // Node is ready, eliminating the race-condition "Connection refused" screen.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        // Check both IPv4 and IPv6 — sidecar listens dual-stack on ::
+        let ready = TcpStream::connect("127.0.0.1:4700").is_ok()
+            || TcpStream::connect("[::1]:4700").is_ok();
+        if ready {
+            println!("[cortex] Sidecar ready on port 4700");
+            break;
+        }
+        if Instant::now() >= deadline {
+            eprintln!("[cortex] Sidecar did not bind port 4700 within 30s — continuing anyway");
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
     Ok(())
 }
 

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS notes (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   content TEXT NOT NULL DEFAULT '',
+  room_tag TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -83,7 +84,8 @@ CREATE TABLE IF NOT EXISTS claude_sessions (
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_active TEXT NOT NULL DEFAULT (datetime('now')),
   terminal_id TEXT REFERENCES terminals(id) ON DELETE SET NULL,
-  claude_session_id TEXT DEFAULT NULL
+  claude_session_id TEXT DEFAULT NULL,
+  session_output TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS session_metrics (
@@ -126,6 +128,8 @@ CREATE TABLE IF NOT EXISTS project_brain (
   decisions TEXT NOT NULL DEFAULT '',
   conventions TEXT NOT NULL DEFAULT '',
   dependencies_notes TEXT NOT NULL DEFAULT '',
+  valid_from TEXT NOT NULL DEFAULT (datetime('now')),
+  valid_until TEXT DEFAULT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -141,6 +145,7 @@ CREATE TABLE IF NOT EXISTS pattern_memory (
   success_rate REAL NOT NULL DEFAULT 0.0,
   user_rating INTEGER,
   confidence TEXT NOT NULL DEFAULT 'unverified' CHECK(confidence IN ('verified','probable','unverified','deprecated')),
+  room_tag TEXT,
   last_used TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -159,6 +164,7 @@ CREATE TABLE IF NOT EXISTS debug_memory (
   success_rate REAL NOT NULL DEFAULT 0.0,
   user_rating INTEGER,
   confidence TEXT NOT NULL DEFAULT 'unverified' CHECK(confidence IN ('verified','probable','unverified','deprecated')),
+  room_tag TEXT,
   last_used TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -293,6 +299,33 @@ CREATE TABLE IF NOT EXISTS captured_network (
   timestamp TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Server & Deployment Tables
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS servers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  provider TEXT,
+  host TEXT,
+  ssh_user TEXT,
+  ssh_port INTEGER DEFAULT 22,
+  deploy_url TEXT,
+  notes TEXT,
+  co_deployed_apps TEXT DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS project_servers (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  deploy_branch TEXT,
+  deploy_command TEXT,
+  env_file_path TEXT,
+  deploy_docs_content TEXT,
+  last_deployed TEXT,
+  PRIMARY KEY (project_id, server_id)
+);
+
 -- AI Policy Tables
 -- ============================================================
 
@@ -417,6 +450,18 @@ CREATE INDEX IF NOT EXISTS idx_execution_history_session ON execution_history(se
 CREATE INDEX IF NOT EXISTS idx_project_snapshots_project ON project_snapshots(project_id);
 CREATE INDEX IF NOT EXISTS idx_file_index_project ON file_index(project_id);
 CREATE INDEX IF NOT EXISTS idx_file_locks_project ON file_locks(project_id);
+
+-- v2.5: Import graph for Impact Preview
+CREATE TABLE IF NOT EXISTS file_imports (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  source_path TEXT NOT NULL,
+  target_path TEXT NOT NULL,
+  raw_specifier TEXT NOT NULL,
+  UNIQUE(project_id, source_path, raw_specifier)
+);
+CREATE INDEX IF NOT EXISTS idx_file_imports_target ON file_imports(project_id, target_path);
+CREATE INDEX IF NOT EXISTS idx_file_imports_source ON file_imports(project_id, source_path);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
 
 -- Additional indexes for common query patterns (Phase 3B)
@@ -474,4 +519,210 @@ CREATE TABLE IF NOT EXISTS aaak_cache (
 );
 
 CREATE INDEX IF NOT EXISTS idx_aaak_project ON aaak_cache(project_id);
+
+-- MemPalace: Global Knowledge (Cross-Project)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS global_knowledge (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  project_name TEXT,
+  company TEXT,
+  subject TEXT NOT NULL,
+  predicate TEXT NOT NULL,
+  object TEXT NOT NULL,
+  room_tag TEXT,
+  confidence TEXT NOT NULL DEFAULT 'probable'
+    CHECK(confidence IN ('verified','probable','unverified','deprecated')),
+  source TEXT NOT NULL DEFAULT 'aggregated'
+    CHECK(source IN ('aggregated','user','cross_project','manual')),
+  source_fact_id TEXT,
+  valid_from TEXT NOT NULL DEFAULT (datetime('now')),
+  valid_until TEXT DEFAULT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_gk_company ON global_knowledge(company);
+CREATE INDEX IF NOT EXISTS idx_gk_project ON global_knowledge(project_id);
+CREATE INDEX IF NOT EXISTS idx_gk_subject ON global_knowledge(subject);
+CREATE INDEX IF NOT EXISTS idx_gk_room ON global_knowledge(room_tag);
+CREATE INDEX IF NOT EXISTS idx_gk_active ON global_knowledge(valid_until);
+
+-- MemPalace: Company Insights (Aggregated per Company)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS company_insights (
+  id TEXT PRIMARY KEY,
+  company TEXT NOT NULL,
+  insight_type TEXT NOT NULL
+    CHECK(insight_type IN ('tech_stack','common_pattern','shared_issue','convention','summary')),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  project_ids TEXT NOT NULL DEFAULT '[]',
+  confidence TEXT NOT NULL DEFAULT 'probable',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(company, insight_type, title)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ci_company ON company_insights(company);
+CREATE INDEX IF NOT EXISTS idx_ci_type ON company_insights(insight_type);
+
+-- MemPalace: Cross-Project Patterns
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS cross_project_patterns (
+  id TEXT PRIMARY KEY,
+  pattern_type TEXT NOT NULL
+    CHECK(pattern_type IN ('shared_tech','recurring_issue','common_convention','architecture_pattern')),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  project_ids TEXT NOT NULL DEFAULT '[]',
+  project_names TEXT NOT NULL DEFAULT '[]',
+  room_tag TEXT,
+  occurrence_count INTEGER NOT NULL DEFAULT 1,
+  first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(pattern_type, title)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cpp_type ON cross_project_patterns(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_cpp_room ON cross_project_patterns(room_tag);
+
+-- Hook telemetry: every time a Claude Code hook calls back into the sidecar
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS hook_consults (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  session_id TEXT,
+  hook_type TEXT NOT NULL CHECK(hook_type IN ('prime','hint','session_end')),
+  tool_name TEXT,
+  query TEXT,
+  result_count INTEGER NOT NULL DEFAULT 0,
+  cwd TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_hook_consults_project ON hook_consults(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_hook_consults_type ON hook_consults(hook_type);
+
+-- Typed session observations: structured "fixes / decisions / discoveries" per session
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS session_observations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  session_id TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('fix','decision','discovery','gotcha','feature','refactor')),
+  title TEXT NOT NULL,
+  before_state TEXT NOT NULL DEFAULT '',
+  after_state TEXT NOT NULL DEFAULT '',
+  files_touched TEXT NOT NULL DEFAULT '[]',
+  room_tag TEXT,
+  confidence TEXT NOT NULL DEFAULT 'probable' CHECK(confidence IN ('verified','probable','unverified','deprecated')),
+  source TEXT NOT NULL DEFAULT 'auto' CHECK(source IN ('auto','user','backfill','session_end')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_obs_project ON session_observations(project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_session_obs_kind ON session_observations(kind);
+CREATE INDEX IF NOT EXISTS idx_session_obs_session ON session_observations(session_id);
+
+-- Backfill marker on claude_sessions
+-- ============================================================
+-- Tracks whether a historical session has already been processed by the backfill worker.
+-- Idempotent: rerunning backfill is a no-op for marked sessions.
+
+-- (Adds backfilled_at column if missing — handled by ensureSchemaMigrations on boot)
+
+-- Credential vault
+-- ============================================================
+-- Encrypted at rest with AES-256-GCM; key lives in OS keyring (libsecret).
+-- The sidecar never writes the master key to disk — it's loaded once on boot.
+-- Plaintext fields ARE NEVER stored.
+
+CREATE TABLE IF NOT EXISTS credentials (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK(kind IN (
+    'ssh','wordpress','shopify','smtp','backend_panel',
+    'api_key','db','app_user','github','other'
+  )),
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  auth_tag TEXT NOT NULL,
+  last_used TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(project_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_credentials_project ON credentials(project_id);
+CREATE INDEX IF NOT EXISTS idx_credentials_kind ON credentials(kind);
+
+-- Audit log: every reveal is recorded so the user can see what Claude (or the UI) accessed.
+CREATE TABLE IF NOT EXISTS credential_access (
+  id TEXT PRIMARY KEY,
+  credential_id TEXT NOT NULL REFERENCES credentials(id) ON DELETE CASCADE,
+  session_id TEXT,
+  reason TEXT NOT NULL,
+  caller TEXT NOT NULL CHECK(caller IN ('mcp','ui','hook','api')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_cred_access_cred ON credential_access(credential_id, created_at DESC);
+
+-- Live TodoWrite snapshots captured by the PostToolUse hook
+-- ============================================================
+-- The interactive Claude Code TUI renders TodoWrite as colored text, not JSON.
+-- The PostToolUse hook captures the structured todos and posts them here so
+-- the live tasks sidebar can render them in real time.
+
+CREATE TABLE IF NOT EXISTS session_todos (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  cwd TEXT,
+  todos_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_todos_session ON session_todos(session_id);
+
+-- AI Provider Accounts
+-- ============================================================
+-- Stores registered Claude CLI accounts and Bedrock configs.
+-- active_provider in settings table controls which one is in use.
+
+CREATE TABLE IF NOT EXISTS ai_accounts (
+  id TEXT PRIMARY KEY,
+  provider_type TEXT NOT NULL CHECK(provider_type IN ('claude-cli', 'bedrock')),
+  display_name TEXT NOT NULL,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  config_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Provider Usage Tracking
+-- ============================================================
+-- Tracks token counts and latency per Bedrock call for cost visibility.
+
+CREATE TABLE IF NOT EXISTS provider_usage (
+  id TEXT PRIMARY KEY,
+  provider_type TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  session_id TEXT,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_usage_provider ON provider_usage(provider_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_provider_usage_project ON provider_usage(project_id, created_at DESC);
 `;

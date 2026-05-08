@@ -208,36 +208,78 @@ sessionsRouter.get('/claude-files', (req, res) => {
   res.json({ slug, projectPath: project.path, files });
 });
 
-// GET /api/sessions/:id/todos — parse live TodoWrite task list from session output buffer
-// Must be before plain /:id (Express 5 routing)
+// GET /api/sessions/:id/todos — live TodoWrite task list
+// Must be before plain /:id (Express 5 routing).
+//
+// Source priority:
+//   1) session_todos table (populated by the PostToolUse TodoWrite hook —
+//      accurate for interactive Claude Code sessions where tool calls are
+//      rendered as colored text, not JSON).
+//   2) Fallback: regex parse of the PTY output buffer (only matches when
+//      Claude Code is run with --output-format stream-json).
 sessionsRouter.get('/:id/todos', (req, res) => {
+  const db = getDb();
+
+  // Direct lookup by Cortex session_id (covers Cortex-spawned sessions).
+  const direct = db
+    .prepare('SELECT todos_json FROM session_todos WHERE session_id = ?')
+    .get(req.params.id) as { todos_json: string } | undefined;
+
+  // Fallback 1: by Claude Code's session id (the hook delivers the Claude id).
+  const cortexSession = db
+    .prepare('SELECT claude_session_id, project_id FROM claude_sessions WHERE id = ?')
+    .get(req.params.id) as { claude_session_id: string | null; project_id: string } | undefined;
+
+  const indirect = cortexSession?.claude_session_id
+    ? (db
+        .prepare('SELECT todos_json FROM session_todos WHERE session_id = ?')
+        .get(cortexSession.claude_session_id) as { todos_json: string } | undefined)
+    : undefined;
+
+  // Fallback 2: most recent todos for this project's CWD (handles session_id mismatch).
+  const byCwd = !direct && !indirect && cortexSession?.project_id
+    ? (db.prepare(`
+        SELECT st.todos_json FROM session_todos st
+        JOIN projects p ON st.cwd = p.path OR st.cwd LIKE p.path || '/%'
+        WHERE p.id = ?
+        ORDER BY st.updated_at DESC LIMIT 1
+      `).get(cortexSession.project_id) as { todos_json: string } | undefined)
+    : undefined;
+
+  const fromHook = direct || indirect || byCwd;
+  if (fromHook) {
+    try {
+      const todos = JSON.parse(fromHook.todos_json);
+      if (Array.isArray(todos) && todos.length > 0) {
+        res.json({ todos, source: 'hook' });
+        return;
+      }
+    } catch {
+      // fall through to regex fallback
+    }
+  }
+
+  // Legacy fallback: regex parse the PTY output buffer.
   const mgr = getSessionManager();
   const session = mgr.getSessionInfo(req.params.id);
-
   let buffer = '';
   if (session && session.status === 'running') {
-    // Get the live output buffer for running sessions
     buffer = mgr.getSessionOutput(req.params.id, 102400);
   } else {
-    // Fall back to DB output for completed sessions
-    const db = getDb();
     const row = db.prepare('SELECT session_output FROM claude_sessions WHERE id = ?').get(req.params.id) as any;
     buffer = row?.session_output || '';
   }
 
   if (!buffer) {
-    res.json({ todos: [] });
+    res.json({ todos: [], source: 'empty' });
     return;
   }
 
-  // Strip ANSI escape codes
   const clean = buffer
     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
     .replace(/\x1b\].*?\x07/g, '')
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
 
-  // Find all TodoWrite/TodoRead JSON blobs in the output.
-  // Claude Code emits tool calls as JSON: {"type":"tool_use","name":"TodoWrite","input":{"todos":[...]}}
   const todos: any[] = [];
   const todoPattern = /"name"\s*:\s*"Todo(?:Write|Read)"[\s\S]*?"todos"\s*:\s*(\[[\s\S]*?\])/g;
   let match: RegExpExecArray | null;
@@ -247,12 +289,10 @@ sessionsRouter.get('/:id/todos', (req, res) => {
       if (Array.isArray(parsed)) {
         todos.splice(0, todos.length, ...parsed);
       }
-    } catch {
-      // malformed JSON, skip
-    }
+    } catch { /* malformed */ }
   }
 
-  res.json({ todos });
+  res.json({ todos, source: todos.length > 0 ? 'regex' : 'empty' });
 });
 
 // GET /api/sessions/:id — single session
@@ -570,6 +610,12 @@ sessionsRouter.post('/:id/stop', async (req, res) => {
   }
 
   const success = mgr.stopSession(req.params.id);
+
+  // Kill the linked terminal so it disappears from the terminal panel
+  if (session.terminalId) {
+    const tmgr = getTerminalManager();
+    tmgr.kill(session.terminalId);
+  }
 
   // Generate handoff document after stopping
   if (success && project) {

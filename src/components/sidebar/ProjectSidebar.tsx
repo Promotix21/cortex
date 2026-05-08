@@ -1,11 +1,14 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { useProjectStore } from '@/stores/project-store';
 import { useSessionStore } from '@/stores/session-store';
 import { ProjectItem } from './ProjectItem';
 import { AddProjectDialog } from './AddProjectDialog';
 import { RecentSessions } from './RecentSessions';
-import { Search, Plus, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Plus, FolderPlus, X, LayoutGrid } from 'lucide-react';
 import type { Project } from '@/types/project';
+
+import { useNavigationStore } from '@/stores/navigation-store';
 
 /** Sort projects so those with active sessions come first, then by last_opened */
 function sortWithActiveSessions(projects: Project[], activeProjectIds: Set<string>): Project[] {
@@ -17,30 +20,9 @@ function sortWithActiveSessions(projects: Project[], activeProjectIds: Set<strin
   });
 }
 
-function groupByCompany(projects: Project[], activeProjectIds: Set<string>): { company: string; projects: Project[] }[] {
-  const groups = new Map<string, Project[]>();
-  for (const p of projects) {
-    const key = p.company || 'Unassigned';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(p);
-  }
-  // Sort projects within each group: active sessions first
-  for (const [key, list] of groups) {
-    groups.set(key, sortWithActiveSessions(list, activeProjectIds));
-  }
-  // Sort groups: those with active sessions first, then alphabetically, Unassigned last
-  const entries = [...groups.entries()].sort((a, b) => {
-    const aHasActive = a[1].some(p => activeProjectIds.has(p.id)) ? 1 : 0;
-    const bHasActive = b[1].some(p => activeProjectIds.has(p.id)) ? 1 : 0;
-    if (aHasActive !== bHasActive) return bHasActive - aHasActive;
-    if (a[0] === 'Unassigned') return 1;
-    if (b[0] === 'Unassigned') return -1;
-    return a[0].localeCompare(b[0]);
-  });
-  return entries.map(([company, projects]) => ({ company, projects }));
-}
 
 export function ProjectSidebar() {
+  const setActivity = useNavigationStore(s => s.setActivity);
   const {
     filteredProjects,
     fetchProjects,
@@ -54,7 +36,6 @@ export function ProjectSidebar() {
   } = useProjectStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchProjects();
@@ -68,27 +49,21 @@ export function ProjectSidebar() {
   }, [loading, storeProjects.length, error, fetchProjects]);
 
   const sessions = useSessionStore(s => s.sessions);
+  const activeSessions = useSessionStore(s => s.activeSessions);
   const activeProjectIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const s of sessions) {
+    // Combine both session sources for robustness
+    for (const s of [...sessions, ...activeSessions]) {
       if (s.status === 'running' || s.status === 'idle') ids.add(s.projectId);
     }
     return ids;
-  }, [sessions]);
+  }, [sessions, activeSessions]);
 
   const allProjects = filteredProjects();
-  const projects = useMemo(() => sortWithActiveSessions(allProjects, activeProjectIds), [allProjects, activeProjectIds]);
-  const hasCompanies = projects.some(p => p.company);
-  const groups = useMemo(() => groupByCompany(allProjects, activeProjectIds), [allProjects, activeProjectIds]);
-
-  const toggleGroup = (company: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(company)) next.delete(company);
-      else next.add(company);
-      return next;
-    });
-  };
+  const projects = useMemo(
+    () => sortWithActiveSessions(allProjects, activeProjectIds),
+    [allProjects, activeProjectIds]
+  );
 
   return (
     <aside
@@ -152,6 +127,45 @@ export function ProjectSidebar() {
         </div>
       </div>
 
+      {/* All Projects (grid / multi-session) toggle */}
+      <div style={{ padding: '0 12px 6px 12px' }}>
+        <button
+          onClick={() => { setActiveProject(null); setActivity('sessions'); }}
+          className="flex items-center w-full rounded-lg transition-colors"
+          style={{
+            gap: 10,
+            padding: '10px 12px',
+            fontSize: 13,
+            fontWeight: 600,
+            background: activeProjectId === null ? 'var(--accent-dim)' : 'transparent',
+            color: activeProjectId === null ? 'var(--accent)' : 'var(--text-secondary)',
+            border: '1px solid',
+            borderColor: activeProjectId === null ? 'var(--accent)' : 'var(--border)',
+          }}
+          title="Show all active sessions across projects"
+        >
+          <LayoutGrid size={14} />
+          <span className="flex-1 text-left">All Projects</span>
+          {activeProjectIds.size > 0 && (
+            <span
+              className="rounded-full"
+              style={{
+                padding: '1px 8px',
+                fontSize: 11,
+                fontWeight: 700,
+                background: activeProjectId === null ? 'var(--accent)' : 'var(--bg-surface)',
+                color: activeProjectId === null ? 'var(--bg-primary)' : 'var(--text-tertiary)',
+              }}
+            >
+              {activeProjectIds.size}
+            </span>
+          )}
+          {activeProjectId !== null && (
+            <X size={12} style={{ color: 'var(--text-tertiary)' }} />
+          )}
+        </button>
+      </div>
+
       {/* Project List */}
       <div className="flex-1 overflow-y-auto" style={{ padding: '4px 12px' }}>
         {loading && projects.length === 0 ? (
@@ -173,63 +187,7 @@ export function ProjectSidebar() {
               {searchQuery ? 'Try a different search' : 'Click + to add your first project'}
             </p>
           </div>
-        ) : hasCompanies ? (
-          /* Grouped by company */
-          groups.map(({ company, projects: groupProjects }) => (
-            <div key={company} style={{ marginBottom: 8 }}>
-              <button
-                onClick={() => toggleGroup(company)}
-                className="flex items-center w-full rounded-lg"
-                style={{
-                  padding: '8px 10px',
-                  gap: 6,
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {collapsedGroups.has(company) ? (
-                  <ChevronRight size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                ) : (
-                  <ChevronDown size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                )}
-                <span
-                  className="font-bold uppercase tracking-wider"
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: '0.1em',
-                    color: 'var(--text-tertiary)',
-                  }}
-                >
-                  {company}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: 'var(--text-tertiary)',
-                    opacity: 0.6,
-                    marginLeft: 'auto',
-                  }}
-                >
-                  {groupProjects.length}
-                </span>
-              </button>
-              {!collapsedGroups.has(company) && (
-                <div style={{ paddingLeft: 4 }}>
-                  {groupProjects.map((project) => (
-                    <ProjectItem
-                      key={project.id}
-                      project={project}
-                      isActive={project.id === activeProjectId}
-                      onClick={() => setActiveProject(project.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
         ) : (
-          /* Flat list (no companies assigned) */
           projects.map((project) => (
             <ProjectItem
               key={project.id}
@@ -256,7 +214,7 @@ export function ProjectSidebar() {
         }}
       >
         {projects.length} project{projects.length !== 1 ? 's' : ''}
-        {hasCompanies && ` · ${groups.length} ${groups.length === 1 ? 'company' : 'companies'}`}
+        {activeProjectIds.size > 0 && ` · ${activeProjectIds.size} active`}
       </div>
 
       {showAddDialog && <AddProjectDialog onClose={() => setShowAddDialog(false)} />}

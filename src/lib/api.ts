@@ -285,6 +285,17 @@ export const api = {
   // ── Tasks ─────────────────────────────────────────────────
   getTasks: (projectId: string) =>
     request<{ tasks: Task[] }>(`/api/tasks/${projectId}`),
+  getLiveTasks: (projectId: string) =>
+    request<{
+      groups: Array<{
+        sessionId: string;
+        sessionName: string;
+        sessionStatus: string;
+        lastActive: string;
+        todos: Array<{ id?: string; content: string; status: string; priority?: string }>;
+      }>;
+      todos: Array<{ id?: string; content: string; status: string; priority?: string; sessionId: string; sessionName: string; sessionStatus: string }>;
+    }>(`/api/tasks/${projectId}/live`),
   createTask: (projectId: string, title: string) =>
     request<{ task: Task }>(`/api/tasks/${projectId}`, {
       method: 'POST',
@@ -433,4 +444,166 @@ export const api = {
     }),
   clearAllData: () =>
     request<{ success: boolean; tablesCleared: number }>('/api/settings/clear-data', { method: 'POST' }),
+
+  // ── Cortex Hooks (Claude Code integration) ───────────────
+  getHookStatus: () =>
+    request<{ installed: boolean; scriptsExist: boolean; settingsHasHooks: boolean; events: string[] }>(
+      '/api/intelligence/hooks/status',
+    ),
+  installHooks: () =>
+    request<{ installed: boolean; scripts: string[]; events: string[]; alreadyInstalled: boolean }>(
+      '/api/intelligence/hooks/install',
+      { method: 'POST' },
+    ),
+  uninstallHooks: () =>
+    request<{ removed: number }>('/api/intelligence/hooks/uninstall', { method: 'POST' }),
+
+  // ── Backfill ─────────────────────────────────────────────
+  startBackfill: () =>
+    request<{ state: string; sessionsTotal: number }>('/api/intelligence/backfill/start', { method: 'POST' }),
+  getBackfillStatus: () =>
+    request<{
+      state: string;
+      sessionsProcessed: number;
+      sessionsTotal: number;
+      observationsCreated: number;
+      factsCreated: number;
+      errors: string[];
+      startedAt: string | null;
+      finishedAt: string | null;
+    }>('/api/intelligence/backfill/status'),
+
+  // ── Vault ────────────────────────────────────────────────
+  vaultStatus: () =>
+    request<{ available: boolean; reason?: string }>('/api/vault/status'),
+  listCredentials: (projectId?: string | null) => {
+    const q = projectId === undefined ? '' :
+      projectId === null ? '?project_id=global' : `?project_id=${encodeURIComponent(projectId)}`;
+    return request<{
+      credentials: Array<{
+        id: string;
+        projectId: string | null;
+        kind: string;
+        name: string;
+        description: string;
+        lastUsed: string | null;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    }>(`/api/vault/list${q}`);
+  },
+  createCredential: (data: {
+    project_id?: string | null;
+    kind: string;
+    name: string;
+    description?: string;
+    fields: Record<string, string>;
+  }) =>
+    request<{ credential: { id: string; name: string; kind: string } }>(
+      '/api/vault/credentials',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+  updateCredential: (id: string, patch: {
+    name?: string;
+    description?: string;
+    kind?: string;
+    fields?: Record<string, string>;
+  }) =>
+    request<{ credential: { id: string; name: string; kind: string } }>(
+      `/api/vault/credentials/${id}`,
+      { method: 'PUT', body: JSON.stringify(patch) },
+    ),
+  deleteCredential: (id: string) =>
+    request<{ success: boolean }>(`/api/vault/credentials/${id}`, { method: 'DELETE' }),
+  revealCredential: (id: string, reason: string) =>
+    request<{
+      summary: { id: string; name: string; kind: string };
+      fields: Record<string, string>;
+    }>(`/api/vault/credentials/${id}/reveal`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  vaultAudit: (credentialId?: string) => {
+    const q = credentialId ? `?credential_id=${encodeURIComponent(credentialId)}` : '';
+    return request<{
+      entries: Array<{
+        id: string;
+        credentialId: string;
+        sessionId: string | null;
+        reason: string;
+        caller: string;
+        createdAt: string;
+      }>;
+    }>(`/api/vault/audit${q}`);
+  },
+
+  // ── Brain Panel ──────────────────────────────────────────
+  getBrainPanel: (projectId: string) =>
+    request<{
+      project: { id: string; name: string; path: string };
+      brain: {
+        summary: string;
+        architecture_notes: string;
+        conventions: string;
+        decisions: string;
+        known_issues: string;
+        updated_at: string;
+      } | null;
+      observations: Array<{
+        id: string;
+        kind: string;
+        title: string;
+        before_state: string;
+        after_state: string;
+        files_touched: string[];
+        room_tag: string | null;
+        source: string;
+        created_at: string;
+      }>;
+      rooms: Array<{ room: string; count?: number; factCount?: number }>;
+      hookStats: {
+        total: number;
+        byType: Record<string, number>;
+        recent: Array<{
+          hook_type: string;
+          tool_name: string | null;
+          query: string | null;
+          result_count: number;
+          created_at: string;
+        }>;
+      };
+    }>(`/api/intelligence/brain-panel/${projectId}`),
+
+  // ── Providers ────────────────────────────────────────────
+  getProviderStatus: () =>
+    request<{
+      activeProvider: 'claude-cli' | 'bedrock' | 'devstral';
+      activeModel: string;
+      providers: Array<{
+        id: string;
+        displayName: string;
+        isActive: boolean;
+        models: Array<{ id: string; label: string }> | string[];
+        region?: string;
+      }>;
+      bedrockUsage: Array<{
+        model_id: string;
+        input_tokens: number;
+        output_tokens: number;
+        call_count: number;
+        avg_latency_ms: number;
+      }>;
+    }>('/api/providers/status')
+      .catch(() => ({ activeProvider: 'claude-cli' as const, activeModel: '', providers: [], bedrockUsage: [] })),
+
+  switchProvider: (provider: 'claude-cli' | 'bedrock' | 'devstral', model?: string) =>
+    request<{ success: boolean; activeProvider: string; activeModel: string; message: string }>(
+      '/api/providers/switch',
+      { method: 'POST', body: JSON.stringify({ provider, model }) },
+    ),
+
+  testBedrock: () =>
+    request<{ ok: boolean; region?: string; model?: string; error?: string; name?: string }>(
+      '/api/providers/bedrock/test',
+    ).catch(err => ({ ok: false, error: err.message })),
 };

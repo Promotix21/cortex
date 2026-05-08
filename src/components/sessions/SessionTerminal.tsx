@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { useSessionStore } from '@/stores/session-store';
 import { XTerminal } from '@/components/terminal/XTerminal';
-import { ArrowLeft, Square, Zap, Clock, MessageSquare, FileText, CheckCircle, FolderInput, ListTodo, ChevronRight, ChevronLeft, Circle, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Square, Zap, Clock, MessageSquare, FileText, CheckCircle, FolderInput, ListTodo, ChevronRight, ChevronLeft, Circle, CheckCircle2, Loader2, Wrench, Send } from 'lucide-react';
 
 interface SessionTerminalProps {
   sessionId: string;
@@ -211,11 +211,12 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
       {isRunning && terminalId ? (
         <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
           <XTerminal terminalId={terminalId} active={true} />
-          {/* Live Tasks Sidebar */}
-          <TodosSidebar
+          {/* Right rail: live tasks (top) + MCP tools (bottom) */}
+          <RightRail
             todos={todos}
             open={todosPanelOpen}
             onToggle={() => setTodosPanelOpen(o => !o)}
+            terminalId={terminalId}
           />
         </div>
       ) : isRunning ? (
@@ -234,7 +235,7 @@ export function SessionTerminal({ sessionId }: SessionTerminalProps) {
 }
 
 // ============================================================
-// LIVE TODOS SIDEBAR
+// RIGHT RAIL — live tasks (top) + MCP tools (bottom)
 // ============================================================
 
 interface Todo {
@@ -244,27 +245,14 @@ interface Todo {
   priority: string;
 }
 
-function TodosSidebar({ todos, open, onToggle }: { todos: Todo[]; open: boolean; onToggle: () => void }) {
-  const pending = todos.filter(t => t.status === 'pending' || t.status === 'in_progress');
-  const done = todos.filter(t => t.status === 'completed');
-
-  const priorityColor = (p: string) => {
-    if (p === 'high') return 'var(--error)';
-    if (p === 'medium') return 'var(--warning)';
-    return 'var(--text-tertiary)';
-  };
-
-  const StatusIcon = ({ status }: { status: string }) => {
-    if (status === 'completed') return <CheckCircle2 size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />;
-    if (status === 'in_progress') return <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)', flexShrink: 0 }} />;
-    return <Circle size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />;
-  };
-
+function RightRail({
+  todos, open, onToggle, terminalId,
+}: { todos: Todo[]; open: boolean; onToggle: () => void; terminalId: string }) {
   return (
     <div
       className="flex shrink-0"
       style={{
-        width: open ? 260 : 36,
+        width: open ? 280 : 36,
         transition: 'width 0.2s ease',
         borderLeft: '1px solid var(--border)',
         background: 'var(--bg-secondary)',
@@ -272,7 +260,7 @@ function TodosSidebar({ todos, open, onToggle }: { todos: Todo[]; open: boolean;
         flexDirection: 'column',
       }}
     >
-      {/* Toggle button */}
+      {/* Toggle button (full-width header) */}
       <button
         onClick={onToggle}
         className="flex items-center justify-center shrink-0"
@@ -284,13 +272,13 @@ function TodosSidebar({ todos, open, onToggle }: { todos: Todo[]; open: boolean;
           color: 'var(--text-tertiary)',
           cursor: 'pointer',
         }}
-        title={open ? 'Collapse tasks' : 'Expand tasks'}
+        title={open ? 'Collapse rail' : 'Expand rail'}
       >
         {open ? (
           <div className="flex items-center w-full" style={{ gap: 8, padding: '0 12px' }}>
             <ListTodo size={14} style={{ color: 'var(--accent)' }} />
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', flex: 1 }}>
-              Claude Tasks
+              Session Rail
             </span>
             {todos.length > 0 && (
               <span style={{
@@ -307,74 +295,235 @@ function TodosSidebar({ todos, open, onToggle }: { todos: Todo[]; open: boolean;
         )}
       </button>
 
-      {/* Task list */}
       {open && (
-        <div className="flex-1 overflow-auto" style={{ padding: '8px 0' }}>
-          {todos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center" style={{ padding: '32px 16px', gap: 8 }}>
-              <ListTodo size={24} style={{ color: 'var(--text-tertiary)' }} />
-              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', lineHeight: 1.4 }}>
-                No tasks yet. Claude will show tasks here when it uses TodoWrite.
-              </p>
-            </div>
-          ) : (
-            <>
-              {pending.length > 0 && (
-                <div style={{ padding: '0 12px 4px' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 6 }}>
-                    Active ({pending.length})
-                  </div>
-                  <div className="flex flex-col" style={{ gap: 4 }}>
-                    {pending.map(todo => (
-                      <div
-                        key={todo.id}
-                        className="flex items-start rounded-lg"
-                        style={{ gap: 8, padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-                      >
-                        <StatusIcon status={todo.status} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{
-                            fontSize: 12, lineHeight: 1.4, color: 'var(--text-primary)',
-                            wordBreak: 'break-word', margin: 0,
-                          }}>
-                            {todo.content}
-                          </p>
-                          <span style={{ fontSize: 10, color: priorityColor(todo.priority), fontWeight: 600, textTransform: 'uppercase' }}>
-                            {todo.priority}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {done.length > 0 && (
-                <div style={{ padding: `${pending.length > 0 ? 12 : 0}px 12px 4px` }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 6 }}>
-                    Done ({done.length})
-                  </div>
-                  <div className="flex flex-col" style={{ gap: 4 }}>
-                    {done.map(todo => (
-                      <div
-                        key={todo.id}
-                        className="flex items-start rounded-lg"
-                        style={{ gap: 8, padding: '8px 10px', background: 'var(--bg-hover)', border: '1px solid transparent' }}
-                      >
-                        <StatusIcon status={todo.status} />
-                        <p style={{
-                          fontSize: 12, lineHeight: 1.4, color: 'var(--text-tertiary)',
-                          wordBreak: 'break-word', margin: 0, textDecoration: 'line-through',
-                        }}>
-                          {todo.content}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+        <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+          {/* Tasks (top, ~60%) */}
+          <div style={{ flex: '1 1 60%', overflow: 'auto', borderBottom: '1px solid var(--border)' }}>
+            <TodosList todos={todos} />
+          </div>
+          {/* MCP tools (bottom, ~40%) */}
+          <div style={{ flex: '1 1 40%', minHeight: 160, overflow: 'auto' }}>
+            <McpToolsPanel terminalId={terminalId} />
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function TodosList({ todos }: { todos: Todo[] }) {
+  const pending = todos.filter(t => t.status === 'pending' || t.status === 'in_progress');
+  const done = todos.filter(t => t.status === 'completed');
+
+  const priorityColor = (p: string) => {
+    if (p === 'high') return 'var(--error)';
+    if (p === 'medium') return 'var(--warning)';
+    return 'var(--text-tertiary)';
+  };
+
+  const StatusIcon = ({ status }: { status: string }) => {
+    if (status === 'completed') return <CheckCircle2 size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />;
+    if (status === 'in_progress') return <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)', flexShrink: 0 }} />;
+    return <Circle size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />;
+  };
+
+  return (
+    <div style={{ padding: '8px 0' }}>
+      <div style={{ padding: '0 12px 6px' }}>
+        <div className="flex items-center" style={{ gap: 6 }}>
+          <ListTodo size={11} style={{ color: 'var(--accent)' }} />
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
+            Claude Tasks
+          </span>
+        </div>
+      </div>
+      {todos.length === 0 ? (
+        <div className="flex flex-col items-center justify-center" style={{ padding: '20px 16px', gap: 8 }}>
+          <ListTodo size={20} style={{ color: 'var(--text-tertiary)' }} />
+          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center', lineHeight: 1.4 }}>
+            No tasks yet. Install the Cortex hooks (Settings → Claude Code Hooks) so TodoWrite snapshots are captured.
+          </p>
+        </div>
+      ) : (
+        <>
+          {pending.length > 0 && (
+            <div style={{ padding: '0 12px 4px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 6 }}>
+                Active ({pending.length})
+              </div>
+              <div className="flex flex-col" style={{ gap: 4 }}>
+                {pending.map(todo => (
+                  <div
+                    key={todo.id}
+                    className="flex items-start rounded-lg"
+                    style={{ gap: 8, padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                  >
+                    <StatusIcon status={todo.status} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{
+                        fontSize: 12, lineHeight: 1.4, color: 'var(--text-primary)',
+                        wordBreak: 'break-word', margin: 0,
+                      }}>
+                        {todo.content}
+                      </p>
+                      <span style={{ fontSize: 10, color: priorityColor(todo.priority), fontWeight: 600, textTransform: 'uppercase' }}>
+                        {todo.priority}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {done.length > 0 && (
+            <div style={{ padding: `${pending.length > 0 ? 12 : 0}px 12px 4px` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 6 }}>
+                Done ({done.length})
+              </div>
+              <div className="flex flex-col" style={{ gap: 4 }}>
+                {done.map(todo => (
+                  <div
+                    key={todo.id}
+                    className="flex items-start rounded-lg"
+                    style={{ gap: 8, padding: '8px 10px', background: 'var(--bg-hover)', border: '1px solid transparent' }}
+                  >
+                    <StatusIcon status={todo.status} />
+                    <p style={{
+                      fontSize: 12, lineHeight: 1.4, color: 'var(--text-tertiary)',
+                      wordBreak: 'break-word', margin: 0, textDecoration: 'line-through',
+                    }}>
+                      {todo.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function McpToolsPanel({ terminalId }: { terminalId: string }) {
+  const [running, setRunning] = useState(false);
+  const [actions, setActions] = useState<string[]>([]);
+  const [filter, setFilter] = useState('');
+  const [injectingAction, setInjectingAction] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.mcpStatus().then(s => {
+      if (cancelled) return;
+      setRunning(s.running);
+      const cortex = s.tools.find(t => t.name === 'cortex');
+      if (cortex) {
+        // Parse "  category: action1, action2, action3" lines from the description.
+        const found: string[] = [];
+        for (const line of cortex.description.split('\n')) {
+          const m = line.match(/^\s+\w+:\s+(.+)/);
+          if (m) {
+            for (const part of m[1].split(',')) {
+              const name = part.replace(/\(.*?\)/, '').trim();
+              if (/^[a-z_]+$/.test(name)) found.push(name);
+            }
+          }
+        }
+        const seen = new Set<string>();
+        const uniq: string[] = [];
+        for (const a of found) {
+          if (!seen.has(a)) { seen.add(a); uniq.push(a); }
+        }
+        setActions(uniq);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const inject = async (action: string) => {
+    setInjectingAction(action);
+    const hint = `Use mcp__cortex-intelligence__cortex with action="${action}" — `;
+    try {
+      await api.writeTerminal(terminalId, hint);
+    } catch {
+      /* ignore */
+    } finally {
+      setTimeout(() => setInjectingAction(null), 600);
+    }
+  };
+
+  const filtered = filter
+    ? actions.filter(a => a.toLowerCase().includes(filter.toLowerCase()))
+    : actions;
+
+  return (
+    <div style={{ padding: '8px 0' }}>
+      <div className="flex items-center" style={{ gap: 6, padding: '0 12px 6px' }}>
+        <Wrench size={11} style={{ color: running ? 'var(--green)' : 'var(--text-tertiary)' }} />
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', flex: 1 }}>
+          Cortex MCP
+        </span>
+        <span
+          className="rounded-full"
+          style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 6px',
+            background: running ? 'var(--success-dim)' : 'var(--error-dim)',
+            color: running ? 'var(--success)' : 'var(--error)',
+          }}
+        >
+          {running ? 'live' : 'offline'}
+        </span>
+      </div>
+      {!running ? (
+        <div style={{ padding: '12px 16px', fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+          MCP server is offline.
+        </div>
+      ) : (
+        <>
+          <div style={{ padding: '0 12px 6px' }}>
+            <input
+              type="text"
+              placeholder="Filter actions"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              className="w-full rounded-md bg-transparent"
+              style={{ fontSize: 11, padding: '6px 10px', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+            />
+          </div>
+          <div style={{ padding: '0 12px' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '16px 4px', fontSize: 11, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                No actions match.
+              </div>
+            ) : (
+              <div className="flex flex-col" style={{ gap: 3 }}>
+                {filtered.map(action => (
+                  <button
+                    key={action}
+                    onClick={() => inject(action)}
+                    className="flex items-center justify-between rounded text-left"
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 11,
+                      fontFamily: 'var(--font-mono)',
+                      background: injectingAction === action ? 'var(--accent-dim)' : 'var(--bg-surface)',
+                      color: injectingAction === action ? 'var(--accent)' : 'var(--text-secondary)',
+                      border: '1px solid var(--border)',
+                      cursor: 'pointer',
+                    }}
+                    title={`Insert hint: cortex action="${action}"`}
+                  >
+                    <span>{action}</span>
+                    <Send size={10} style={{ opacity: 0.6 }} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ padding: '8px 12px 4px', fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.4 }}>
+            Click → inserts a hint into the terminal so Claude knows which Cortex action to use.
+          </div>
+        </>
       )}
     </div>
   );

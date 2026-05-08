@@ -182,6 +182,44 @@ function assembleL2(projectId: string, room: string | null): { content: string; 
 }
 
 // ============================================================
+// File Tree — paths from file_index (no content, just structure)
+// ============================================================
+
+function assembleFileTree(projectId: string, maxFiles = 200): string {
+  const db = getDb();
+  let rows: { file_path: string; file_type: string; summary: string | null }[] = [];
+  try {
+    rows = db.prepare(`
+      SELECT file_path, file_type, summary
+      FROM file_index
+      WHERE project_id = ?
+      ORDER BY file_path ASC
+      LIMIT ?
+    `).all(projectId, maxFiles) as { file_path: string; file_type: string; summary: string | null }[];
+  } catch { return ''; }
+
+  if (rows.length === 0) return '';
+
+  // Group by directory
+  const dirMap = new Map<string, string[]>();
+  for (const row of rows) {
+    const parts = row.file_path.split('/');
+    const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
+    const file = parts[parts.length - 1];
+    const entry = row.summary ? `${file} — ${row.summary}` : file;
+    if (!dirMap.has(dir)) dirMap.set(dir, []);
+    dirMap.get(dir)!.push(entry);
+  }
+
+  const lines: string[] = [];
+  for (const [dir, files] of dirMap) {
+    lines.push(`${dir}/`);
+    for (const f of files) lines.push(`  ${f}`);
+  }
+  return lines.join('\n');
+}
+
+// ============================================================
 // Extras — errors, decisions, server info, MCP, masterpiece
 // ============================================================
 
@@ -249,6 +287,15 @@ function assembleExtras(projectId: string, remainingBudget: number): { sections:
     sections.push({
       key: 'dependencies', title: 'Dependencies', content: compressed,
       tokens: estimateTokens(compressed), priority: 3,
+    });
+  }
+
+  // File tree — let the model know what source files exist
+  const fileTree = assembleFileTree(projectId);
+  if (fileTree) {
+    sections.push({
+      key: 'file_tree', title: 'Project File Tree', content: fileTree,
+      tokens: estimateTokens(fileTree), priority: 6,
     });
   }
 

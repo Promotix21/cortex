@@ -1,0 +1,40 @@
+{
+  "name": "cortex-node",
+  "version": "0.1.0",
+  "description": "Cortex backend error bridge — captures Node.js errors and sends them to Cortex for AI debugging",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --target node18",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --watch"
+  },
+  "keywords": [
+    "cortex",
+    "debugging",
+    "error-tracking",
+    "claude"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsup": "^8.0.0",
+    "typescript": "~5.8.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

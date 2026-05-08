@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import type { Session, UsageSummary } from '@/types/session';
-import { api } from '@/lib/api';
+import { api, type LiveWorkItem, type LiveProjectGroup } from '@/lib/api';
 
 interface SessionStore {
   sessions: Session[];
   activeSessions: Session[];
+  liveWork: LiveWorkItem[];
+  liveProjects: LiveProjectGroup[];
   usage: UsageSummary | null;
   loading: boolean;
   dashboardOpen: boolean;
@@ -13,6 +15,7 @@ interface SessionStore {
   // Actions
   fetchSessions: (projectId?: string) => Promise<void>;
   fetchActiveSessions: () => Promise<void>;
+  fetchLiveWork: () => Promise<void>;
   fetchUsage: () => Promise<void>;
   spawnSession: (projectId: string, name: string) => Promise<Session>;
   stopSession: (id: string) => Promise<void>;
@@ -25,12 +28,16 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>((set, _get) => ({
   sessions: [],
   activeSessions: [],
+  liveWork: [],
+  liveProjects: [],
   usage: null,
   loading: false,
   dashboardOpen: false,
 
   fetchSessions: async (projectId) => {
-    set({ loading: true });
+    // Only show loading spinner on first load (when sessions list is empty)
+    const currentSessions = _get().sessions;
+    if (currentSessions.length === 0) set({ loading: true });
     try {
       const data = await api.getSessions(projectId);
       set({ sessions: data.sessions, loading: false });
@@ -43,6 +50,15 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
     try {
       const data = await api.getActiveSessions();
       set({ activeSessions: data.sessions });
+    } catch {
+      // silent
+    }
+  },
+
+  fetchLiveWork: async () => {
+    try {
+      const data = await api.getLiveWork();
+      set({ liveWork: data.items, liveProjects: data.projects });
     } catch {
       // silent
     }
@@ -108,6 +124,7 @@ export const useSessionStore = create<SessionStore>((set, _get) => ({
         sessions: s.sessions.filter(sess => sess.id !== id),
         activeSessions: s.activeSessions.filter(sess => sess.id !== id),
       }));
+      toast.success('Session deleted');
     } catch (err) {
       toast.error('Failed to delete session', { description: err instanceof Error ? err.message : 'Unknown error' });
     }

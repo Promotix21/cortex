@@ -33,23 +33,30 @@ chatRouter.post('/:projectId', async (req, res) => {
   res.flushHeaders();
 
   try {
+    // Load conversation history to thread multi-turn context
+    const db = getDb();
+    const historyRow = db.prepare('SELECT history_json FROM ai_sessions WHERE project_id = ?').get(req.params.projectId) as any;
+    const history: { id: string; role: 'user' | 'assistant'; content: string; timestamp: string }[] = JSON.parse(historyRow?.history_json || '[]');
+    const conversationHistory = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+
     let fullResponse = '';
     for await (const event of orchestrator.processInteraction(message, {
       projectId: req.params.projectId,
-      useCLI
+      useCLI,
+      history: conversationHistory,
     })) {
       if (event.type === 'chunk') fullResponse += event.content;
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     }
 
-    // Save history (simplified for now, ideally the orchestrator handles this)
-    const db = getDb();
-    const historyRow = db.prepare('SELECT history_json FROM ai_sessions WHERE project_id = ?').get(req.params.projectId) as any;
-    let history = JSON.parse(historyRow?.history_json || '[]');
+    // Save this turn to history
     history.push({ id: uuid(), role: 'user', content: message, timestamp: new Date().toISOString() });
     if (fullResponse) {
       history.push({ id: uuid(), role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() });
     }
+
+    // Ensure session row exists then update
+    db.prepare('INSERT OR IGNORE INTO ai_sessions (id, project_id, history_json) VALUES (?, ?, ?)').run(uuid(), req.params.projectId, '[]');
     db.prepare('UPDATE ai_sessions SET history_json = ?, updated_at = ? WHERE project_id = ?')
       .run(JSON.stringify(history), new Date().toISOString(), req.params.projectId);
 

@@ -52,12 +52,20 @@ const HOME = process.env.HOME || os.homedir();
 Also: run the binary directly via `spawnSync(claudePath, ['--version'])` rather than through a shell command. Claude installs to `~/.local/share/claude/versions/<version>` (the `~/.local/bin/claude` symlink points there) — scan that directory as the last fallback in `findClaudeBinary()`.
 
 ### Sidecar Hot-Swap (no Tauri recompile needed)
-After any sidecar change, just:
+After any sidecar change (no new npm deps):
 ```bash
 cd sidecar && pnpm build
 sudo cp dist/index.js /usr/lib/Cortex/sidecar-bundle/dist/index.js
 ```
-Tauri bundles the sidecar as a resource file at `/usr/lib/Cortex/sidecar-bundle/dist/index.js`. Hot-swapping it updates the installed app instantly — no Rust recompile, no deb rebuild, no reinstall required. Restart Cortex after the copy.
+
+If you **added a new npm dependency**, also sync it to the install location:
+```bash
+sudo cp sidecar/package.json /usr/lib/Cortex/sidecar-bundle/package.json
+cd /usr/lib/Cortex/sidecar-bundle && sudo npm install --omit=dev
+```
+The install has its own `node_modules` — new packages not installed there will cause `ERR_MODULE_NOT_FOUND` on startup.
+
+Tauri bundles the sidecar at `/usr/lib/Cortex/sidecar-bundle/dist/index.js`. No Rust recompile needed. Restart Cortex after.
 
 ## Known Issues
 - Token estimates use rough 4-char heuristic, not actual API counts
@@ -65,6 +73,27 @@ Tauri bundles the sidecar as a resource file at `/usr/lib/Cortex/sidecar-bundle/
 - Session terminal input may not work if sidecar restarted (PTY reference lost)
 - Express 5 `app.use()` with routers doesn't match exact paths — use `app.all()` for exact
 - Vite warns about Google Fonts @import in CSS — non-blocking
+
+## Scheduled Sanity Checks
+
+### 2026-05-09 — Hook-consult counter check (2 weeks after install)
+The hook installer + brain panel shipped 2026-04-25. Two weeks later, verify it's actually being consulted — that's the only honest signal the work paid off.
+
+Run locally and inspect:
+```bash
+for id in $(sqlite3 ~/.cortex/cortex.db 'select id from projects'); do
+  curl -s "http://localhost:4700/api/intelligence/brain-panel/$id" \
+    | jq '{name: .project.name, hooks: .hookStats.total, byType: .hookStats.byType, observations: (.observations|length)}'
+done
+```
+
+Interpretation:
+- **total = 0 across all projects** → hooks never fired. Check `~/.claude/settings.json` for the three Cortex hook entries; check sidecar logs for inbound POSTs to `/api/intelligence/prime|hint|session-end`.
+- **prime/hint > 0 but session_end = 0** → Stop hook isn't firing. Verify `cortex-session-end.sh` exists in `~/.claude/cortex-hooks/` and is executable.
+- **Healthy** = double-digit `prime` calls and at least one `session_end` per active project per week.
+
+If healthy: move on to phase 2 (typed-observation schema migration, sqlite-vec embeddings).
+If cold: don't add features — debug the consult pipeline first.
 
 ## File Structure
 ```

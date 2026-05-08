@@ -187,21 +187,28 @@ export class BackgroundWorker extends EventEmitter {
    */
   async analyzeRecentSessions(): Promise<void> {
     const db = getDb();
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    // 7-day window: catches sessions missed during restarts or offline periods.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Find recently completed sessions not yet analyzed
+    // Find completed sessions from last 7 days that haven't been analyzed yet.
+    // Sentinel: after analysis we insert an execution_history row with action_type='analyzed'.
     const sessions = db.prepare(`
       SELECT cs.id, cs.project_id FROM claude_sessions cs
       WHERE cs.status = 'completed' AND cs.last_active > ?
       AND cs.id NOT IN (
-        SELECT DISTINCT session_id FROM execution_history WHERE session_id = cs.id LIMIT 1
+        SELECT session_id FROM execution_history WHERE action_type = 'analyzed'
       )
-      LIMIT 5
-    `).all(oneHourAgo) as { id: string; project_id: string }[];
+      LIMIT 10
+    `).all(sevenDaysAgo) as { id: string; project_id: string }[];
 
     for (const session of sessions) {
       try {
         analyzeSession(session.id, session.project_id);
+        // Mark as analyzed so we don't re-process on next tick
+        db.prepare(`
+          INSERT INTO execution_history (id, session_id, action_type, timestamp)
+          VALUES (?, ?, 'analyzed', ?)
+        `).run(uuid(), session.id, new Date().toISOString());
       } catch (err) {
         console.error(`[background-worker] Session analysis failed for ${session.id}:`, err);
       }

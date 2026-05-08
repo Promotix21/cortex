@@ -680,6 +680,7 @@ Without an orchestrator:
 | **Tool Router** | AI request | Routed to Claude CLI, Claude SDK, or OpenAI API based on config | Every AI call |
 | **Reference Injector** | Project's pinned tool versions | Version-matched commands added to context | Context assembly |
 | **Memory Selector** | All available intelligence data + token budget | Prioritized subset that fits context window | Context assembly |
+| **OpenRouter Fallback** | Budget status + OpenRouter API key | Automatic switch to OpenRouter when Claude Max limit is hit | Every AI interaction |
 | **Execution Policy** | Proposed AI action | Allow / Restrict / Require Approval | Before every execution |
 
 ### 9.4 MVP Scope

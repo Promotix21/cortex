@@ -33,11 +33,74 @@ interface ManagedSession {
   lastActive: string;
   terminalId: string | null;
   inputBuffer: string;  // accumulates keystrokes until Enter
+  flushedToDaily: boolean; // Prevent double-counting in usage_daily
 }
 
 // Rough token estimation: ~4 chars per token
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+/**
+ * Parse token counts from Claude Code terminal output.
+ * Returns { tokens, costUsd } when found, null otherwise.
+ *
+ * Patterns Claude Code emits:
+ *  "This session is 5h 43m old and 380k tokens."  → cumulative session total
+ *  "↓711tokens"  or  "↓ 1,234 tokens"             → per-response output tokens
+ *  "Cost: $0.042"                                  → cost per response
+ */
+function parseTokensFromOutput(data: string): { tokens: number; costUsd: number } | null {
+  // Strip ANSI before matching
+  const clean = data
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/\x1b./g, '');
+
+  let tokens = 0;
+  let costUsd = 0;
+
+  // "This session is X old and 380k tokens" — most reliable cumulative count
+  const sessionTotalMatch = clean.match(/\bthis session is .+? and ([\d.,]+)(k?)\s*tokens/i);
+  if (sessionTotalMatch) {
+    const n = parseFloat(sessionTotalMatch[1].replace(/,/g, ''));
+    tokens = sessionTotalMatch[2] === 'k' ? Math.round(n * 1000) : Math.round(n);
+  }
+
+  // "↓711tokens" or "↓ 1,234 tokens" — per-response streamed output count
+  if (!tokens) {
+    const streamMatch = clean.match(/↓\s*([\d,]+)\s*tokens?/i);
+    if (streamMatch) {
+      tokens = parseInt(streamMatch[1].replace(/,/g, ''), 10);
+    }
+  }
+
+  // "Cost: $0.042" or "$0.042"
+  const costMatch = clean.match(/cost:\s*\$([\d.]+)/i) || clean.match(/\$([\d]{1,3}\.[\d]{2,4})\b/);
+  if (costMatch) {
+    costUsd = parseFloat(costMatch[1]);
+  }
+
+  return tokens > 0 || costUsd > 0 ? { tokens, costUsd } : null;
+}
+
+/**
+ * Strip ANSI/VT100 escape sequences and terminal control codes from raw PTY input.
+ * Returns null if the cleaned string has no meaningful text content.
+ */
+function stripAnsiAndValidate(raw: string): string | null {
+  const cleaned = raw
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')   // CSI sequences: ESC [ ... letter
+    .replace(/\x1b\][^\x07]*\x07/g, '')         // OSC sequences: ESC ] ... BEL
+    .replace(/\x1b[()][AB012]/g, '')             // Charset designation
+    .replace(/\x1b./g, '')                       // Any remaining ESC + char
+    .replace(/\[200~/g, '').replace(/\[201~/g, '') // Bracketed paste markers
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '') // Non-printable control chars
+    .trim();
+
+  // Reject if empty or contains no alphanumeric characters (pure symbols/noise)
+  if (!cleaned || cleaned.length < 2 || !/[a-zA-Z0-9]/.test(cleaned)) return null;
+  return cleaned;
 }
 
 export class SessionManager extends EventEmitter {
@@ -91,6 +154,7 @@ export class SessionManager extends EventEmitter {
       lastActive: now,
       terminalId: null,
       inputBuffer: '',
+      flushedToDaily: false,
     };
 
     if (ptyProcess) {
@@ -162,18 +226,19 @@ export class SessionManager extends EventEmitter {
       const promptText = session.inputBuffer.replace(/[\r\n]+$/, '').trim();
       session.inputBuffer = '';
 
-      // Skip empty prompts and control sequences
-      if (!promptText || promptText.length < 2) return;
+      // Skip empty prompts, control sequences, and pure ANSI noise
+      const cleanPrompt = stripAnsiAndValidate(promptText);
+      if (!cleanPrompt) return;
 
       session.promptCount++;
-      session.tokenEstimateInput += estimateTokens(promptText);
+      session.tokenEstimateInput += estimateTokens(cleanPrompt);
 
       // Log to session_history
       const db = getDb();
       db.prepare(`
         INSERT INTO session_history (id, session_id, prompt_text, timestamp)
         VALUES (?, ?, ?, ?)
-      `).run(uuid(), session.id, promptText, session.lastActive);
+      `).run(uuid(), session.id, cleanPrompt, session.lastActive);
 
       this.updateMetrics(session);
       this.emit('session:prompt', { sessionId: session.id, promptText });
@@ -200,6 +265,25 @@ export class SessionManager extends EventEmitter {
 
     if (session.outputBuffer.length > 102400) {
       session.outputBuffer = session.outputBuffer.slice(-51200);
+    }
+
+    // Parse actual token counts from Claude Code output
+    const parsed = parseTokensFromOutput(data);
+    if (parsed) {
+      const db = getDb();
+      // "session total" pattern gives cumulative — store directly
+      // "per-response" pattern gives incremental — accumulate
+      if (parsed.tokens > 100) { // session total is always large
+        db.prepare(`
+          UPDATE session_metrics SET tokens_actual = MAX(tokens_actual, ?), cost_usd = cost_usd + ?, updated_at = ?
+          WHERE session_id = ?
+        `).run(parsed.tokens, parsed.costUsd, session.lastActive, session.id);
+      } else {
+        db.prepare(`
+          UPDATE session_metrics SET tokens_actual = tokens_actual + ?, cost_usd = cost_usd + ?, updated_at = ?
+          WHERE session_id = ?
+        `).run(parsed.tokens, parsed.costUsd, session.lastActive, session.id);
+      }
     }
   }
 
@@ -238,16 +322,17 @@ export class SessionManager extends EventEmitter {
       const promptText = session.inputBuffer.replace(/[\r\n]+$/, '').trim();
       session.inputBuffer = '';
 
-      if (promptText && promptText.length >= 2) {
+      const cleanPrompt2 = stripAnsiAndValidate(promptText);
+      if (cleanPrompt2) {
         session.promptCount++;
-        session.tokenEstimateInput += estimateTokens(promptText);
+        session.tokenEstimateInput += estimateTokens(cleanPrompt2);
 
         // Log to session_history
         const db = getDb();
         db.prepare(`
           INSERT INTO session_history (id, session_id, prompt_text, timestamp)
           VALUES (?, ?, ?, ?)
-        `).run(uuid(), sessionId, promptText, session.lastActive);
+        `).run(uuid(), sessionId, cleanPrompt2, session.lastActive);
 
         // Update metrics
         this.updateMetrics(session);
@@ -324,9 +409,6 @@ export class SessionManager extends EventEmitter {
   private saveSessionOutput(session: ManagedSession): void {
     if (!session.outputBuffer) return;
     const db = getDb();
-    try {
-      db.exec('ALTER TABLE claude_sessions ADD COLUMN session_output TEXT DEFAULT NULL');
-    } catch { /* column may already exist */ }
 
     // Save last 50KB of output (strip ANSI escape codes for readability)
     const cleanOutput = session.outputBuffer
@@ -348,7 +430,8 @@ export class SessionManager extends EventEmitter {
       // Check DB for completed sessions
       const db = getDb();
       const row = db.prepare(`
-        SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output
+        SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output,
+               sm.tokens_actual, sm.cost_usd
         FROM claude_sessions cs
         LEFT JOIN session_metrics sm ON sm.session_id = cs.id
         WHERE cs.id = ?
@@ -394,22 +477,24 @@ export class SessionManager extends EventEmitter {
   }
 
   /**
-   * Get all active (in-memory) sessions
+   * Get all active (in-memory) sessions — only running/idle, not completed
    */
   getActiveSessions(): SessionInfo[] {
-    return Array.from(this.sessions.values()).map(s => ({
-      id: s.id,
-      projectId: s.projectId,
-      name: s.name,
-      status: s.status,
-      startedAt: s.startedAt,
-      lastActive: s.lastActive,
-      pid: s.pty?.pid ?? null,
-      promptCount: s.promptCount,
-      tokenUsageInput: s.tokenEstimateInput,
-      tokenUsageOutput: s.tokenEstimateOutput,
-      terminalId: s.terminalId,
-    }));
+    return Array.from(this.sessions.values())
+      .filter(s => s.status === 'running' || s.status === 'idle')
+      .map(s => ({
+        id: s.id,
+        projectId: s.projectId,
+        name: s.name,
+        status: s.status,
+        startedAt: s.startedAt,
+        lastActive: s.lastActive,
+        pid: s.pty?.pid ?? null,
+        promptCount: s.promptCount,
+        tokenUsageInput: s.tokenEstimateInput,
+        tokenUsageOutput: s.tokenEstimateOutput,
+        terminalId: s.terminalId,
+      }));
   }
 
   /**
@@ -418,7 +503,8 @@ export class SessionManager extends EventEmitter {
   getAllSessions(projectId?: string): SessionInfo[] {
     const db = getDb();
     let query = `
-      SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output
+      SELECT cs.*, sm.prompt_count, sm.token_usage_input, sm.token_usage_output,
+             sm.tokens_actual, sm.cost_usd
       FROM claude_sessions cs
       LEFT JOIN session_metrics sm ON sm.session_id = cs.id
     `;
@@ -482,6 +568,66 @@ export class SessionManager extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session) return '';
     return session.outputBuffer.slice(-lastN);
+  }
+
+  /**
+   * Redact specific string values from every live session's in-memory PTY buffer
+   * AND from the session_output column in the DB. Called immediately after
+   * save_credential so a credential the user pasted into a terminal is wiped from
+   * scrollback as fast as possible.
+   *
+   * Caveat: cannot retroactively scrub the user's terminal emulator scrollback —
+   * if you scroll back inside the running Claude TUI you may still see the value.
+   * It's wiped from Cortex's persisted state, not from the OS-level pty stream
+   * already rendered to the WebView.
+   *
+   * Returns the number of replacements made across all live + DB rows.
+   */
+  redactStringsEverywhere(values: string[]): number {
+    const meaningful = values
+      .map(v => (typeof v === 'string' ? v.trim() : ''))
+      .filter(v => v.length >= 4); // skip empty / 1-3 char "values" — too many false positives
+    if (meaningful.length === 0) return 0;
+
+    let replacements = 0;
+    const replaceAll = (haystack: string): string => {
+      let out = haystack;
+      for (const v of meaningful) {
+        if (!v) continue;
+        // Plain split/join to avoid regex-escaping the credential.
+        const parts = out.split(v);
+        if (parts.length > 1) {
+          replacements += parts.length - 1;
+          out = parts.join('[redacted]');
+        }
+      }
+      return out;
+    };
+
+    // 1) live PTY buffers in memory
+    for (const session of this.sessions.values()) {
+      if (!session.outputBuffer) continue;
+      session.outputBuffer = replaceAll(session.outputBuffer);
+    }
+
+    // 2) persisted session_output rows
+    try {
+      const db = getDb();
+      const rows = db
+        .prepare("SELECT id, session_output FROM claude_sessions WHERE session_output IS NOT NULL AND session_output != ''")
+        .all() as Array<{ id: string; session_output: string }>;
+      const update = db.prepare('UPDATE claude_sessions SET session_output = ? WHERE id = ?');
+      for (const row of rows) {
+        const cleaned = replaceAll(row.session_output);
+        if (cleaned !== row.session_output) {
+          update.run(cleaned, row.id);
+        }
+      }
+    } catch (err: unknown) {
+      console.warn('[redact] DB scrub failed:', err instanceof Error ? err.message : err);
+    }
+
+    return replacements;
   }
 
   /**
@@ -584,6 +730,8 @@ export class SessionManager extends EventEmitter {
    * Flush session usage to daily aggregate
    */
   private updateDailyUsage(session: ManagedSession): void {
+    if (session.flushedToDaily) return;
+    
     const db = getDb();
     const date = new Date().toISOString().split('T')[0];
     const tokenTotal = session.tokenEstimateInput + session.tokenEstimateOutput;
@@ -606,6 +754,8 @@ export class SessionManager extends EventEmitter {
         VALUES (?, ?, ?, ?, ?, 1)
       `).run(uuid(), session.projectId, date, session.promptCount, tokenTotal);
     }
+
+    session.flushedToDaily = true;
   }
 
   /**
