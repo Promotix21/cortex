@@ -22,8 +22,11 @@ const MACOS_CANDIDATES = [
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
 ];
 const WIN_CANDIDATES = [
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+  `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
+  `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe`,
+  `${process.env['PROGRAMFILES(X86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
+  `${process.env.PROGRAMFILES}\\Microsoft\\Edge\\Application\\msedge.exe`,
 ];
 
 export function findChromiumBinary(): string | null {
@@ -33,10 +36,11 @@ export function findChromiumBinary(): string | null {
   const platform = os.platform();
   const candidates = platform === 'darwin' ? MACOS_CANDIDATES : platform === 'win32' ? WIN_CANDIDATES : LINUX_CANDIDATES;
   for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+    if (p && fs.existsSync(p)) return p;
   }
   return null;
 }
+
 
 export interface LaunchOptions {
   port?: number;

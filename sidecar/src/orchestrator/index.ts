@@ -29,6 +29,7 @@ export interface InteractionOptions {
   model?: string;
   useCLI?: boolean;
   history?: ConversationTurn[];
+  fileContext?: string;
 }
 
 /**
@@ -146,7 +147,7 @@ export class AIOrchestrator {
 
     // 4. System Prompt Construction
     const brain = getProjectBrain(options.projectId);
-    const systemPrompt = this.buildSystemPrompt(brain, contextContent);
+    const systemPrompt = this.buildSystemPrompt(brain, contextContent, options.fileContext);
 
     // 5. Budget + Route selection
     const budget = canSpawnSession();
@@ -224,15 +225,25 @@ export class AIOrchestrator {
     return { status: 'allow' };
   }
 
-  private buildSystemPrompt(brain: any, context: string): string {
-    return `You are Cortex, an expert AI development assistant.
-Project Context:
-${context}
+  private buildSystemPrompt(brain: any, context: string, fileContext?: string): string {
+    const parts = [
+      'You are Cortex, an expert AI development assistant embedded in the user\'s project.',
+      'You have access to the actual project source files listed below — read them carefully before answering.',
+      'Never say you cannot read files. Never make up file contents. If a file is not provided, say so.',
+      '',
+      '## Project Intelligence',
+      context,
+    ];
 
-Additional Brain Data:
-${brain?.conventions ? `Conventions:\n${brain.conventions}` : ''}
+    if (brain?.conventions) {
+      parts.push('', '## Conventions', brain.conventions);
+    }
 
-Always provide precise, production-ready code. Follow the project conventions strictly.`;
+    if (fileContext) {
+      parts.push('', fileContext);
+    }
+
+    return parts.join('\n');
   }
 
   private async *routeToAnthropic(prompt: string, system: string, options: InteractionOptions) {

@@ -59,42 +59,66 @@ export async function claudeAnalyze(prompt: string, options?: { timeoutMs?: numb
 }
 
 /**
+ * Check if a command exists in the system PATH.
+ */
+export function shellExists(cmd: string): boolean {
+  try {
+    const isWin = process.platform === 'win32';
+    const checkCmd = isWin ? `where.exe ${cmd}` : `command -v ${cmd}`;
+    execSync(checkCmd, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Find the claude binary path using multiple strategies.
  * Returns the path string if found, null otherwise.
  */
 export function findClaudeBinary(): string | null {
-  // 1. Try login shell which command (picks up nvm, user PATH)
+  const isWin = process.platform === 'win32';
+
+  // 1. Try which/where
   try {
-    const shell = process.env.SHELL || '/bin/bash';
-    const result = execSync(`${shell} -lc 'which claude 2>/dev/null'`, {
-      encoding: 'utf-8',
-      timeout: 8000,
-      env: { ...process.env, HOME },
-    }).trim();
-    if (result && fs.existsSync(result)) return result;
+    const checkCmd = isWin ? 'where.exe claude' : 'command -v claude';
+    const result = execSync(checkCmd, { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (result) {
+      // where.exe can return multiple lines
+      const first = result.split('\n')[0].trim();
+      if (fs.existsSync(first)) return first;
+    }
   } catch { /* fall through */ }
 
   // 2. Direct filesystem scan
-  const candidates = [
+  const candidates = isWin ? [
+    `${process.env.APPDATA}\\npm\\claude.cmd`,
+    `${process.env.USERPROFILE}\\AppData\\Roaming\\npm\\claude.cmd`,
+    'C:\\Program Files\\nodejs\\claude.cmd',
+  ] : [
     `${HOME}/.local/bin/claude`,
     `${HOME}/.npm-global/bin/claude`,
     '/usr/local/bin/claude',
     '/usr/bin/claude',
   ];
+
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
 
-  // 3. Scan ~/.nvm/versions/node/*/bin/claude
-  const nvmDir = `${HOME}/.nvm/versions/node`;
-  if (fs.existsSync(nvmDir)) {
-    try {
-      for (const ver of fs.readdirSync(nvmDir)) {
-        const p = `${nvmDir}/${ver}/bin/claude`;
-        if (fs.existsSync(p)) return p;
-      }
-    } catch { /* ignore */ }
+  // 3. Scan ~/.nvm/versions/node/*/bin/claude (Linux only)
+  if (!isWin) {
+    const nvmDir = `${HOME}/.nvm/versions/node`;
+    if (fs.existsSync(nvmDir)) {
+      try {
+        for (const ver of fs.readdirSync(nvmDir)) {
+          const p = `${nvmDir}/${ver}/bin/claude`;
+          if (fs.existsSync(p)) return p;
+        }
+      } catch { /* ignore */ }
+    }
   }
 
   return null;
 }
+

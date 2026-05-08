@@ -2,6 +2,7 @@ import * as pty from 'node-pty';
 import { EventEmitter } from 'events';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
+import { shellExists } from '../utils/binaries.js';
 
 export type TerminalType = 'shell' | 'ai_session' | 'dev_server' | 'git';
 export type TerminalStatus = 'running' | 'stopped' | 'error';
@@ -50,10 +51,18 @@ export class TerminalManager extends EventEmitter {
   ): TerminalInfo {
     const id = uuid();
     const now = new Date().toISOString();
-    const shell = process.env.SHELL || '/bin/bash';
+    const isWin = process.platform === 'win32';
+    
+    // Select appropriate shell and args based on OS
+    let shell = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash');
+    let args: string[] = isWin ? ['-NoProfile'] : ['-l'];
 
-    // Use login shell to ensure full env (PATH, locale, etc.)
-    const args: string[] = ['-l'];
+    // Fallback for Windows if powershell is missing
+    if (isWin && !shellExists(shell)) {
+      shell = 'cmd.exe';
+      args = [];
+    }
+
     // Build a clean env — filter out undefined values and NO_COLOR from process.env,
     // then apply terminal color settings. In production (Tauri desktop), process.env
     // is sparse, so we must ensure all color-critical vars are explicitly set.
@@ -77,11 +86,12 @@ export class TerminalManager extends EventEmitter {
         TERM_PROGRAM: 'cortex',
         LANG: process.env.LANG || 'en_US.UTF-8',
         LC_ALL: process.env.LC_ALL || '',
-        HOME: process.env.HOME || '',
+        HOME: process.env.HOME || process.env.USERPROFILE || '',
         CORTEX_TERMINAL_ID: id,
         CORTEX_PROJECT_ID: projectId,
       },
     });
+
 
     const terminal: ManagedTerminal = {
       id,

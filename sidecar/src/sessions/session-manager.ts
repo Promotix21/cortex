@@ -124,7 +124,8 @@ export class SessionManager extends EventEmitter {
     // Only spawn our own PTY if we're managing claude directly.
     // When skipClaude=true, the terminal manager owns the PTY — we just track metrics.
     if (!skipClaude) {
-      const shell = process.env.SHELL || '/bin/bash';
+      const isWin = process.platform === 'win32';
+      const shell = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash');
       ptyProcess = pty.spawn(shell, [], {
         name: 'xterm-256color',
         cols: 120,

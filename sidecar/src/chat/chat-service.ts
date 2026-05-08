@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/index.js';
+import { findClaudeBinary } from '../utils/binaries.js';
 import { getMasterpieceContext } from '../intelligence/masterpiece-context.js';
 
 export interface ChatMessage {
@@ -200,11 +201,18 @@ export async function* sendMessage(
   const fullPrompt = contextParts.join('\n');
 
   try {
-    // Use login shell to ensure claude is in PATH (nvm etc.)
-    const shell = process.env.SHELL || '/bin/bash';
-    const claude = spawn(shell, ['-lc', `claude -p ${JSON.stringify(fullPrompt)}`], {
+    const claudePath = findClaudeBinary();
+    if (!claudePath) {
+      throw new Error('Claude CLI not found in PATH');
+    }
+
+    // Execute Claude directly
+    const claude = spawn(claudePath, ['-p', fullPrompt], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { 
+        ...process.env,
+        HOME: process.platform === 'win32' ? process.env.USERPROFILE : process.env.HOME
+      },
     });
 
     let fullResponse = '';

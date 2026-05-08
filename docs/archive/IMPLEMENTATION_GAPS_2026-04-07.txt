@@ -1,0 +1,42 @@
+Implementation gaps found in Cortex app review
+Date: 2026-04-07
+
+1. Frontend build currently fails typecheck.
+- src/components/CommandPalette.tsx imports useCallback but does not use it.
+- src/components/CommandPalette.tsx builds the results object with actions specified twice, which triggers TS2783.
+- Result: the app does not pass tsc --noEmit.
+
+2. Completed session output retrieval has a backend bug.
+- sidecar/src/routes/sessions.ts uses db.prepare(...) inside GET /api/sessions/:id/output.
+- That handler never defines db before using it.
+- Result: fetching saved output for completed sessions can throw instead of returning persisted output.
+
+3. Chat streaming parser is incomplete.
+- src/stores/chat-store.ts parses SSE by splitting each network read on newline.
+- It does not preserve partial lines across reads.
+- Result: streamed assistant responses can be truncated or malformed when JSON event boundaries do not align with read boundaries.
+
+4. Remotion Studio is only partially implemented.
+- src/components/remotion/RemotionStudio.tsx stores ideas and discussion only in localStorage.
+- The discuss tab uses generateAIResponse(...), which is a placeholder and not a real model-backed flow.
+- The render request only sends projectId, not storyboard/scenes/style data.
+- sidecar/src/intelligence/remotion-renderer.ts renders generic project-brain props, not the approved studio content.
+- Result: the feature is a prototype UI, not an end-to-end production implementation.
+
+5. "Clear All Data" is exposed but not implemented.
+- src/components/settings/SettingsPanel.tsx opens a destructive confirmation dialog.
+- executeClearData() only closes the dialog and contains a TODO comment.
+- Result: the UI advertises a destructive system action that does nothing.
+
+6. Command palette "New Session" action is misleading.
+- src/components/CommandPalette.tsx adds a quick action labeled as starting a named Claude Code session.
+- Its handler only navigates to the terminal activity.
+- Result: the shortcut does not perform the action it claims to perform.
+
+7. Sidecar tests are not currently validated in this environment.
+- pnpm -C sidecar test failed under sandbox restrictions with loopback connect EPERM errors.
+- Result: automated sidecar verification could not be completed from this environment, so runtime confidence depends on code inspection more than test execution here.
+
+Verification notes
+- Frontend typecheck command run: pnpm exec tsc --noEmit
+- Sidecar tests attempted: pnpm -C sidecar test

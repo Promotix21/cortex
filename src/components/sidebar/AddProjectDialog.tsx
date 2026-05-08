@@ -99,7 +99,7 @@ export function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                 type="text"
                 value={projectPath}
                 onChange={(e) => setProjectPath(e.target.value)}
-                placeholder={isTauri ? 'Select a folder...' : '/home/user/projects/my-project'}
+                placeholder={isTauri ? 'Select a folder...' : (navigator.platform.includes('Win') ? 'C:\\Users\\user\\projects\\my-project' : '/home/user/projects/my-project')}
                 className="flex-1 rounded-xl outline-none"
                 style={{
                   padding: '12px 16px',

@@ -22,8 +22,15 @@ interface ImportResult {
 /**
  * Map a Claude project directory name back to a Cortex project path.
  * Claude uses: -home-user-projects-name → /home/user/projects/name
+ * On Windows, it uses: C-Users-Name-Project → C:\Users\Name\Project
  */
 function claudeDirToPath(dirName: string): string {
+  if (process.platform === 'win32') {
+    // If it starts with a drive letter (e.g., C-...)
+    if (/^[A-Z]-/.test(dirName)) {
+      return dirName.slice(0, 1) + ':\\' + dirName.slice(2).replace(/-/g, '\\');
+    }
+  }
   return dirName.replace(/^-/, '/').replace(/-/g, '/');
 }
 
@@ -41,8 +48,17 @@ export function importClaudeSessions(projectId: string, projectPath: string): Im
 
   const db = getDb();
 
-  // Find the matching Claude project directory
-  const claudeDirName = projectPath.replace(/\//g, '-').replace(/^-/, '-');
+  // Create the slug Claude uses for the project directory
+  let claudeDirName: string;
+  if (process.platform === 'win32') {
+    // Windows: C:\Path\To → C-Path-To
+    claudeDirName = projectPath.replace(/\\/g, '-').replace(/\//g, '-').replace(/:/g, '');
+  } else {
+    // Unix: /home/user/proj → -home-user-proj
+    claudeDirName = projectPath.replace(/\//g, '-').replace(/^-/, '-');
+    if (!claudeDirName.startsWith('-')) claudeDirName = '-' + claudeDirName;
+  }
+
   let claudeDir = path.join(CLAUDE_PROJECTS_DIR, claudeDirName);
 
   // Try exact match first, then fuzzy

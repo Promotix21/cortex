@@ -6,45 +6,79 @@ use tauri::Manager;
 
 struct SidecarProcess(Mutex<Option<Child>>);
 
-/// Resolve the user's full login-shell environment so the sidecar
-/// (and PTYs it spawns) inherit TERM, COLORTERM, LANG, PATH, etc.
-/// Desktop-launched apps have a minimal environment — this restores it.
+/// Resolve the user's full login-shell environment.
+/// On Linux/macOS, it uses the login shell to restore the full environment.
+/// On Windows, it returns the current process environment as it is usually sufficient.
 fn resolve_shell_env() -> std::collections::HashMap<String, String> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-    let output = Command::new(&shell)
-        .args(["-lc", "env"])
-        .output()
-        .ok();
-
     let mut env_map = std::collections::HashMap::new();
-    if let Some(out) = output {
-        let env_str = String::from_utf8_lossy(&out.stdout);
-        for line in env_str.lines() {
-            if let Some((key, val)) = line.split_once('=') {
-                // Skip vars that would interfere with the sidecar process itself
-                if !matches!(key, "_" | "SHLVL" | "PWD" | "OLDPWD") {
-                    env_map.insert(key.to_string(), val.to_string());
+
+    #[cfg(not(windows))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+        let output = Command::new(&shell)
+            .args(["-lc", "env"])
+            .output()
+            .ok();
+
+        if let Some(out) = output {
+            let env_str = String::from_utf8_lossy(&out.stdout);
+            for line in env_str.lines() {
+                if let Some((key, val)) = line.split_once('=') {
+                    if !matches!(key, "_" | "SHLVL" | "PWD" | "OLDPWD") {
+                        env_map.insert(key.to_string(), val.to_string());
+                    }
                 }
             }
         }
     }
+
+    #[cfg(windows)]
+    {
+        for (key, val) in std::env::vars() {
+            env_map.insert(key, val);
+        }
+    }
+
     env_map
 }
 
-/// Kill any process currently holding port 4700 (orphaned sidecar from a previous session).
-/// Uses `fuser` which is available on all Linux systems.
+/// Kill any process currently holding port 4700.
 fn kill_orphan_sidecar() {
-    // Kill on both IPv4 and IPv6 (sidecar now listens dual-stack)
-    let _ = Command::new("fuser")
-        .args(["-k", "-TERM", "4700/tcp"])
-        .output();
+    #[cfg(not(windows))]
+    {
+        // Use fuser on Linux/macOS
+        let _ = Command::new("fuser")
+            .args(["-k", "-TERM", "4700/tcp"])
+            .output();
+    }
+
+    #[cfg(windows)]
+    {
+        // On Windows, use netstat to find PID and taskkill to kill it
+        let output = Command::new("cmd")
+            .args(["/C", "netstat -ano | findstr :4700"])
+            .output()
+            .ok();
+
+        if let Some(out) = output {
+            let res = String::from_utf8_lossy(&out.stdout);
+            for line in res.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if let Some(pid) = parts.last() {
+                    let _ = Command::new("taskkill")
+                        .args(["/F", "/PID", pid])
+                        .output();
+                }
+            }
+        }
+    }
+
     // Give the OS a moment to release the port
     std::thread::sleep(Duration::from_millis(500));
 }
 
 fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Kill any orphaned sidecar from a previous session before spawning a new one.
-    // Without this, the new sidecar gets EADDRINUSE and silently fails.
     kill_orphan_sidecar();
 
     let resource_dir = app.path().resource_dir()?;
@@ -58,16 +92,13 @@ fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // Spawn node with the sidecar script; set CWD to sidecar dir so
-    // native addons in node_modules resolve correctly.
-    // Desktop-launched apps have a minimal environment, so we resolve
-    // the user's full login-shell env and pass it to the sidecar.
-    // This ensures PTYs spawned by the sidecar have TERM, COLORTERM,
-    // LANG, PATH, etc. — making Claude Code render colors properly.
     let sidecar_dir = resource_dir.join("sidecar-bundle");
     let shell_env = resolve_shell_env();
 
-    let mut cmd = Command::new("node");
+    // Use "node" on Unix, "node.exe" on Windows
+    let node_cmd = if cfg!(windows) { "node.exe" } else { "node" };
+
+    let mut cmd = Command::new(node_cmd);
     cmd.arg(&sidecar_script)
         .current_dir(&sidecar_dir)
         .env_clear()
@@ -79,11 +110,22 @@ fn spawn_sidecar(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit());
 
+    #[cfg(windows)]
+    {
+        // On Windows, Command::new doesn't automatically look in PATH if it's cleared
+        // but we are setting envs(&shell_env) which should contain PATH.
+        // We also want to hide the console window for the sidecar process.
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     if let Some(path) = shell_env.get("PATH") {
         println!("[cortex] Sidecar PATH: {path}");
     }
 
     let child = cmd.spawn()?;
+
 
     println!(
         "[cortex] Sidecar spawned (pid {}) from {}",

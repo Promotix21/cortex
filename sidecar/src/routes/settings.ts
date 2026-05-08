@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { getDb } from '../db/index.js';
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
+import { findClaudeBinary } from '../utils/binaries.js';
 
 export const settingsRouter: ReturnType<typeof Router> = Router();
 
@@ -15,62 +16,7 @@ function ensureTable(): void {
 // IMPORTANT: Specific routes MUST come before parameterized routes in Express 5
 
 // Resolve the true home directory — os.homedir() reads /etc/passwd, immune to missing HOME env
-const HOME = process.env.HOME || os.homedir();
-
-/**
- * Find the claude binary path using multiple strategies.
- * Returns the path string if found, null otherwise.
- * Robust against Tauri launching with a stripped environment.
- */
-function findClaudeBinary(): string | null {
-  // 1. Try login shell which command (picks up nvm, user PATH)
-  try {
-    const shell = process.env.SHELL || '/bin/bash';
-    const result = execSync(`${shell} -lc 'which claude 2>/dev/null'`, {
-      encoding: 'utf-8',
-      timeout: 8000,
-      env: { ...process.env, HOME },
-    }).trim();
-    if (result && fs.existsSync(result)) return result;
-  } catch { /* fall through */ }
-
-  // 2. Direct filesystem scan — covers all known install locations
-  const candidates = [
-    `${HOME}/.local/bin/claude`,
-    `${HOME}/.npm-global/bin/claude`,
-    '/usr/local/bin/claude',
-    '/usr/bin/claude',
-    `${HOME}/.nvm/versions/node/v20.0.0/bin/claude`,
-    `${HOME}/.nvm/versions/node/v22.0.0/bin/claude`,
-    `${HOME}/.nvm/versions/node/v23.0.0/bin/claude`,
-    `${HOME}/.nvm/versions/node/v24.0.0/bin/claude`,
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-
-  // 3. Scan ~/.nvm/versions/node/*/bin/claude (any node version)
-  const nvmDir = `${HOME}/.nvm/versions/node`;
-  if (fs.existsSync(nvmDir)) {
-    for (const ver of fs.readdirSync(nvmDir)) {
-      const p = `${nvmDir}/${ver}/bin/claude`;
-      if (fs.existsSync(p)) return p;
-    }
-  }
-
-  // 4. Scan ~/.local/share/claude/versions/ (claude's own install dir)
-  const claudeVersions = `${HOME}/.local/share/claude/versions`;
-  if (fs.existsSync(claudeVersions)) {
-    const versions = fs.readdirSync(claudeVersions).sort().reverse();
-    if (versions.length > 0) {
-      // The binary is the versioned directory itself (executable)
-      const p = `${claudeVersions}/${versions[0]}`;
-      if (fs.existsSync(p)) return p;
-    }
-  }
-
-  return null;
-}
+const HOME = process.platform === 'win32' ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
 
 // GET /api/settings/claude-status — check Claude CLI status
 settingsRouter.get('/claude-status', (_req, res) => {
