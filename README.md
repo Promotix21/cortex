@@ -20,7 +20,7 @@
 <p align="center">
   <a href="#-quick-start"><img src="https://img.shields.io/badge/status-alpha-1D9E75?style=flat-square" alt="Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
-  <a href="#-tech-stack"><img src="https://img.shields.io/badge/platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Platform"></a>
+  <a href="#-tech-stack"><img src="https://img.shields.io/badge/platform-Linux_%7C_Windows-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Platform"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/built_with-Tauri_2_%2B_React_19-7C5CFC?style=flat-square" alt="Stack"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/AI-Multi--Provider-D97706?style=flat-square" alt="AI"></a>
   <a href="#-tech-stack"><img src="https://img.shields.io/badge/database-SQLite_(local)-003B57?style=flat-square" alt="DB"></a>
@@ -38,7 +38,7 @@
 
 ## TL;DR
 
-Cortex is a Linux desktop application that serves as the mission control for AI-assisted development. It wraps your AI interactions in a layer of persistent project intelligence and multi-model orchestration.
+Cortex is a cross-platform (Linux & Windows) desktop application that serves as the mission control for AI-assisted development. It wraps your AI interactions in a layer of persistent project intelligence and multi-model orchestration.
 
 - **Named AI Sessions** — Move from anonymous terminals to named identities (`refactor-auth`).
 - **Multi-Provider Orchestration** — Seamlessly switch between **Anthropic**, **AWS Bedrock** (Claude 4.6), and **Mistral** (Devstral 2 123B).
@@ -48,14 +48,15 @@ Cortex is a Linux desktop application that serves as the mission control for AI-
 
 ---
 
-## 🆕 What's New: The Orchestration Update
+## 🆕 What's New: Cross-Platform Orchestration
 
 We just shipped a massive update to the Cortex intelligence layer:
 
+*   **Initial Windows Support:** Cortex now runs natively on Windows with PowerShell/CMD terminal support and automatic Claude CLI discovery.
 *   **AWS Bedrock Native:** High-capacity access to Claude 3.5 Sonnet and Claude 4.6 via AWS Bedrock.
 *   **Devstral Support:** Mistral's massive 123B model (Devstral 2) integrated for high-logic reasoning tasks.
 *   **Conversation Threading:** No more cold-starts. Cortex now threads the last 20 turns of history into every message.
-*   **Context Explorer:** AI can now see your full project directory structure (via the `file_index` table) to understand repo-wide relationships.
+*   **Context Explorer:** AI can now see your full project directory structure (via the `file_index` table).
 
 ---
 
@@ -109,6 +110,7 @@ Cortex is built for performance and security using a sidecar architecture.
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                           TAURI SHELL (Rust)                          │
+│                          Linux / Windows                              │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │   ┌───────────────────────┐                  ┌──────────────────────┐  │
@@ -138,7 +140,7 @@ We are building the open-source infrastructure for the AI-assisted era. Cortex i
 - **MemPalace UI:** Help us build the visual room explorer and decision timeline.
 - **New Providers:** Add support for OpenRouter, Ollama, or Azure OpenAI.
 - **Terminal UX:** Optimizing `xterm.js` for high-throughput AI logs.
-- **macOS/Windows support:** We are Linux-first but want to expand.
+- **macOS support:** We are targeting macOS next!
 
 Check out [CLAUDE.md](CLAUDE.md) for our coding standards.
 
