@@ -11,8 +11,9 @@ import { shadowBus } from './event-bus.js';
 import { analyzePrompt, buildReflection } from './plan.js';
 import { computeImpactForFiles } from '../intelligence/impact-graph.js';
 import { searchCodebase, formatSearchResults } from '../intelligence/search-engine.js';
-import { getProjectStructureSummary, indexProject } from '../intelligence/file-indexer.js';
+import { getProjectStructureSummary } from '../intelligence/file-indexer.js';
 import { getMasterpieceContext } from '../intelligence/masterpiece-context.js';
+import { TOOLS_LIST, handleToolCall } from '../mcp/mcp-server.js';
 
 export const BEDROCK_SONNET = 'us.anthropic.claude-sonnet-4-6';
 export const BEDROCK_OPUS = 'us.anthropic.claude-opus-4-7';
@@ -34,13 +35,14 @@ export interface InteractionOptions {
   useCLI?: boolean;
   history?: ConversationTurn[];
   fileContext?: string;
+  toolResults?: any[];
 }
 
 /**
  * AI Orchestrator
  *
  * The central coordination layer for all AI interactions.
- * Handles context assembly, policy checking, and provider routing.
+ * Now supports multi-provider orchestration and autonomous tool loops.
  */
 export class AIOrchestrator {
   private static instance: AIOrchestrator;
@@ -107,6 +109,7 @@ export class AIOrchestrator {
 
   /**
    * Process a user prompt through the orchestrated pipeline.
+   * Includes Plan → Search → Tool Loop → Reflect.
    */
   async *processInteraction(prompt: string, options: InteractionOptions) {
     if (!this.anthropic && !this.openrouterApiKey && !this.geminiApiKey) {
@@ -131,23 +134,18 @@ export class AIOrchestrator {
       }
     }
 
-    // 2. Context Builder (Upgraded to Semantic Search)
+    // 2. Context Builder (Semantic Retrieval)
     const { content: palaceContext } = assembleContext(options.projectId);
     const structureSummary = getProjectStructureSummary(options.projectId);
-    
     const project = db.prepare('SELECT path FROM projects WHERE id = ?').get(options.projectId) as any;
     const searchResults = await searchCodebase(options.projectId, project?.path || '', prompt);
     const semanticCodeContext = formatSearchResults(searchResults);
     
-    shadowBus.emitEvent({ ...baseEvent, type: 'tool', payload: { 
-      name: 'semantic-search', status: 'ok', matches: searchResults.length 
-    } });
+    shadowBus.emitEvent({ ...baseEvent, type: 'tool', payload: { name: 'semantic-search', status: 'ok', matches: searchResults.length } });
 
     // 3. Policy Check
     const policyResult = this.checkPolicy(prompt, options.projectId);
     if (policyResult.status === 'restrict') {
-      shadowBus.emitEvent({ ...baseEvent, type: 'error', payload: { message: `Policy restrict: ${policyResult.reason}` } });
-      shadowBus.emitEvent({ ...baseEvent, type: 'reflect', payload: buildReflection(runId, 'aborted', 0, 0, policyResult.reason) });
       shadowBus.emitEvent({ ...baseEvent, type: 'run:end', payload: { outcome: 'aborted' } });
       yield { type: 'error', content: `Action restricted: ${policyResult.reason}` };
       return;
@@ -159,35 +157,57 @@ export class AIOrchestrator {
     const route = this.pickRoute(isClaudeLimited, !!options.useCLI);
     shadowBus.emitEvent({ ...baseEvent, type: 'tool', payload: { name: 'route', status: 'ok', route } });
 
-    // 5. Build Cursor-grade System Prompt
+    // 5. System Prompt
     const brain = getProjectBrain(options.projectId);
     const systemPrompt = this.buildAgenticPrompt(brain, structureSummary, semanticCodeContext, palaceContext);
 
     const fileInSystemPrompt = route === 'bedrock' || route === 'anthropic' || route === 'kimi';
-    const userPrompt = !fileInSystemPrompt && options.fileContext
-      ? `${options.fileContext}\n\n---\n${prompt}`
-      : prompt;
+    const userPrompt = !fileInSystemPrompt && options.fileContext ? `${options.fileContext}\n\n---\n${prompt}` : prompt;
 
-    // 6. Execute
+    // 6. Execute Autonomous Tool Loop
     let chunkCount = 0;
     let totalChars = 0;
+    let outcome: 'success' | 'error' | 'aborted' = 'success';
     let errorMessage: string | undefined;
-    let outcome: 'success' | 'error' | 'aborted' | 'partial' = 'success';
 
     try {
       const router = this.getRouter(route);
-      for await (const event of router.call(this, userPrompt, systemPrompt, options)) {
-        if (event.type === 'chunk') {
-          chunkCount++;
-          totalChars += event.content.length;
-          yield event;
-        } else if (event.type === 'error') {
-          outcome = 'error';
-          errorMessage = event.content;
-          yield event;
-        } else {
-          yield event;
+      let iteration = 0;
+      const maxIterations = 5;
+      let currentPrompt = userPrompt;
+      let toolResults: any[] = [];
+
+      while (iteration < maxIterations) {
+        iteration++;
+        let toolCallsFound = false;
+        let assistantContent = '';
+
+        for await (const event of router.call(this, currentPrompt, systemPrompt, { ...options, toolResults })) {
+          if (event.type === 'chunk') {
+            assistantContent += event.content;
+            chunkCount++;
+            totalChars += event.content.length;
+            yield event;
+          } else if (event.type === 'tool_use') {
+            toolCallsFound = true;
+            shadowBus.emitEvent({ ...baseEvent, type: 'tool', payload: { name: event.name, args: event.args } });
+            try {
+              const result = await handleToolCall(event.name, event.args as any);
+              toolResults.push({ callId: event.id, name: event.name, result });
+            } catch (err: any) {
+              toolResults.push({ callId: event.id, name: event.name, error: err.message });
+            }
+          } else if (event.type === 'error') {
+            outcome = 'error';
+            errorMessage = event.content;
+            yield event;
+          } else {
+            yield event;
+          }
         }
+
+        if (!toolCallsFound) break;
+        currentPrompt = 'Results received. Proceed with the task.';
       }
     } catch (err: any) {
       outcome = 'error';
@@ -195,7 +215,6 @@ export class AIOrchestrator {
       yield { type: 'error', content: err.message };
     }
 
-    // 7. Reflect
     const reflection = buildReflection(runId, outcome, chunkCount, totalChars, errorMessage);
     shadowBus.emitEvent({ ...baseEvent, type: 'reflect', payload: reflection });
     shadowBus.emitEvent({ ...baseEvent, type: 'run:end', payload: { outcome } });
@@ -204,24 +223,18 @@ export class AIOrchestrator {
   private buildAgenticPrompt(brain: any, structure: string, code: string, memory: string): string {
     const db = getDb();
     const masterpieceSetting = db.prepare("SELECT value FROM settings WHERE key = 'masterpiece_mode'").get() as any;
-    
     const parts = [
-      'You are Cortex, the World-Class AI Software Engineer. You are at par with Cursor and better than GitHub Copilot.',
-      'Your goal is to provide deep, architectural, and production-ready code insights.',
+      'You are Cortex, an autonomous AI Software Engineer. You are at par with Cursor and better than GitHub Copilot.',
+      'You have full access to Cortex workspace tools. Use them to investigate, test, and manage the project.',
       '',
-      '## CODEBASE MAP',
-      structure || 'Structure unknown.',
+      '## CODEBASE MAP', structure || 'Unknown.',
       '',
-      '## RELEVANT SNIPPETS (Semantic Search)',
-      code || 'No specific snippets retrieved.',
+      '## RELEVANT SNIPPETS', code || 'None.',
       '',
-      '## TEMPORAL MEMORY (Decisions & Facts)',
-      memory || 'No historical memory found.',
+      '## TEMPORAL MEMORY', memory || 'None.',
     ];
-
     if (brain?.conventions) parts.push('', '## CONVENTIONS', brain.conventions);
     if (masterpieceSetting?.value === 'true') parts.push('\n' + getMasterpieceContext());
-
     return parts.join('\n');
   }
 
@@ -233,8 +246,7 @@ export class AIOrchestrator {
       if (this.openrouterApiKey) return 'openrouter';
       return 'claude-cli';
     }
-    if (useCLI || !this.anthropic) return 'claude-cli';
-    return 'anthropic';
+    return (useCLI || !this.anthropic) ? 'claude-cli' : 'anthropic';
   }
 
   private getRouter(route: string) {
@@ -261,48 +273,47 @@ export class AIOrchestrator {
 
   private async *routeToKimi(prompt: string, system: string, options: InteractionOptions) {
     const apiKey = process.env.NVIDIA_API_KEY;
-    if (!apiKey) {
-      yield { type: 'error', content: 'NVIDIA_API_KEY not found in environment. Please add it to sidecar/.env' };
-      return;
-    }
+    if (!apiKey) { yield { type: 'error', content: 'NVIDIA_API_KEY missing' }; return; }
     const history = (options.history ?? []).map(t => ({ role: t.role, content: t.content }));
-    yield* this.routeToOpenAICompatible('https://integrate.api.nvidia.com/v1', apiKey, KIMI_MODEL, 'kimi', prompt, system, history);
+    yield* this.routeToOpenAICompatible('https://integrate.api.nvidia.com/v1', apiKey, KIMI_MODEL, 'kimi', prompt, system, history, options.toolResults);
   }
 
   private async *routeToBedrockModel(modelId: string, providerType: string, prompt: string, system: string, options: InteractionOptions) {
     const start = Date.now();
     try {
       const history = (options.history ?? []).map(t => ({ role: t.role, content: [{ text: t.content }] }));
+      const toolConfig = { tools: TOOLS_LIST, toolChoice: { auto: {} } };
+      const messages: any[] = [...history, { role: 'user', content: [{ text: prompt }] }];
+      
+      // Inject previous tool results if any
+      if (options.toolResults && options.toolResults.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        lastMsg.content = [...lastMsg.content, ...options.toolResults.map(tr => ({
+          toolResult: { toolUseId: tr.callId, content: [{ text: JSON.stringify(tr.result || tr.error) }] }
+        }))];
+      }
+
       const command = new ConverseStreamCommand({
-        modelId,
-        messages: [...history, { role: 'user', content: [{ text: prompt }] }],
-        system: [{ text: system }],
-        inferenceConfig: { maxTokens: 4096, temperature: 0.5, topP: 0.9 },
+        modelId, messages, system: [{ text: system }],
+        toolConfig,
+        inferenceConfig: { maxTokens: 4096, temperature: 0.5 },
       });
 
       const response = await this.bedrockClient!.send(command);
-      let fullContent = '';
-      let inputTokens = 0;
-      let outputTokens = 0;
+      let inputTokens = 0, outputTokens = 0;
 
       if (response.stream) {
         for await (const chunk of response.stream) {
-          if (chunk.contentBlockDelta?.delta?.text) {
-            const text = chunk.contentBlockDelta.delta.text;
-            fullContent += text;
-            yield { type: 'chunk', content: text };
+          if (chunk.contentBlockDelta?.delta?.text) yield { type: 'chunk', content: chunk.contentBlockDelta.delta.text };
+          if (chunk.contentBlockStart?.start?.toolUse) {
+            const tu = chunk.contentBlockStart.start.toolUse;
+            yield { type: 'tool_use', id: tu.toolUseId, name: tu.name, args: tu.input };
           }
-          if (chunk.metadata?.usage) {
-            inputTokens = chunk.metadata.usage.inputTokens;
-            outputTokens = chunk.metadata.usage.outputTokens;
-          }
+          if (chunk.metadata?.usage) { inputTokens = chunk.metadata.usage.inputTokens; outputTokens = chunk.metadata.usage.outputTokens; }
         }
       }
       this.logUsage(providerType, modelId, inputTokens, outputTokens, Date.now() - start);
-      yield { type: 'done', content: fullContent };
-    } catch (e: any) {
-      yield { type: 'error', content: `Bedrock error: ${e.message}` };
-    }
+    } catch (e: any) { yield { type: 'error', content: `Bedrock error: ${e.message}` }; }
   }
 
   private async *routeToClaudeCLI(prompt: string, system: string, options: InteractionOptions) {
@@ -321,28 +332,27 @@ export class AIOrchestrator {
         yield { type: 'chunk', content: text };
       }
       yield { type: 'done', content: fullResponse.trim() };
-    } catch (err: any) {
-      yield { type: 'error', content: `Claude CLI error: ${err.message}` };
-    }
+    } catch (err: any) { yield { type: 'error', content: `Claude CLI error: ${err.message}` }; }
   }
 
-  private async *routeToOpenAICompatible(baseUrl: string, apiKey: string, model: string, provider: string, prompt: string, system: string, history: any[]) {
+  private async *routeToOpenAICompatible(baseUrl: string, apiKey: string, model: string, provider: string, prompt: string, system: string, history: any[], toolResults?: any[]) {
     const start = Date.now();
     try {
+      const messages = [{ role: 'system', content: system }, ...history, { role: 'user', content: prompt }];
+      if (toolResults) {
+        messages.push({ role: 'system', content: `Tool results: ${JSON.stringify(toolResults)}` });
+      }
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model,
-          messages: [{ role: 'system', content: system }, ...history, { role: 'user', content: prompt }],
-          stream: true,
-          max_tokens: 4096, temperature: 0.5,
+          model, messages, stream: true, max_tokens: 4096, temperature: 0.5,
+          tools: TOOLS_LIST.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } })),
         })
       });
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let fullContent = '';
       while (reader) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -351,13 +361,17 @@ export class AIOrchestrator {
           const data = line.slice(6);
           if (data === '[DONE]') break;
           try {
-            const content = JSON.parse(data).choices[0]?.delta?.content || '';
-            if (content) { fullContent += content; yield { type: 'chunk', content }; }
+            const delta = JSON.parse(data).choices[0]?.delta;
+            if (delta?.content) yield { type: 'chunk', content: delta.content };
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                yield { type: 'tool_use', id: tc.id, name: tc.function.name, args: JSON.parse(tc.function.arguments) };
+              }
+            }
           } catch {}
         }
       }
       this.logUsage(provider, model, 0, 0, Date.now() - start);
-      yield { type: 'done', content: fullContent };
     } catch (err: any) { yield { type: 'error', content: `${provider} error: ${err.message}` }; }
   }
 
@@ -378,7 +392,7 @@ export class AIOrchestrator {
     } catch {}
   }
 
-  private async *routeToAnthropic(p: string, s: string, o: InteractionOptions) { yield { type: 'error', content: 'Anthropic SDK routing not implemented yet. Use Claude CLI or Bedrock.' }; }
+  private async *routeToAnthropic(p: string, s: string, o: InteractionOptions) { yield { type: 'error', content: 'Anthropic SDK routing not implemented.' }; }
   private async *routeToGeminiNative(p: string, s: string, o: InteractionOptions) { yield { type: 'error', content: 'Gemini routing not implemented.' }; }
   private async *routeToOpenRouter(p: string, s: string, o: InteractionOptions) { yield { type: 'error', content: 'OpenRouter routing not implemented.' }; }
 }

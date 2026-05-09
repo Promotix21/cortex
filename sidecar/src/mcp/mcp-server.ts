@@ -43,7 +43,7 @@ interface MCPResponse {
  * Claude reads the description to know what action to use and what params to pass.
  * Reduces per-session MCP token overhead by ~92%.
  */
-const TOOLS_LIST: any[] = [
+export const TOOLS_LIST: any[] = [
   {
     name: 'cortex',
     description: `Cortex workspace intelligence. Pass action + relevant params.
@@ -114,6 +114,7 @@ const ACTION_DOCS: Record<string, string> = {
   match_error: 'match_error(error_message, [error_signature]) — find a known solution for an error.',
   save_intelligence: 'save_intelligence(project_id, type, content) — type ∈ {decision,known_issue,pattern,debug,server,convention}. USE INSTEAD OF Claude memory.',
   check_consistency: 'check_consistency(project_id, fact, [room_tag]) — validate a fact before saving to prevent contradiction.',
+  check_consistency: 'check_consistency(project_id, fact, [room_tag]) — validate a fact before saving to prevent contradiction.',
   build_memory: 'build_memory(project_id) — rebuild the temporal knowledge graph from brain.',
   list_credentials: 'list_credentials([project_id]) — names + kinds only, no secret values.',
   get_credential: 'get_credential(name, reason, [project_id]) — decrypt and return fields. Reason is REQUIRED (audited). Use BEFORE asking the user for any password.',
@@ -132,7 +133,7 @@ const ACTION_DOCS: Record<string, string> = {
   read_docx: 'read_docx(file_path).',
 };
 
-async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
+export async function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
   // Single gateway — all calls come in as name='cortex' with args.action
   const action = (name === 'cortex' ? args.action as string : name) || '';
 
