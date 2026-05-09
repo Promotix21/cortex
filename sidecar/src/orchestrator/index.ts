@@ -14,8 +14,9 @@ import { computeImpactForFiles } from '../intelligence/impact-graph.js';
 export const BEDROCK_SONNET = 'us.anthropic.claude-sonnet-4-6';
 export const BEDROCK_OPUS = 'us.anthropic.claude-opus-4-7';
 export const DEVSTRAL_MODEL = 'mistral.devstral-2-123b';
+export const KIMI_MODEL = 'moonshotai/kimi-k2.6';
 
-export type ActiveProvider = 'claude-cli' | 'bedrock' | 'devstral';
+export type ActiveProvider = 'claude-cli' | 'bedrock' | 'devstral' | 'kimi';
 
 export interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -213,9 +214,123 @@ export class AIOrchestrator {
       case 'anthropic': return this.routeToAnthropic;
       case 'bedrock': return this.routeToBedrock;
       case 'devstral': return this.routeToDevstral;
+      case 'kimi': return this.routeToKimi;
       case 'gemini-native': return this.routeToGeminiNative;
       case 'openrouter': return this.routeToOpenRouter;
       default: return this.routeToClaudeCLI;
+    }
+  }
+
+  private async *routeToKimi(prompt: string, system: string, options: InteractionOptions) {
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) {
+      yield { type: 'error', content: 'NVIDIA_API_KEY not found in environment. Please add it to sidecar/.env' };
+      return;
+    }
+
+    const history = (options.history ?? []).map(t => ({
+      role: t.role,
+      content: t.content
+    }));
+
+    yield* this.routeToOpenAICompatible(
+      'https://integrate.api.nvidia.com/v1',
+      apiKey,
+      KIMI_MODEL,
+      'kimi',
+      prompt,
+      system,
+      history
+    );
+  }
+
+  private async *routeToOpenAICompatible(
+    baseUrl: string,
+    apiKey: string,
+    model: string,
+    providerType: string,
+    prompt: string,
+    system: string,
+    history: any[]
+  ) {
+    const start = Date.now();
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: system },
+            ...history,
+            { role: 'user', content: prompt }
+          ],
+          stream: true,
+          max_tokens: 4096,
+          temperature: 0.5,
+          top_p: 1,
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`OpenAI-compatible provider error: ${response.status} ${err}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+
+      if (!reader) throw new Error('Failed to get response reader');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') break;
+
+            try {
+              const json = JSON.parse(data);
+              const content = json.choices[0]?.delta?.content || '';
+              if (content) {
+                fullContent += content;
+                yield { type: 'chunk', content };
+              }
+              // NVIDIA NIM might not provide usage in stream, but if it does:
+              if (json.usage) {
+                inputTokens = json.usage.prompt_tokens;
+                outputTokens = json.usage.completion_tokens;
+              }
+            } catch (e) {
+              // Ignore parse errors for partial chunks
+            }
+          }
+        }
+      }
+
+      // Est tokens if not provided (1 token ~= 4 chars)
+      if (inputTokens === 0) {
+        inputTokens = Math.ceil((system.length + prompt.length + JSON.stringify(history).length) / 4);
+        outputTokens = Math.ceil(fullContent.length / 4);
+      }
+
+      this.logUsage(providerType, model, inputTokens, outputTokens, Date.now() - start);
+      yield { type: 'done', content: fullContent };
+
+    } catch (err: any) {
+      yield { type: 'error', content: `${providerType} error: ${err.message}` };
     }
   }
 

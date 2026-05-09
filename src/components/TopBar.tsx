@@ -11,7 +11,7 @@ export function TopBar() {
   const setActiveProject = useProjectStore(s => s.setActiveProject);
   const setActivity = useNavigationStore(s => s.setActivity);
 
-  const [activeProvider, setActiveProvider] = useState<'claude-cli' | 'bedrock' | 'devstral'>('claude-cli');
+  const [activeProvider, setActiveProvider] = useState<'claude-cli' | 'bedrock' | 'devstral' | 'kimi'>('claude-cli');
   const [activeModel, setActiveModel] = useState('');
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -29,7 +29,7 @@ export function TopBar() {
 
   useEffect(() => {
     api.getProviderStatus().then(s => {
-      setActiveProvider(s.activeProvider);
+      setActiveProvider(s.activeProvider as 'claude-cli' | 'bedrock' | 'devstral' | 'kimi');
       setActiveModel(s.activeModel);
     });
   }, []);
@@ -46,12 +46,12 @@ export function TopBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, [providerMenuOpen]);
 
-  const switchProvider = async (provider: 'claude-cli' | 'bedrock' | 'devstral', model?: string) => {
+  const switchProvider = async (provider: 'claude-cli' | 'bedrock' | 'devstral' | 'kimi', model?: string) => {
     setSwitching(true);
     setProviderMenuOpen(false);
     try {
       const result = await api.switchProvider(provider, model);
-      setActiveProvider(result.activeProvider as 'claude-cli' | 'bedrock' | 'devstral');
+      setActiveProvider(result.activeProvider as 'claude-cli' | 'bedrock' | 'devstral' | 'kimi');
       setActiveModel(result.activeModel || '');
     } finally {
       setSwitching(false);
@@ -69,12 +69,16 @@ export function TopBar() {
     ? (activeModel?.includes('opus') ? 'Opus 4.7' : 'Sonnet 4.6')
     : activeProvider === 'devstral'
     ? 'Devstral 2'
+    : activeProvider === 'kimi'
+    ? 'Kimi K2.6'
     : 'Claude Pro';
 
   const providerColor = activeProvider === 'bedrock'
     ? { bg: 'rgba(251, 191, 36, 0.12)', border: 'rgba(251, 191, 36, 0.25)', text: '#fbbf24' }
     : activeProvider === 'devstral'
     ? { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.25)', text: '#34d399' }
+    : activeProvider === 'kimi'
+    ? { bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.25)', text: '#60a5fa' }
     : { bg: 'rgba(139, 92, 246, 0.12)', border: 'rgba(139, 92, 246, 0.25)', text: '#a78bfa' };
 
   return (
@@ -155,6 +159,7 @@ export function TopBar() {
         >
           {activeProvider === 'bedrock' ? <Cloud size={12} />
             : activeProvider === 'devstral' ? <Code2 size={12} />
+            : activeProvider === 'kimi' ? <Zap size={12} />
             : <Terminal size={12} />
           }
           <span>{switching ? 'Switching…' : providerLabel}</span>
@@ -186,6 +191,19 @@ export function TopBar() {
               icon={<Terminal size={13} />}
               active={activeProvider === 'claude-cli'}
               onClick={() => switchProvider('claude-cli')}
+            />
+
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            <div style={{ padding: '4px 12px 4px', fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              NVIDIA NIM
+            </div>
+
+            <ProviderOption
+              label="Kimi K2.6"
+              sublabel="Coding specialist · GPU"
+              icon={<Zap size={13} />}
+              active={activeProvider === 'kimi'}
+              onClick={() => switchProvider('kimi')}
             />
 
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
@@ -223,6 +241,7 @@ export function TopBar() {
           </div>
         )}
       </div>
+
 
       {/* Sessions dashboard toggle */}
       <button
