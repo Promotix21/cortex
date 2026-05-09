@@ -586,7 +586,7 @@ export const api = {
   // ── Providers ────────────────────────────────────────────
   getProviderStatus: () =>
     request<{
-      activeProvider: 'claude-cli' | 'bedrock' | 'devstral';
+      activeProvider: 'claude-cli' | 'bedrock' | 'devstral' | 'kimi';
       activeModel: string;
       providers: Array<{
         id: string;
@@ -595,17 +595,11 @@ export const api = {
         models: Array<{ id: string; label: string }> | string[];
         region?: string;
       }>;
-      bedrockUsage: Array<{
-        model_id: string;
-        input_tokens: number;
-        output_tokens: number;
-        call_count: number;
-        avg_latency_ms: number;
-      }>;
+      usageStats?: any[];
     }>('/api/providers/status')
-      .catch(() => ({ activeProvider: 'claude-cli' as const, activeModel: '', providers: [], bedrockUsage: [] })),
+      .catch(() => ({ activeProvider: 'claude-cli' as const, activeModel: '', providers: [] })),
 
-  switchProvider: (provider: 'claude-cli' | 'bedrock' | 'devstral', model?: string) =>
+  switchProvider: (provider: 'claude-cli' | 'bedrock' | 'devstral' | 'kimi', model?: string) =>
     request<{ success: boolean; activeProvider: string; activeModel: string; message: string }>(
       '/api/providers/switch',
       { method: 'POST', body: JSON.stringify({ provider, model }) },

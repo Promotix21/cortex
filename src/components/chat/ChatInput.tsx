@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 import { FileDropZone, type DroppedFile } from './FileDropZone';
-import { Send, Terminal, Cloud, Code2 } from 'lucide-react';
+import { Send, Terminal, Cloud, Code2, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface ChatInputProps {
@@ -15,12 +15,12 @@ export function ChatInput({ projectId, disabled }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { sendMessage } = useChatStore();
 
-  const [activeProvider, setActiveProvider] = useState<'claude-cli' | 'bedrock' | 'devstral'>('claude-cli');
+  const [activeProvider, setActiveProvider] = useState<'claude-cli' | 'bedrock' | 'devstral' | 'kimi'>('claude-cli');
   const [activeModel, setActiveModel] = useState('');
 
   useEffect(() => {
     const load = () => api.getProviderStatus().then(s => {
-      setActiveProvider(s.activeProvider);
+      setActiveProvider(s.activeProvider as 'claude-cli' | 'bedrock' | 'devstral' | 'kimi');
       setActiveModel(s.activeModel);
     });
     load();
@@ -229,15 +229,18 @@ export function ChatInput({ projectId, disabled }: ChatInputProps) {
 function ActiveProviderBadge({ provider, model }: { provider: string; model: string }) {
   const isDevstral = provider === 'devstral';
   const isBedrock = provider === 'bedrock';
+  const isKimi = provider === 'kimi';
 
   const label = isDevstral
     ? 'Devstral 2'
+    : isKimi
+    ? 'Kimi K2.6'
     : isBedrock
     ? (model?.includes('opus') ? 'Claude Opus 4.7' : 'Claude Sonnet 4.6')
     : 'Claude Pro';
 
-  const color = isDevstral ? '#34d399' : isBedrock ? '#fbbf24' : '#a78bfa';
-  const icon = isDevstral ? <Code2 size={11} /> : isBedrock ? <Cloud size={11} /> : <Terminal size={11} />;
+  const color = isDevstral ? '#34d399' : isKimi ? '#60a5fa' : isBedrock ? '#fbbf24' : '#a78bfa';
+  const icon = isDevstral ? <Code2 size={11} /> : isKimi ? <Zap size={11} /> : isBedrock ? <Cloud size={11} /> : <Terminal size={11} />;
 
   return (
     <span

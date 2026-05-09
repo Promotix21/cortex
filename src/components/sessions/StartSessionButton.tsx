@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { useNavigationStore } from '@/stores/navigation-store';
 import { api } from '@/lib/api';
-import { Play, X, Terminal, Cloud, ChevronDown, Code2 } from 'lucide-react';
+import { Play, X, Terminal, Cloud, ChevronDown, Code2, Zap } from 'lucide-react';
 
 interface StartSessionButtonProps {
   projectId: string;
   projectName: string;
 }
 
-type Provider = 'claude-cli' | 'bedrock' | 'devstral';
+type Provider = 'claude-cli' | 'bedrock' | 'devstral' | 'kimi';
 type BedrockModel = 'us.anthropic.claude-sonnet-4-6' | 'us.anthropic.claude-opus-4-7';
 
 const BEDROCK_MODELS: { id: BedrockModel; label: string }[] = [
@@ -33,7 +33,7 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
   useEffect(() => {
     if (!showForm) return;
     api.getProviderStatus().then(s => {
-      setActiveProvider(s.activeProvider);
+      setActiveProvider(s.activeProvider as Provider);
       if (s.activeModel?.includes('opus')) {
         setBedrockModel('us.anthropic.claude-opus-4-7');
       }
@@ -44,7 +44,7 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
     setSpawning(true);
     setError('');
     try {
-      if (activeProvider === 'bedrock' || activeProvider === 'devstral') {
+      if (activeProvider === 'bedrock' || activeProvider === 'devstral' || activeProvider === 'kimi') {
         await api.switchProvider(activeProvider, activeProvider === 'bedrock' ? bedrockModel : undefined);
         setActivity('chat');
         setShowForm(false);
@@ -84,15 +84,19 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
   }
 
   const providerColor = activeProvider === 'bedrock'
-    ? { bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)', text: '#fbbf24' }
+    ? { bg: 'rgba(251, 191, 36, 0.12)', border: 'rgba(251, 191, 36, 0.3)', text: '#fbbf24' }
     : activeProvider === 'devstral'
-    ? { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', text: '#34d399' }
-    : { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.3)', text: '#a78bfa' };
+    ? { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)', text: '#34d399' }
+    : activeProvider === 'kimi'
+    ? { bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.3)', text: '#60a5fa' }
+    : { bg: 'rgba(139, 92, 246, 0.12)', border: 'rgba(139, 92, 246, 0.3)', text: '#a78bfa' };
 
   const providerLabel = activeProvider === 'bedrock'
     ? (bedrockModel.includes('opus') ? 'Bedrock Opus 4.7' : 'Bedrock Sonnet 4.6')
     : activeProvider === 'devstral'
     ? 'Devstral 2 (Code Analysis)'
+    : activeProvider === 'kimi'
+    ? 'Kimi K2.6 (Coding Specialist)'
     : 'Claude Pro (CLI)';
 
   return (
@@ -140,6 +144,7 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
           {spawning ? 'Starting…'
             : activeProvider === 'bedrock' ? 'Start with Bedrock'
             : activeProvider === 'devstral' ? 'Start with Devstral'
+            : activeProvider === 'kimi' ? 'Start with Kimi'
             : 'Start'}
         </button>
 
@@ -168,7 +173,7 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
             cursor: 'pointer',
           }}
         >
-          {activeProvider === 'bedrock' ? <Cloud size={12} /> : activeProvider === 'devstral' ? <Code2 size={12} /> : <Terminal size={12} />}
+          {activeProvider === 'bedrock' ? <Cloud size={12} /> : activeProvider === 'devstral' ? <Code2 size={12} /> : activeProvider === 'kimi' ? <Zap size={12} /> : <Terminal size={12} />}
           {providerLabel}
           <ChevronDown size={11} />
         </button>
@@ -199,8 +204,21 @@ export function StartSessionButton({ projectId, projectName }: StartSessionButto
 
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
             <div style={{ padding: '2px 12px 4px', fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              NVIDIA NIM
+            </div>
+            <ProviderMenuOption
+              icon={<Zap size={13} />}
+              label="Kimi K2.6"
+              sublabel="High-performance coding"
+              active={activeProvider === 'kimi'}
+              onClick={() => { setActiveProvider('kimi'); setProviderMenuOpen(false); }}
+            />
+
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            <div style={{ padding: '2px 12px 4px', fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               AWS Bedrock
             </div>
+
 
             {BEDROCK_MODELS.map(m => (
               <ProviderMenuOption
